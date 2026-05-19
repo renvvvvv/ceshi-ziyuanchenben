@@ -82,32 +82,39 @@ const SUMMARY_HEADERS = [
   '动力并行数', '动力实际测试工期', '动力同时在场', '动力总人天',
   '功能测试组数', '场景压测组数', '前端冷源人数', '安装检查人数',
   '暖通总组数', '暖通峰值在场', '暖通总人天',
-  '弱电主测', '弱电记录员', '弱电小计',
-  '消防主测', '消防测试员', '消防小计',
-  '柴发主测', '柴发记录员', '柴发小计',
-  '固定人员小计', '峰值同时在场', '总人天',
+  '峰值同时在场', '总人天',
   '6kW总需求', '6kW自有', '6kW需租赁',
   '8kW总需求', '8kW自有', '8kW需租赁',
   '500kW总需求', '300kW总需求',
 ];
 
+function expandTransformers(transformers: [number, number][]): string {
+  const parts: string[] = [];
+  for (const [cap, count] of transformers) {
+    for (let i = 0; i < count; i++) parts.push(`${cap}MW`);
+  }
+  return parts.join('+');
+}
+
 function buildSummaryRow(input: ResourceInput, report: ResourceReport): (string | number)[] {
-  const itSpec = input.it_transformers.map(([c, n]) => `${c}MW×${n}台`).join('+');
-  const pwSpec = input.power_transformers.map(([c, n]) => `${c}MW×${n}台`).join('+');
+  const cabinetPower = input.cabinet_power;
+  const cabinetCount = input.total_cabinets;
+  const itCap = input.it_transformers.reduce((s, [c, n]) => s + c * n, 0);
+  const pwCap = input.power_transformers.reduce((s, [c, n]) => s + c * n, 0);
   const itCount = input.it_transformers.reduce((s, [, n]) => s + n, 0);
   const pwCount = input.power_transformers.reduce((s, [, n]) => s + n, 0);
+  const itComp = expandTransformers(input.it_transformers);
+  const pwComp = expandTransformers(input.power_transformers);
+  const pue = itCap > 0 ? Math.round((input.total_mw / itCap) * 1000) / 1000 : 0;
 
   return [
-    input.total_mw, input.total_duration, input.cabinet_power, itSpec, itCount,
-    pwSpec, pwCount, input.total_cabinets, input.ac_type,
+    input.cabinet_power, cabinetCount, itCap, itComp, itCount,
+    pue, pwCap, pwComp, pwCount,
+    input.total_mw, input.total_duration, input.ac_type,
     report.IT链路.所需并行数, report.IT链路.实际测试工期, report.IT链路.同时在场人数, report.IT链路.总人天,
     report.动力链路.所需并行数, report.动力链路.实际测试工期, report.动力链路.同时在场人数, report.动力链路.总人天,
-    report.暖通.功能测试.组数, report.暖通.场景压测.组数, report.暖通.前端冷源.人数, report.暖通.安装检查.人数,
     report.暖通.暖通总组数, report.暖通.峰值同时在场, report.暖通.总人天,
-    report.弱电.主测, report.弱电.记录员小计, report.弱电.小计,
-    report.消防.主测, report.消防.测试员, report.消防.小计,
-    report.柴发.主测, report.柴发.记录员, report.柴发.小计,
-    report.固定人员.小计, report.汇总.峰值同时在场, report.汇总.总人天,
+    report.汇总.峰值同时在场, report.汇总.总人天,
     report.负载['6kW'].总需求, report.负载['6kW'].自有, report.负载['6kW'].需租赁,
     report.负载['8kW'].总需求, report.负载['8kW'].自有, report.负载['8kW'].需租赁,
     report.负载['500kW'].总需求, report.负载['300kW'].总需求,
