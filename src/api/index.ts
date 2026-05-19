@@ -1,0 +1,105 @@
+/**
+ * API 客户端 — 连接后端 Express 服务
+ *
+ * 开发环境：Vite proxy /api → http://localhost:3001
+ * 生产环境：nginx proxy /api → backend:3001
+ */
+
+const BASE = '/api';
+
+async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
+    headers: { 'Content-Type': 'application/json' },
+    ...options,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error((err as { error?: string }).error || `HTTP ${res.status}`);
+  }
+  return res.json() as Promise<T>;
+}
+
+// ============ 资源计算 ============
+
+export interface CalcInput {
+  total_mw: number; total_duration: number; cabinet_power: number;
+  it_transformers: [number, number][]; power_transformers: [number, number][];
+  total_cabinets: number; ac_type: string;
+}
+
+export interface CalcResponse {
+  success: boolean;
+  data: Record<string, unknown>;
+  pue: number;
+}
+
+export function apiCalcResource(input: CalcInput): Promise<CalcResponse> {
+  return request<CalcResponse>('/resource-calc', { method: 'POST', body: JSON.stringify(input) });
+}
+
+export interface HistoryItem {
+  id: number; total_mw: number; total_duration: number; cabinet_power: number;
+  it_transformers: string; power_transformers: string;
+  total_cabinets: number; ac_type: string;
+  peak_staff: number; total_man_days: number;
+  ai_insights: string | null; created_at: string;
+}
+
+export interface HistoryResponse {
+  success: boolean;
+  data: HistoryItem[];
+  page: number; size: number; total: number;
+}
+
+export function apiGetHistory(page = 1, size = 20): Promise<HistoryResponse> {
+  return request<HistoryResponse>(`/resource-calc/history?page=${page}&size=${size}`);
+}
+
+export function apiDeleteHistory(id: number): Promise<{ success: boolean }> {
+  return request('/resource-calc/history/' + id, { method: 'DELETE' });
+}
+
+// ============ 项目管理 ============
+
+export interface Project {
+  id?: number; name: string; customer: string; status: string; priority: string;
+  manager: string; start_date: string; end_date?: string;
+  it_output: number; contract_amount?: number;
+  business_type?: string; description?: string;
+}
+
+export interface ProjectListResponse {
+  success: boolean; data: Project[]; page: number; size: number; total: number;
+}
+
+export function apiGetProjects(params?: Record<string, string>): Promise<ProjectListResponse> {
+  const qs = params ? '?' + new URLSearchParams(params).toString() : '';
+  return request<ProjectListResponse>('/projects' + qs);
+}
+
+export function apiCreateProject(data: Project): Promise<{ success: boolean; id: number }> {
+  return request('/projects', { method: 'POST', body: JSON.stringify(data) });
+}
+
+export function apiUpdateProject(id: number, data: Project): Promise<{ success: boolean }> {
+  return request(`/projects/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+}
+
+export function apiDeleteProject(id: number): Promise<{ success: boolean }> {
+  return request(`/projects/${id}`, { method: 'DELETE' });
+}
+
+export function apiGetProject(id: number): Promise<{ success: boolean; data: Project }> {
+  return request(`/projects/${id}`);
+}
+
+// ============ 历史项目 & 团队成员 ============
+
+export function apiGetHistoryProjects(): Promise<{ success: boolean; data: Record<string, unknown>[] }> {
+  return request('/projects/history/list');
+}
+
+export function apiGetTeamMembers(params?: Record<string, string>): Promise<{ success: boolean; data: Record<string, unknown>[] }> {
+  const qs = params ? '?' + new URLSearchParams(params).toString() : '';
+  return request('/projects/members/list' + qs);
+}

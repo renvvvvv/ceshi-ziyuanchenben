@@ -1,0 +1,17 @@
+[Unit]
+Description=Data Center Test Verification Platform
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/test-platform/server
+EnvironmentFile=/opt/test-platform/test-platform.env
+ExecStart=/usr/bin/node --max-old-space-size=2048 dist/index.js
+Restart=on-failure
+RestartSec=10
+StandardOutput=append:/opt/test-platform/server/app.log
+StandardError=append:/opt/test-platform/server/app.log
+
+[Install]
+WantedBy=multi-user.target
