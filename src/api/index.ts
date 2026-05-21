@@ -38,11 +38,12 @@ export function apiCalcResource(input: CalcInput): Promise<CalcResponse> {
 }
 
 export interface HistoryItem {
-  id: number; total_mw: number; total_duration: number; cabinet_power: number;
+  id: number; batch_id: string | null;
+  total_mw: number; total_duration: number; cabinet_power: number;
   it_transformers: string; power_transformers: string;
   total_cabinets: number; ac_type: string;
   peak_staff: number; total_man_days: number;
-  ai_insights: string | null; created_at: string;
+  result_json?: string; created_at: string;
 }
 
 export interface HistoryResponse {

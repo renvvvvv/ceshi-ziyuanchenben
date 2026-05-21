@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import { calculateResource, type ResourceInput, type ResourceReport } from './resourceCalculator';
+import { type ResourceInput, type ResourceReport } from './resourceCalculator';
 
 // ============ 模板列名（匹配 V20 CSV 格式） ============
 
@@ -391,29 +391,56 @@ export interface BatchReportRow {
   error?: string;
 }
 
-export function runBatchCalculation(inputs: ParsedInput[]): BatchReportRow[] {
-  return inputs.map((item, idx) => {
+export async function runBatchCalculation(inputs: ParsedInput[]): Promise<BatchReportRow[]> {
+  // 构建合法 input 列表
+  const validInputs: ResourceInput[] = [];
+  const errors: BatchReportRow[] = [];
+
+  for (let i = 0; i < inputs.length; i++) {
+    const item = inputs[i];
+    if (item._errors.length > 0) {
+      errors.push({ index: i + 1, input: {} as ResourceInput, report: {} as ResourceReport, error: item._errors.join('; ') });
+      continue;
+    }
+    validInputs.push({
+      total_mw: item.total_mw!,
+      total_duration: item.total_duration!,
+      cabinet_power: item.cabinet_power!,
+      it_transformers: item.it_transformers!,
+      power_transformers: item.power_transformers!,
+      total_cabinets: item.total_cabinets!,
+      ac_type: item.ac_type || '传统风冷',
+    });
+  }
+
+  if (validInputs.length === 0) return errors;
+
+  const batchId = Date.now().toString();
+
+  // 调用后端群算 API（失败则回退本地计算）
+  try {
+    const res = await fetch('/api/resource-calc/batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ inputs: validInputs, batch_id: batchId }),
+    });
+    if (res.ok) {
+      const json = await res.json() as { success: boolean; data: { index: number; input: ResourceInput; report: ResourceReport; error?: string }[] };
+      return [...json.data, ...errors];
+    }
+  } catch {}
+
+  // 回退：本地计算（不存库）
+  const { calculateResource } = await import('./resourceCalculator');
+  const localResults = validInputs.map((input, idx) => {
     try {
-      if (item._errors.length > 0) {
-        return { index: idx + 1, input: {} as ResourceInput, report: {} as ResourceReport, error: item._errors.join('; ') };
-      }
-
-      const input: ResourceInput = {
-        total_mw: item.total_mw!,
-        total_duration: item.total_duration!,
-        cabinet_power: item.cabinet_power!,
-        it_transformers: item.it_transformers!,
-        power_transformers: item.power_transformers!,
-        total_cabinets: item.total_cabinets!,
-        ac_type: item.ac_type || '传统风冷',
-      };
-
       const report = calculateResource(input);
       return { index: idx + 1, input, report };
     } catch (e) {
-      return { index: idx + 1, input: {} as ResourceInput, report: {} as ResourceReport, error: String(e) };
+      return { index: idx + 1, input, report: {} as ResourceReport, error: String(e) };
     }
   });
+  return [...localResults, ...errors];
 }
 
 export function exportBatchResultsToExcel(batchResults: BatchReportRow[]): void {

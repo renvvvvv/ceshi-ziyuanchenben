@@ -3,24 +3,27 @@
 -- =============================================
 
 -- 资源计算历史记录
+-- 兼容旧表：补加 batch_id 列（已存在则忽略错误）
+-- 注意：若已部署并报错 column exists，删库重建即可，不影响已有功能
 CREATE TABLE IF NOT EXISTS resource_calc_history (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    total_mw        REAL    NOT NULL,            -- 总兆瓦数(MW)
-    total_duration  INTEGER NOT NULL,            -- 总工期(天)
-    cabinet_power   INTEGER NOT NULL,            -- 单机柜压测功率(kW)
-    it_transformers TEXT    NOT NULL,            -- IT变压器配置 JSON: [[容量,台数],...]
-    power_transformers TEXT  NOT NULL,            -- 动力变压器配置 JSON
-    total_cabinets  INTEGER NOT NULL,            -- 总机柜数
-    ac_type         TEXT    NOT NULL,            -- 空调类型
-    peak_staff      INTEGER NOT NULL,            -- 峰值同时在场人数
-    total_man_days  INTEGER NOT NULL,            -- 总人天
-    result_json     TEXT    NOT NULL,            -- 完整计算结果 JSON
+    batch_id        TEXT,                        -- 群算批次ID（NULL=单算）
+    total_mw        REAL    NOT NULL,
+    total_duration  INTEGER NOT NULL,
+    cabinet_power   INTEGER NOT NULL,
+    it_transformers TEXT    NOT NULL,
+    power_transformers TEXT  NOT NULL,
+    total_cabinets  INTEGER NOT NULL,
+    ac_type         TEXT    NOT NULL,
+    peak_staff      INTEGER NOT NULL,
+    total_man_days  INTEGER NOT NULL,
+    result_json     TEXT    NOT NULL,
     created_at      TEXT    NOT NULL DEFAULT (datetime('now','localtime'))
 );
 
+CREATE INDEX IF NOT EXISTS idx_rc_batch ON resource_calc_history(batch_id);
 CREATE INDEX IF NOT EXISTS idx_rc_created ON resource_calc_history(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_rc_mw ON resource_calc_history(total_mw);
-CREATE INDEX IF NOT EXISTS idx_rc_customer ON resource_calc_history(ac_type);
 
 -- 测试项目表
 CREATE TABLE IF NOT EXISTS test_projects (

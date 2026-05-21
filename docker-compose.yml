@@ -13,6 +13,7 @@ services:
       - PORT=3001
       - NODE_ENV=production
       - MINIMAX_API_KEY=${MINIMAX_API_KEY:-}
+      - TZ=Asia/Shanghai
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:3001/api/health"]
