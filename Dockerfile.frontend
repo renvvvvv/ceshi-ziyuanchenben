@@ -2,8 +2,8 @@
 FROM docker.m.daocloud.io/library/node:20-slim AS builder
 
 WORKDIR /app
-COPY package.json package-lock.json* ./
-RUN npm ci --ignore-scripts
+COPY package.json ./
+RUN npm install --ignore-scripts --legacy-peer-deps
 
 COPY . .
 RUN npx vite build
