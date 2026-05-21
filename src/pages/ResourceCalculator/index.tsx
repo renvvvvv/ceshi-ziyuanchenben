@@ -159,6 +159,7 @@ function ResourceCalculator() {
       }
       setCurrentInput(input);
       setSingleModalOpen(false);
+      setMode('single');
       message.success('计算完成');
     } catch { message.error('计算失败'); }
     finally { setCalcLoading(false); }
