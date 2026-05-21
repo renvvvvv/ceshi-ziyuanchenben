@@ -53,29 +53,38 @@ function ResourceCalculator() {
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importedData, setImportedData] = useState<ParsedInput[]>([]);
   const [importError, setImportError] = useState('');
+  const [importLoading, setImportLoading] = useState(false);
   const [selectedRow, setSelectedRow] = useState(0);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // 历史
   const [historyData, setHistoryData] = useState<HistoryGroupItem[]>([]);
   const [historyTotal, setHistoryTotal] = useState(0);
+  const [historyPage, setHistoryPage] = useState(1);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyHasMore, setHistoryHasMore] = useState(false);
   const [filterType, setFilterType] = useState<'all' | 'single' | 'batch'>('all');
   const [filterDate, setFilterDate] = useState('');
+  const [backendOnline, setBackendOnline] = useState(true);
 
-  useEffect(() => { loadHistory(); }, []);
+  const HISTORY_PAGE_SIZE = 20;
 
-  const loadHistory = async () => {
+  useEffect(() => { loadHistory(1, true); }, []);
+
+  const loadHistory = async (page = 1, reset = false) => {
     setHistoryLoading(true);
     try {
-      const res = await apiGetHistory(1, 50, filterType, filterDate);
-      setHistoryData(res.data);
+      const res = await apiGetHistory(page, HISTORY_PAGE_SIZE, filterType, filterDate);
+      setHistoryData(prev => reset ? res.data : [...prev, ...res.data]);
       setHistoryTotal(res.total);
-    } catch { message.warning('后端不可用'); }
+      setHistoryPage(page);
+      setHistoryHasMore(res.total > page * HISTORY_PAGE_SIZE);
+      setBackendOnline(true);
+    } catch { setBackendOnline(false); if (reset) setHistoryData([]); }
     finally { setHistoryLoading(false); }
   };
 
-  useEffect(() => { loadHistory(); }, [filterType, filterDate]);
+  useEffect(() => { loadHistory(1, true); }, [filterType, filterDate]);
 
   const parseItTrans = (s: string): [number, number][] => {
     try { const v = JSON.parse(s); if (Array.isArray(v)) return v; } catch {}
@@ -137,7 +146,11 @@ function ResourceCalculator() {
     const itTrans: [number, number][] = (values.it_transSpecs || []).map((s: number) => [s, values.it_transCount || 1]);
     const pwTrans: [number, number][] = (values.pw_transSpecs || []).map((s: number) => [s, values.pw_transCount || 1]);
     if (itTrans.length === 0 || pwTrans.length === 0) { message.warning('请选择变压器规格'); return null; }
-    if (!values.total_mw || !values.total_duration || !values.total_cabinets) { message.warning('请填写必填字段'); return null; }
+    if (!values.total_mw || !values.total_duration || !values.total_cabinets) { message.warning('请填写必填字段：总兆瓦数、总工期、总机柜数'); return null; }
+    if (values.total_mw < 10 || values.total_mw > 66) { message.warning('总兆瓦数需在 10~66 MW 之间'); return null; }
+    if (values.total_duration < 1 || values.total_duration > 365) { message.warning('工期需在 1~365 天之间'); return null; }
+    if ((values.it_transCount || 1) < 1 || (values.it_transCount || 1) > 20) { message.warning('IT变压器台数需在 1~20 之间'); return null; }
+    if ((values.pw_transCount || 1) < 1 || (values.pw_transCount || 1) > 20) { message.warning('动力变压器台数需在 1~20 之间'); return null; }
     return {
       total_mw: values.total_mw, total_duration: values.total_duration,
       cabinet_power: values.cabinet_power, it_transformers: itTrans,
@@ -169,16 +182,24 @@ function ResourceCalculator() {
   const handleFileSelected: React.ChangeEventHandler<HTMLInputElement> = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    setImportFile(file); setImportError('');
+    // 文件类型校验
+    const ext = file.name.split('.').pop()?.toLowerCase();
+    if (!ext || !['xlsx', 'xls', 'csv'].includes(ext)) {
+      setImportError('仅支持 .xlsx / .xls / .csv 格式');
+      return;
+    }
+    setImportFile(file); setImportError(''); setSelectedRow(0);
     try {
       const data = await parseImportExcel(file);
       setImportedData(data);
-      if (data.length === 0) setImportError('未解析到有效数据');
+      if (data.length === 0) setImportError('未解析到有效数据，请检查文件内容');
     } catch (err) { setImportError(String(err)); setImportedData([]); }
   };
 
   const handleConfirmImport = async () => {
     if (importedData.length === 0) { message.warning('没有可导入的数据'); return; }
+    if (importLoading) return; // 防重复提交
+    setImportLoading(true);
     setImportModalOpen(false);
 
     if (importMode === 'single') {
@@ -207,13 +228,14 @@ function ResourceCalculator() {
       const errors = results.filter(r => r.error);
       message[errors.length > 0 ? 'warning' : 'success'](`${results.length} 条，${errors.length > 0 ? errors.length + ' 条失败' : '全部成功'}`);
     }
+    setImportLoading(false);
   };
 
   // ============ 回到首页 ============
   const goHome = () => {
     setMode('home'); setReport(null); setCurrentInput(null);
     setBatchResults([]); setSingleModalOpen(false);
-    loadHistory();
+    loadHistory(1, true);
   };
 
   // ============ 群算结果页 ============
@@ -282,7 +304,8 @@ function ResourceCalculator() {
               style={{ padding: '2px 8px', border: '1px solid #d9d9d9', borderRadius: 6, fontSize: 13, width: 130 }}
             />
             {filterDate && <Button size="small" onClick={() => setFilterDate('')}>清除日期</Button>}
-            <Button size="small" icon={<DownloadOutlined />} onClick={loadHistory} loading={historyLoading}>刷新</Button>
+            {!backendOnline && <Tag color="red">后端离线</Tag>}
+            <Button size="small" icon={<DownloadOutlined />} onClick={() => loadHistory(1, true)} loading={historyLoading}>刷新</Button>
             <Text type="secondary">{historyData.length > 0 ? `共 ${historyData.length} 条` : ''}</Text>
           </Space>
         }
@@ -295,11 +318,7 @@ function ResourceCalculator() {
         ) : (
           <Table dataSource={historyData.map((h) => ({ ...h, key: h.type === 'batch' ? h.batch_id! : 's' + h.id }))}
             loading={historyLoading} size="small" bordered
-            pagination={{
-              pageSize: 20, showSizeChanger: true,
-              total: historyTotal,
-              showTotal: (t: number) => `共 ${t} 条`,
-            }}
+            pagination={false}
             columns={[
               { title: '类型', dataIndex: 'type', width: 60, render: (t: string) => <Tag color={t === 'batch' ? 'blue' : 'default'}>{t === 'batch' ? '群算' : '单算'}</Tag> },
               {
@@ -325,7 +344,7 @@ function ResourceCalculator() {
                           try {
                             const res2 = await apiGetBatchDetail(r.batch_id!);
                             for (const h of res2.data) await apiDeleteHistory(h.id);
-                            loadHistory(); message.success('已删除');
+                            loadHistory(1, true); message.success('已删除');
                           } catch { message.error('删除失败'); }
                         }}>删除</Button>
                       </Space>
@@ -337,7 +356,7 @@ function ResourceCalculator() {
                       <Button size="small" type="link" icon={<ExportOutlined />} onClick={() => handleHistoryDownload(r)}>下载</Button>
                       <Popconfirm title="确认删除？" onConfirm={async () => {
                         await apiDeleteHistory(r.id!);
-                        loadHistory(); message.success('已删除');
+                        loadHistory(1, true); message.success('已删除');
                       }}><Button size="small" type="link" danger>删除</Button></Popconfirm>
                     </Space>
                   );
@@ -345,6 +364,17 @@ function ResourceCalculator() {
               },
             ]}
           />
+        )}
+        {historyData.length > 0 && (
+          <div style={{ textAlign: 'center', marginTop: 12 }}>
+            <Text type="secondary">已加载 {historyData.length} / {historyTotal} 条</Text>
+            {historyHasMore && (
+              <Button type="link" loading={historyLoading}
+                onClick={() => loadHistory(historyPage + 1)}>
+                加载更多
+              </Button>
+            )}
+          </div>
         )}
       </Card>
 
@@ -427,7 +457,8 @@ function ResourceCalculator() {
 
       {/* 导入弹窗 */}
       <Modal title="导入 Excel" open={importModalOpen} onCancel={() => setImportModalOpen(false)} onOk={handleConfirmImport}
-        okText={importMode === 'single' ? '导入选中行' : '开始群算'} cancelText="取消" width={750}>
+        okText={importMode === 'single' ? '导入选中行' : '开始群算'} cancelText="取消" width={750}
+        okButtonProps={{ loading: importLoading, disabled: importedData.length === 0 }}>
         <div style={{ marginBottom: 12 }}><Text strong>模式：{importMode === 'single' ? '单算导入（选择一行填入表单）' : '群算（批量计算存库）'}</Text></div>
         <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center' }}>
           <Button icon={<DownloadOutlined />} onClick={downloadBatchTemplate}>下载模板</Button>
