@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import {
   Form, InputNumber, Select, Button, Card, Table, Row, Col, Statistic, Space, message,
   Typography, Modal, Alert, Tooltip, Tabs, Collapse, Descriptions, Popconfirm, Tag,
@@ -15,7 +15,7 @@ import {
   exportBatchResultsToExcel, downloadBatchTemplate,
   type ParsedInput, type BatchReportRow,
 } from '../../utils/excelUtils';
-import { apiCalcResource, apiGetHistory, apiDeleteHistory, type HistoryItem } from '../../api';
+import { apiCalcResource, apiGetHistory, apiDeleteHistory, apiGetBatchDetail, type HistoryItem, type HistoryGroupItem } from '../../api';
 import BatchResultsView from '../../components/BatchResultsView';
 
 const { Title, Text, Paragraph } = Typography;
@@ -57,114 +57,78 @@ function ResourceCalculator() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // 历史
-  const [historyRaw, setHistoryRaw] = useState<HistoryItem[]>([]);
+  const [historyData, setHistoryData] = useState<HistoryGroupItem[]>([]);
+  const [historyTotal, setHistoryTotal] = useState(0);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [filterType, setFilterType] = useState<'all' | 'single' | 'batch'>('all');
-  const [filterDate, setFilterDate] = useState(''); // YYYY-MM-DD 前缀匹配
+  const [filterDate, setFilterDate] = useState('');
 
-  // 初始加载历史
   useEffect(() => { loadHistory(); }, []);
 
   const loadHistory = async () => {
     setHistoryLoading(true);
     try {
-      const res = await apiGetHistory(1, 500);
-      setHistoryRaw(res.data);
-    } catch { message.warning('后端不可用，无法加载历史'); }
+      const res = await apiGetHistory(1, 50, filterType, filterDate);
+      setHistoryData(res.data);
+      setHistoryTotal(res.total);
+    } catch { message.warning('后端不可用'); }
     finally { setHistoryLoading(false); }
   };
 
-  // 分组：batch_id 非空 → 群算批次；null → 单算
-  const historyGroups = useMemo(() => {
-    const singles: HistoryItem[] = [];
-    const batches = new Map<string, HistoryItem[]>();
-    for (const h of historyRaw) {
-      if (h.batch_id) {
-        if (!batches.has(h.batch_id)) batches.set(h.batch_id, []);
-        batches.get(h.batch_id)!.push(h);
-      } else {
-        singles.push(h);
-      }
-    }
-    return { singles, batches: Array.from(batches.entries()) };
-  }, [historyRaw]);
-
-  const historyTableData = useMemo(() => {
-    const rows: { key: string; type: 'single' | 'batch'; batchId?: string; item?: HistoryItem; items?: HistoryItem[]; count?: number; time?: string }[] = [];
-    // 群算批次
-    if (filterType === 'all' || filterType === 'batch') {
-      for (const [batchId, items] of historyGroups.batches) {
-        const time = items[0]?.created_at || '';
-        if (filterDate && !time.startsWith(filterDate)) continue;
-        rows.push({ key: `b-${batchId}`, type: 'batch', batchId, items, count: items.length, time });
-      }
-    }
-    // 单算
-    if (filterType === 'all' || filterType === 'single') {
-      for (const h of historyGroups.singles) {
-        if (filterDate && !h.created_at.startsWith(filterDate)) continue;
-        rows.push({ key: `s-${h.id}`, type: 'single', item: h, time: h.created_at });
-      }
-    }
-    rows.sort((a, b) => (b.time || '').localeCompare(a.time || ''));
-    return rows;
-  }, [historyGroups, filterType, filterDate]);
+  useEffect(() => { loadHistory(); }, [filterType, filterDate]);
 
   const parseItTrans = (s: string): [number, number][] => {
     try { const v = JSON.parse(s); if (Array.isArray(v)) return v; } catch {}
     return [[2, 6]];
   };
 
-  const handleHistoryLoad = (item: HistoryItem) => {
+  const handleHistoryLoad = (item: HistoryGroupItem) => {
     if (!item.result_json) { message.warning('该记录缺少完整数据'); return; }
     try {
       const r = JSON.parse(item.result_json);
       setReport(r as ResourceReport);
       setCurrentInput({
-        total_mw: item.total_mw, total_duration: item.total_duration,
+        total_mw: item.total_mw!, total_duration: item.total_duration!,
         cabinet_power: item.cabinet_power || 12,
-        it_transformers: parseItTrans(item.it_transformers),
+        it_transformers: parseItTrans(item.it_transformers || '[[2,6]]'),
         power_transformers: parseItTrans(item.power_transformers || '[[1.25,6]]'),
-        total_cabinets: item.total_cabinets || 1150, ac_type: item.ac_type,
+        total_cabinets: item.total_cabinets || 1150, ac_type: item.ac_type || '传统风冷',
       });
       setMode('single'); setSingleModalOpen(false);
       message.success('已加载历史记录');
     } catch { message.error('记录解析失败'); }
   };
 
-  const handleHistoryDownload = (item: HistoryItem) => {
+  const handleHistoryDownload = (item: HistoryGroupItem) => {
     if (!item.result_json) { message.warning('该记录缺少完整数据'); return; }
     try {
       const report = JSON.parse(item.result_json) as ResourceReport;
       const input: ResourceInput = {
-        total_mw: item.total_mw, total_duration: item.total_duration,
+        total_mw: item.total_mw!, total_duration: item.total_duration!,
         cabinet_power: item.cabinet_power || 12,
-        it_transformers: parseItTrans(item.it_transformers),
+        it_transformers: parseItTrans(item.it_transformers || '[[2,6]]'),
         power_transformers: parseItTrans(item.power_transformers || '[[1.25,6]]'),
-        total_cabinets: item.total_cabinets || 1150, ac_type: item.ac_type,
+        total_cabinets: item.total_cabinets || 1150, ac_type: item.ac_type || '传统风冷',
       };
       exportReportToExcel(input, report);
       message.success('已下载');
     } catch { message.error('导出失败'); }
   };
 
-  const handleBatchHistoryLoad = (items: HistoryItem[]) => {
-    const rows: BatchReportRow[] = items.map((h, i) => {
-      if (!h.result_json) return { index: i + 1, input: {} as ResourceInput, report: {} as ResourceReport, error: '缺数据' };
-      try {
-        const report = JSON.parse(h.result_json) as ResourceReport;
-        const input: ResourceInput = {
-          total_mw: h.total_mw, total_duration: h.total_duration,
-          cabinet_power: h.cabinet_power || 12,
-          it_transformers: parseItTrans(h.it_transformers),
-          power_transformers: parseItTrans(h.power_transformers || '[[1.25,6]]'),
-          total_cabinets: h.total_cabinets || 1150, ac_type: h.ac_type,
-        };
-        return { index: i + 1, input, report };
-      } catch { return { index: i + 1, input: {} as ResourceInput, report: {} as ResourceReport, error: '解析失败' }; }
-    });
-    setBatchResults(rows);
-    setMode('batch');
+  const handleBatchHistoryLoad = async (batchId: string) => {
+    try {
+      const res = await apiGetBatchDetail(batchId);
+      const items = res.data;
+      const rows: BatchReportRow[] = items.map((h, i) => {
+        if (!h.result_json) return { index: i + 1, input: {} as ResourceInput, report: {} as ResourceReport, error: '缺数据' };
+        try {
+          const report = JSON.parse(h.result_json) as ResourceReport;
+          return { index: i + 1, input: { total_mw: h.total_mw, total_duration: h.total_duration, cabinet_power: h.cabinet_power, it_transformers: parseItTrans(h.it_transformers), power_transformers: parseItTrans(h.power_transformers), total_cabinets: h.total_cabinets, ac_type: h.ac_type }, report };
+        } catch { return { index: i + 1, input: {} as ResourceInput, report: {} as ResourceReport, error: '解析失败' }; }
+      });
+      setBatchResults(rows);
+      setMode('batch');
+    } catch { message.error('加载批次详情失败'); }
   };
 
   // ============ 单算 ============
@@ -318,88 +282,60 @@ function ResourceCalculator() {
             />
             {filterDate && <Button size="small" onClick={() => setFilterDate('')}>清除日期</Button>}
             <Button size="small" icon={<DownloadOutlined />} onClick={loadHistory} loading={historyLoading}>刷新</Button>
-            <Text type="secondary">{historyTableData.length > 0 ? `共 ${historyTableData.length} 条` : ''}</Text>
+            <Text type="secondary">{historyData.length > 0 ? `共 ${historyData.length} 条` : ''}</Text>
           </Space>
         }
       >
-        {historyTableData.length === 0 && !historyLoading ? (
+        {historyData.length === 0 && !historyLoading ? (
           <div style={{ textAlign: 'center', padding: 40, color: '#999' }}>
             <HistoryOutlined style={{ fontSize: 36, marginBottom: 12 }} />
             <Paragraph>暂无历史记录。点击上方"单算"或"群算"开始。</Paragraph>
           </div>
         ) : (
-          <Table dataSource={historyTableData}
+          <Table dataSource={historyData.map((h) => ({ ...h, key: h.type === 'batch' ? h.batch_id! : 's' + h.id }))}
             loading={historyLoading} size="small" bordered
-            pagination={{ pageSize: 20, showSizeChanger: true, showTotal: (t: number) => `共 ${t} 条` }}
-            expandable={{
-              expandedRowRender: (r: typeof historyTableData[0]) => {
-                if (r.type !== 'batch' || !r.items) return null;
-                return (
-                  <div style={{ padding: '8px 0' }}>
-                    <Table size="small" bordered pagination={false}
-                      dataSource={r.items.map((h: HistoryItem) => ({ ...h, key: h.id }))}
-                      columns={[
-                        { title: '#', width: 40, render: (_: unknown, _2: unknown, i: number) => i + 1 },
-                        { title: '总MW', dataIndex: 'total_mw', width: 70 },
-                        { title: '工期', dataIndex: 'total_duration', width: 55 },
-                        { title: '峰值', dataIndex: 'peak_staff', width: 55, render: (v: number) => `${v}人` },
-                        { title: '人天', dataIndex: 'total_man_days', width: 65 },
-                        { title: '空调', dataIndex: 'ac_type', width: 80, render: (v: string) => <Tag>{v}</Tag> },
-                        { title: '操作', width: 120,
-                          render: (_: unknown, h: HistoryItem) => (
-                            <Space>
-                              <Button size="small" type="link"
-                                onClick={() => handleHistoryLoad(h)}>查看</Button>
-                              <Button size="small" type="link"
-                                onClick={() => handleHistoryDownload(h)}>下载</Button>
-                            </Space>
-                          ),
-                        },
-                      ]}
-                    />
-                    <div style={{ marginTop: 8 }}>
-                      <Button size="small" type="primary" onClick={() => handleBatchHistoryLoad(r.items!)}
-                        icon={<FileExcelOutlined />}>查看整批结果</Button>
-                    </div>
-                  </div>
-                );
-              },
-              rowExpandable: (r: typeof historyTableData[0]) => r.type === 'batch',
+            pagination={{
+              pageSize: 20, showSizeChanger: true,
+              total: historyTotal,
+              showTotal: (t: number) => `共 ${t} 条`,
             }}
             columns={[
               { title: '类型', dataIndex: 'type', width: 60, render: (t: string) => <Tag color={t === 'batch' ? 'blue' : 'default'}>{t === 'batch' ? '群算' : '单算'}</Tag> },
               {
-                title: '概要', key: 'summary', render: (_: unknown, r: typeof historyTableData[0]) => {
-                  if (r.type === 'batch' && r.items) {
-                    const mws = r.items.map((i: HistoryItem) => i.total_mw);
-                    return <Text>{r.count}项, {Math.min(...mws)}~{Math.max(...mws)}MW, 累计{r.items.reduce((s: number, i: HistoryItem) => s + i.peak_staff, 0)}人</Text>;
+                title: '概要', key: 'summary', render: (_: unknown, r: HistoryGroupItem) => {
+                  if (r.type === 'batch') {
+                    return <Text>{r.count}项, {r.min_mw}~{r.max_mw}MW, 累计{r.total_peak}人 / {r.total_md}人天</Text>;
                   }
-                  return <Text>{r.item!.total_mw}MW, {r.item!.total_duration}天, <Tag>{r.item!.ac_type}</Tag></Text>;
+                  return <Text>{r.total_mw}MW, {r.total_duration}天, <Tag>{r.ac_type}</Tag></Text>;
                 },
               },
-              { title: '峰值', key: 'peak', width: 70, render: (_: unknown, r: typeof historyTableData[0]) => r.type === 'batch' ? `${r.items!.reduce((s: number, i: HistoryItem) => s + i.peak_staff, 0)}人` : `${r.item!.peak_staff}人` },
-              { title: '人天', key: 'md', width: 75, render: (_: unknown, r: typeof historyTableData[0]) => r.type === 'batch' ? r.items!.reduce((s: number, i: HistoryItem) => s + i.total_man_days, 0) : r.item!.total_man_days },
+              { title: '峰值', key: 'peak', width: 70, render: (_: unknown, r: HistoryGroupItem) => r.type === 'batch' ? `${r.total_peak}人` : `${r.peak_staff}人` },
+              { title: '人天', key: 'md', width: 75, render: (_: unknown, r: HistoryGroupItem) => r.type === 'batch' ? r.total_md : r.total_man_days },
               { title: '时间', dataIndex: 'time', width: 155 },
               {
                 title: '操作', key: 'action', width: 180,
-                render: (_: unknown, r: typeof historyTableData[0]) => {
+                render: (_: unknown, r: HistoryGroupItem) => {
                   if (r.type === 'batch') {
                     return (
                       <Space>
-                        <Button size="small" type="link" onClick={() => handleBatchHistoryLoad(r.items!)}>查看</Button>
-                        <Popconfirm title="删除整批？" onConfirm={async () => {
-                          for (const h of r.items!) await apiDeleteHistory(h.id);
-                          loadHistory(); message.success('已删除');
-                        }}><Button size="small" type="link" danger>删除</Button></Popconfirm>
+                        <Button size="small" type="link" onClick={() => handleBatchHistoryLoad(r.batch_id!)}>查看</Button>
+                        <Button size="small" type="link" danger onClick={async () => {
+                          // 删整批：先取详情再逐条删
+                          try {
+                            const res2 = await apiGetBatchDetail(r.batch_id!);
+                            for (const h of res2.data) await apiDeleteHistory(h.id);
+                            loadHistory(); message.success('已删除');
+                          } catch { message.error('删除失败'); }
+                        }}>删除</Button>
                       </Space>
                     );
                   }
                   return (
                     <Space>
-                      <Button size="small" type="link" onClick={() => handleHistoryLoad(r.item!)}>加载</Button>
-                      <Button size="small" type="link" icon={<ExportOutlined />} onClick={() => handleHistoryDownload(r.item!)}>下载</Button>
+                      <Button size="small" type="link" onClick={() => handleHistoryLoad(r)}>加载</Button>
+                      <Button size="small" type="link" icon={<ExportOutlined />} onClick={() => handleHistoryDownload(r)}>下载</Button>
                       <Popconfirm title="确认删除？" onConfirm={async () => {
-                        await apiDeleteHistory(r.item!.id);
+                        await apiDeleteHistory(r.id!);
                         loadHistory(); message.success('已删除');
                       }}><Button size="small" type="link" danger>删除</Button></Popconfirm>
                     </Space>

@@ -91,20 +91,56 @@ router.post('/batch', (req: Request, res: Response) => {
   }
 });
 
-/** GET /api/resource-calc/history — 查询历史 */
+/** GET /api/resource-calc/history — 查询历史（已分组，群算合并为一行） */
 router.get('/history', (req: Request, res: Response) => {
   try {
     const page = parseInt(req.query.page as string) || 1;
     const size = parseInt(req.query.size as string) || 20;
+    const filterType = req.query.type as string || 'all';
+    const filterDate = req.query.date as string || '';
     const offset = (page - 1) * size;
 
-    const rows = db.prepare(`SELECT id, batch_id, total_mw, total_duration, cabinet_power, it_transformers, power_transformers,
+    let whereDate = '';
+    if (filterDate) whereDate = `WHERE created_at LIKE '${filterDate}%'`;
+
+    // 群算分组
+    const batchWhere = filterType === 'single' ? 'AND 1=0' : (filterDate ? `AND batch_id IS NOT NULL AND created_at LIKE '${filterDate}%'` : 'AND batch_id IS NOT NULL');
+    const batchRows = db.prepare(`SELECT batch_id, COUNT(*) as count, MIN(total_mw) as min_mw, MAX(total_mw) as max_mw,
+      SUM(peak_staff) as total_peak, SUM(total_man_days) as total_md, MAX(created_at) as created_at
+      FROM resource_calc_history WHERE batch_id IS NOT NULL ${filterDate ? `AND created_at LIKE '${filterDate}%'` : ''}
+      GROUP BY batch_id ORDER BY created_at DESC`).all();
+
+    // 单算
+    const singleWhere = filterType === 'batch' ? 'AND 1=0' : 'AND batch_id IS NULL';
+    const singleRows = db.prepare(`SELECT id, batch_id, total_mw, total_duration, cabinet_power, it_transformers, power_transformers,
       total_cabinets, ac_type, peak_staff, total_man_days, result_json, created_at
-      FROM resource_calc_history ORDER BY created_at DESC LIMIT ? OFFSET ?`).all(size, offset);
+      FROM resource_calc_history WHERE batch_id IS NULL ${filterDate ? `AND created_at LIKE '${filterDate}%'` : ''}
+      ORDER BY created_at DESC`).all();
 
-    const total = (db.prepare('SELECT COUNT(*) as cnt FROM resource_calc_history').get() as { cnt: number }).cnt;
+    // 合并排序：batch 和 single 按时间混合
+    type Row = { type: string; time: string; [key: string]: unknown };
+    const merged: Row[] = [
+      ...batchRows.map((r: Record<string, unknown>) => ({ type: 'batch', time: r.created_at as string, ...r })),
+      ...singleRows.map((r: Record<string, unknown>) => ({ type: 'single', time: r.created_at as string, ...r })),
+    ];
+    merged.sort((a, b) => b.time.localeCompare(a.time));
 
-    res.json({ success: true, data: rows, page, size, total });
+    const total = merged.length;
+    const paged = merged.slice(offset, offset + size);
+
+    res.json({ success: true, data: paged, page, size, total });
+  } catch (e) {
+    res.status(500).json({ error: '查询失败', detail: String(e) });
+  }
+});
+
+/** GET /api/resource-calc/history/batch/:batchId — 获取群算批次详情 */
+router.get('/history/batch/:batchId', (req: Request, res: Response) => {
+  try {
+    const rows = db.prepare(`SELECT id, total_mw, total_duration, cabinet_power, it_transformers, power_transformers,
+      total_cabinets, ac_type, peak_staff, total_man_days, result_json, created_at
+      FROM resource_calc_history WHERE batch_id=? ORDER BY id`).all(req.params.batchId);
+    res.json({ success: true, data: rows });
   } catch (e) {
     res.status(500).json({ error: '查询失败', detail: String(e) });
   }

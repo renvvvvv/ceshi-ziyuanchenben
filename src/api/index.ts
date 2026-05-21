@@ -37,23 +37,44 @@ export function apiCalcResource(input: CalcInput): Promise<CalcResponse> {
   return request<CalcResponse>('/resource-calc', { method: 'POST', body: JSON.stringify(input) });
 }
 
+export interface HistoryGroupItem {
+  type: 'batch' | 'single';
+  time: string;
+  // batch fields
+  batch_id?: string; count?: number; min_mw?: number; max_mw?: number;
+  total_peak?: number; total_md?: number;
+  // single fields
+  id?: number; total_mw?: number; total_duration?: number; cabinet_power?: number;
+  it_transformers?: string; power_transformers?: string;
+  total_cabinets?: number; ac_type?: string;
+  peak_staff?: number; total_man_days?: number;
+  result_json?: string; created_at?: string;
+}
+
+export interface HistoryGroupResponse {
+  success: boolean;
+  data: HistoryGroupItem[];
+  page: number; size: number; total: number;
+}
+
+export function apiGetHistory(page = 1, size = 20, type?: string, date?: string): Promise<HistoryGroupResponse> {
+  const params = new URLSearchParams({ page: String(page), size: String(size) });
+  if (type && type !== 'all') params.set('type', type);
+  if (date) params.set('date', date);
+  return request<HistoryGroupResponse>('/resource-calc/history?' + params.toString());
+}
+
+export function apiGetBatchDetail(batchId: string): Promise<{ success: boolean; data: HistoryItem[] }> {
+  return request('/resource-calc/history/batch/' + batchId);
+}
+
 export interface HistoryItem {
-  id: number; batch_id: string | null;
+  id: number; batch_id?: string | null;
   total_mw: number; total_duration: number; cabinet_power: number;
   it_transformers: string; power_transformers: string;
   total_cabinets: number; ac_type: string;
   peak_staff: number; total_man_days: number;
   result_json?: string; created_at: string;
-}
-
-export interface HistoryResponse {
-  success: boolean;
-  data: HistoryItem[];
-  page: number; size: number; total: number;
-}
-
-export function apiGetHistory(page = 1, size = 20): Promise<HistoryResponse> {
-  return request<HistoryResponse>(`/resource-calc/history?page=${page}&size=${size}`);
 }
 
 export function apiDeleteHistory(id: number): Promise<{ success: boolean }> {
