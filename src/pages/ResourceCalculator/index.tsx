@@ -68,7 +68,7 @@ function ResourceCalculator() {
   const loadHistory = async () => {
     setHistoryLoading(true);
     try {
-      const res = await apiGetHistory(1, 200);
+      const res = await apiGetHistory(1, 500);
       setHistoryRaw(res.data);
     } catch { message.warning('后端不可用，无法加载历史'); }
     finally { setHistoryLoading(false); }
