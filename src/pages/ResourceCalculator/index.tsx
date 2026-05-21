@@ -61,30 +61,28 @@ function ResourceCalculator() {
   const [historyData, setHistoryData] = useState<HistoryGroupItem[]>([]);
   const [historyTotal, setHistoryTotal] = useState(0);
   const [historyPage, setHistoryPage] = useState(1);
+  const [historyPageSize, setHistoryPageSize] = useState(20);
   const [historyLoading, setHistoryLoading] = useState(false);
-  const [historyHasMore, setHistoryHasMore] = useState(false);
   const [filterType, setFilterType] = useState<'all' | 'single' | 'batch'>('all');
   const [filterDate, setFilterDate] = useState('');
   const [backendOnline, setBackendOnline] = useState(true);
 
-  const HISTORY_PAGE_SIZE = 20;
+  useEffect(() => { loadHistory(1, historyPageSize); }, []);
 
-  useEffect(() => { loadHistory(1, true); }, []);
-
-  const loadHistory = async (page = 1, reset = false) => {
+  const loadHistory = async (page: number, size: number) => {
     setHistoryLoading(true);
     try {
-      const res = await apiGetHistory(page, HISTORY_PAGE_SIZE, filterType, filterDate);
-      setHistoryData(prev => reset ? res.data : [...prev, ...res.data]);
+      const res = await apiGetHistory(page, size, filterType, filterDate);
+      setHistoryData(res.data);
       setHistoryTotal(res.total);
       setHistoryPage(page);
-      setHistoryHasMore(res.total > page * HISTORY_PAGE_SIZE);
+      setHistoryPageSize(size);
       setBackendOnline(true);
-    } catch { setBackendOnline(false); if (reset) setHistoryData([]); }
+    } catch { setBackendOnline(false); setHistoryData([]); }
     finally { setHistoryLoading(false); }
   };
 
-  useEffect(() => { loadHistory(1, true); }, [filterType, filterDate]);
+  useEffect(() => { loadHistory(1, historyPageSize); }, [filterType, filterDate]);
 
   const parseItTrans = (s: string): [number, number][] => {
     try { const v = JSON.parse(s); if (Array.isArray(v)) return v; } catch {}
@@ -235,7 +233,7 @@ function ResourceCalculator() {
   const goHome = () => {
     setMode('home'); setReport(null); setCurrentInput(null);
     setBatchResults([]); setSingleModalOpen(false);
-    loadHistory(1, true);
+    loadHistory(1, historyPageSize);
   };
 
   // ============ 群算结果页 ============
@@ -305,7 +303,7 @@ function ResourceCalculator() {
             />
             {filterDate && <Button size="small" onClick={() => setFilterDate('')}>清除日期</Button>}
             {!backendOnline && <Tag color="red">后端离线</Tag>}
-            <Button size="small" icon={<DownloadOutlined />} onClick={() => loadHistory(1, true)} loading={historyLoading}>刷新</Button>
+            <Button size="small" icon={<DownloadOutlined />} onClick={() => loadHistory(1, historyPageSize)} loading={historyLoading}>刷新</Button>
             <Text type="secondary">{historyData.length > 0 ? `共 ${historyData.length} 条` : ''}</Text>
           </Space>
         }
@@ -318,7 +316,15 @@ function ResourceCalculator() {
         ) : (
           <Table dataSource={historyData.map((h) => ({ ...h, key: h.type === 'batch' ? h.batch_id! : 's' + h.id }))}
             loading={historyLoading} size="small" bordered
-            pagination={false}
+            pagination={{
+              current: historyPage,
+              pageSize: historyPageSize,
+              total: historyTotal,
+              showSizeChanger: true,
+              pageSizeOptions: ['10', '20', '50'],
+              showTotal: (t: number) => `共 ${t} 条`,
+              onChange: (p, s) => loadHistory(p, s),
+            }}
             columns={[
               { title: '类型', dataIndex: 'type', width: 60, render: (t: string) => <Tag color={t === 'batch' ? 'blue' : 'default'}>{t === 'batch' ? '群算' : '单算'}</Tag> },
               {
@@ -344,7 +350,7 @@ function ResourceCalculator() {
                           try {
                             const res2 = await apiGetBatchDetail(r.batch_id!);
                             for (const h of res2.data) await apiDeleteHistory(h.id);
-                            loadHistory(1, true); message.success('已删除');
+                            loadHistory(1, historyPageSize); message.success('已删除');
                           } catch { message.error('删除失败'); }
                         }}>删除</Button>
                       </Space>
@@ -356,7 +362,7 @@ function ResourceCalculator() {
                       <Button size="small" type="link" icon={<ExportOutlined />} onClick={() => handleHistoryDownload(r)}>下载</Button>
                       <Popconfirm title="确认删除？" onConfirm={async () => {
                         await apiDeleteHistory(r.id!);
-                        loadHistory(1, true); message.success('已删除');
+                        loadHistory(1, historyPageSize); message.success('已删除');
                       }}><Button size="small" type="link" danger>删除</Button></Popconfirm>
                     </Space>
                   );
@@ -364,17 +370,6 @@ function ResourceCalculator() {
               },
             ]}
           />
-        )}
-        {historyData.length > 0 && (
-          <div style={{ textAlign: 'center', marginTop: 12 }}>
-            <Text type="secondary">已加载 {historyData.length} / {historyTotal} 条</Text>
-            {historyHasMore && (
-              <Button type="link" loading={historyLoading}
-                onClick={() => loadHistory(historyPage + 1)}>
-                加载更多
-              </Button>
-            )}
-          </div>
         )}
       </Card>
 
