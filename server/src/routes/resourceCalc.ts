@@ -5,7 +5,7 @@ import { fileURLToPath } from 'url';
 import db from '../database.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const SCRIPTS_DIR = join(__dirname, '..', '..', 'scripts');
+const SCRIPTS_DIR = join(__dirname, '..', '..', '..', 'scripts');
 const PY = 'python3';
 
 const router = Router();
