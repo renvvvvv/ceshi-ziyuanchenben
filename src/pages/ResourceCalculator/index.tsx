@@ -139,21 +139,29 @@ function ResourceCalculator() {
   };
 
   // ============ 单算 ============
+  // 功率段列表状态
+  const [powerSegments, setPowerSegments] = useState<{ power: number; count: number }[]>([
+    { power: 20, count: 500 },
+  ]);
+
   const buildInput = (): ResourceInput | null => {
     const values = form.getFieldsValue();
     const itTrans: [number, number][] = (values.it_transSpecs || []).map((s: number) => [s, values.it_transCount || 1]);
     const pwTrans: [number, number][] = (values.pw_transSpecs || []).map((s: number) => [s, values.pw_transCount || 1]);
     if (itTrans.length === 0 || pwTrans.length === 0) { message.warning('请选择变压器规格'); return null; }
-    if (!values.total_mw || !values.total_duration || !values.total_cabinets) { message.warning('请填写必填字段：总兆瓦数、总工期、总机柜数'); return null; }
+    if (!values.total_mw || !values.total_duration) { message.warning('请填写必填字段：总兆瓦数、总工期'); return null; }
     if (values.total_mw < 10 || values.total_mw > 66) { message.warning('总兆瓦数需在 10~66 MW 之间'); return null; }
     if (values.total_duration < 1 || values.total_duration > 365) { message.warning('工期需在 1~365 天之间'); return null; }
     if ((values.it_transCount || 1) < 1 || (values.it_transCount || 1) > 20) { message.warning('IT变压器台数需在 1~20 之间'); return null; }
     if ((values.pw_transCount || 1) < 1 || (values.pw_transCount || 1) > 20) { message.warning('动力变压器台数需在 1~20 之间'); return null; }
+    if (powerSegments.length === 0) { message.warning('请添加至少一个功率段'); return null; }
+    const totalCabs = powerSegments.reduce((s, seg) => s + seg.count, 0);
+    if (totalCabs < 1) { message.warning('总机柜数不能为0'); return null; }
     return {
       total_mw: values.total_mw, total_duration: values.total_duration,
-      cabinet_power: values.cabinet_power, it_transformers: itTrans,
-      power_transformers: pwTrans, total_cabinets: values.total_cabinets,
-      ac_type: values.ac_type,
+      cabinet_power_segments: powerSegments,
+      it_transformers: itTrans, power_transformers: pwTrans,
+      total_cabinets: totalCabs, ac_type: values.ac_type,
     };
   };
 
@@ -208,14 +216,19 @@ function ResourceCalculator() {
       const itTotal = item.it_transformers?.reduce((s, [, n]) => s + n, 0) || 0;
       const pwSpecs = item.power_transformers?.map(([c]) => c) || [];
       const pwTotal = item.power_transformers?.reduce((s, [, n]) => s + n, 0) || 0;
+      // 尝试解析多功率段
+      if (item.cabinet_power_segments && item.cabinet_power_segments.length > 0) {
+        setPowerSegments(item.cabinet_power_segments);
+      } else {
+        setPowerSegments([{ power: item.cabinet_power || 20, count: item.total_cabinets || 500 }]);
+      }
       form.setFieldsValue({
         total_mw: item.total_mw, total_duration: item.total_duration,
-        cabinet_power: item.cabinet_power,
         it_transSpecs: itSpecs.length > 0 ? itSpecs : undefined,
         it_transCount: itTotal || undefined,
         pw_transSpecs: pwSpecs.length > 0 ? pwSpecs : undefined,
         pw_transCount: pwTotal || undefined,
-        total_cabinets: item.total_cabinets, ac_type: item.ac_type,
+        ac_type: item.ac_type,
       });
       setSingleModalOpen(true);
       message.success('参数已导入表单，请确认后计算');
@@ -383,10 +396,10 @@ function ResourceCalculator() {
         width={560}
       >
         <Form form={form} layout="vertical" initialValues={{
-          total_mw: 21.6, total_duration: 21, cabinet_power: 12,
+          total_mw: 30.0, total_duration: 25,
           it_transSpecs: [2.0], it_transCount: 6,
           pw_transSpecs: [1.25], pw_transCount: 6,
-          total_cabinets: 1150, ac_type: '液冷',
+          ac_type: '液冷',
         }}>
           <Row gutter={16}>
             <Col span={12}>
@@ -400,18 +413,42 @@ function ResourceCalculator() {
               </Form.Item>
             </Col>
           </Row>
-          <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item name="cabinet_power" label="单机柜功率" rules={[{ required: true }]}>
-                <Select options={CABINET_POWER_OPTIONS} />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item name="total_cabinets" label="总机柜数" rules={[{ required: true }]}>
-                <InputNumber style={{ width: '100%' }} min={1} />
-              </Form.Item>
-            </Col>
-          </Row>
+          <Form.Item label="机柜功率段配置（可添加多行）" required>
+            <div style={{ border: '1px solid #d9d9d9', borderRadius: 6, padding: 12, marginBottom: 8 }}>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 4, fontWeight: 500, fontSize: 12, color: '#666' }}>
+                <span style={{ width: 100 }}>功率 (kW)</span>
+                <span style={{ flex: 1 }}>机柜数量</span>
+                <span style={{ width: 60 }}></span>
+              </div>
+              {powerSegments.map((seg, i) => (
+                <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 6, alignItems: 'center' }}>
+                  <Select value={seg.power} style={{ width: 100 }}
+                    options={CABINET_POWER_OPTIONS}
+                    onChange={v => {
+                      const ns = [...powerSegments];
+                      ns[i] = { ...ns[i], power: v };
+                      setPowerSegments(ns);
+                    }} />
+                  <InputNumber style={{ flex: 1 }} min={1} value={seg.count}
+                    onChange={v => {
+                      const ns = [...powerSegments];
+                      ns[i] = { ...ns[i], count: v || 0 };
+                      setPowerSegments(ns);
+                    }} />
+                  <Button size="small" danger style={{ width: 60 }}
+                    onClick={() => setPowerSegments(powerSegments.filter((_, j) => j !== i))}
+                    disabled={powerSegments.length <= 1}>删除</Button>
+                </div>
+              ))}
+              <Button type="dashed" size="small" block onClick={() => setPowerSegments([...powerSegments, { power: 20, count: 500 }])}>
+                + 添加功率段
+              </Button>
+            </div>
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              总机柜：{powerSegments.reduce((s, seg) => s + seg.count, 0)} 柜
+              | 总IT容量：{(powerSegments.reduce((s, seg) => s + seg.power * seg.count, 0) / 1000).toFixed(2)} MW
+            </Text>
+          </Form.Item>
           <Row gutter={16}>
             <Col span={12}>
               <Form.Item label="IT变压器规格" required>
@@ -530,7 +567,8 @@ function buildSummaryRow(input: ResourceInput, report: ResourceReport): (string 
   const pwCount = input.power_transformers.reduce((s, [, n]) => s + n, 0);
   const pue = itCap > 0 ? Math.round((input.total_mw / itCap) * 1000) / 1000 : 0;
   return [
-    input.cabinet_power, input.total_cabinets, itCap, expandTf(input.it_transformers), itCount,
+    input.cabinet_power || (input.cabinet_power_segments || []).map(s => s.power).join('/') || '-',
+    input.total_cabinets || 0, itCap, expandTf(input.it_transformers), itCount,
     pue, pwCap, expandTf(input.power_transformers), pwCount,
     input.total_mw, input.total_duration, input.ac_type,
     report.IT链路.所需并行数, report.IT链路.实际测试工期, report.IT链路.同时在场人数, report.IT链路.总人天,

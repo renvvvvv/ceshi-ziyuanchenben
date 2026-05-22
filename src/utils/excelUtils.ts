@@ -97,8 +97,7 @@ function expandTransformers(transformers: [number, number][]): string {
 }
 
 function buildSummaryRow(input: ResourceInput, report: ResourceReport): (string | number)[] {
-  const cabinetPower = input.cabinet_power;
-  const cabinetCount = input.total_cabinets;
+  const cabinetCount = input.total_cabinets || 0;
   const itCap = input.it_transformers.reduce((s, [c, n]) => s + c * n, 0);
   const pwCap = input.power_transformers.reduce((s, [c, n]) => s + c * n, 0);
   const itCount = input.it_transformers.reduce((s, [, n]) => s + n, 0);
@@ -108,7 +107,7 @@ function buildSummaryRow(input: ResourceInput, report: ResourceReport): (string 
   const pue = itCap > 0 ? Math.round((input.total_mw / itCap) * 1000) / 1000 : 0;
 
   return [
-    input.cabinet_power, cabinetCount, itCap, itComp, itCount,
+    input.cabinet_power || (input.cabinet_power_segments || []).map(s => s.power).join('/') || '-', cabinetCount, itCap, itComp, itCount,
     pue, pwCap, pwComp, pwCount,
     input.total_mw, input.total_duration, input.ac_type,
     report.IT链路.所需并行数, report.IT链路.实际测试工期, report.IT链路.同时在场人数, report.IT链路.总人天,
@@ -200,10 +199,10 @@ export function exportReportToExcel(input: ResourceInput, report: ResourceReport
       ['=== 项目输入 ===', ''],
       ['总兆瓦数(MW)', input.total_mw],
       ['总工期(天)', input.total_duration],
-      ['单机柜压测功率(kW)', input.cabinet_power],
+      ['单机柜功率(kW)', input.cabinet_power || (input.cabinet_power_segments || []).map(s => `${s.power}kW×${s.count}`).join('+') || '-'],
       ['IT变压器配置', itSpecStr],
       ['动力变压器配置', pwSpecStr],
-      ['总机柜数', input.total_cabinets],
+      ['总机柜数', input.total_cabinets || 0],
       ['空调类型', input.ac_type],
       ['', ''],
       ['=== IT链路 ===', ''],
@@ -262,6 +261,7 @@ export interface ParsedInput {
   total_mw?: number;
   total_duration?: number;
   cabinet_power?: number;
+  cabinet_power_segments?: { power: number; count: number }[];
   it_transformers?: [number, number][];
   power_transformers?: [number, number][];
   total_cabinets?: number;

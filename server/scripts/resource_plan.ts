@@ -5,10 +5,15 @@
 
 // ============ 类型 ============
 
+export interface PowerSegment { power: number; count: number; }
+
 export interface ResourceInput {
-  total_mw: number; total_duration: number; cabinet_power: number;
+  total_mw: number; total_duration: number;
+  cabinet_power?: number;                   // 兼容旧版单一功率
+  cabinet_power_segments?: PowerSegment[];   // 新版多功率输入
   it_transformers: [number, number][]; power_transformers: [number, number][];
-  total_cabinets: number; ac_type: string;
+  total_cabinets?: number;                   // 兼容旧版（新版由 segments 求和）
+  ac_type: string;
 }
 
 export interface StaffResult {
@@ -123,9 +128,26 @@ function calcFire(cabinetCount: number) {
 
 function calcLoads(input: ResourceInput) {
   const r = config.load_config.redundancy;
-  const itCfg = config.it_load_per_mw[String(input.cabinet_power)] || { '6kw': 0, '8kw': 0 };
   const totalIt = input.it_transformers.reduce((s, [, n]) => s + n, 0);
-  const t6 = Math.ceil(totalIt * itCfg['6kw'] * r), t8 = Math.ceil(totalIt * itCfg['8kw'] * r);
+  let t6 = 0, t8 = 0;
+
+  // 多功率：按各功率段分别计算后汇总
+  const segments = input.cabinet_power_segments || [];
+  if (segments.length > 0) {
+    for (const seg of segments) {
+      const itCfg = config.it_load_per_mw[String(seg.power)] || { '6kw': 0, '8kw': 0 };
+      const segMW = seg.power * seg.count / 1000;
+      t6 += Math.ceil(totalIt * itCfg['6kw'] * r * segMW / input.total_mw);
+      t8 += Math.ceil(totalIt * itCfg['8kw'] * r * segMW / input.total_mw);
+    }
+  } else {
+    // 兼容旧版单一功率
+    const cp = input.cabinet_power || 12;
+    const itCfg = config.it_load_per_mw[String(cp)] || { '6kw': 0, '8kw': 0 };
+    t6 = Math.ceil(totalIt * itCfg['6kw'] * r);
+    t8 = Math.ceil(totalIt * itCfg['8kw'] * r);
+  }
+
   const totalPw = input.power_transformers.reduce((s, [, n]) => s + n, 0);
   let t500 = 0, t300 = 0;
   if (totalPw > 0) {
@@ -135,17 +157,23 @@ function calcLoads(input: ResourceInput) {
   }
   const owned = config.owned_loads;
   return {
-    '6kW': { 总需求: t6, 自有: Math.min(t6, owned['6kw']), 需租赁: Math.max(0, t6 - owned['6kw']) },
-    '8kW': { 总需求: t8, 自有: Math.min(t8, owned['8kw']), 需租赁: Math.max(0, t8 - owned['8kw']) },
+    '6kW': { 总需求: Math.ceil(t6), 自有: Math.min(Math.ceil(t6), owned['6kw']), 需租赁: Math.max(0, Math.ceil(t6) - owned['6kw']) },
+    '8kW': { 总需求: Math.ceil(t8), 自有: Math.min(Math.ceil(t8), owned['8kw']), 需租赁: Math.max(0, Math.ceil(t8) - owned['8kw']) },
     '500kW': { 总需求: t500, 需租赁: t500 }, '300kW': { 总需求: t300, 需租赁: t300 },
   };
 }
 
 export function calculateResource(input: ResourceInput): ResourceReport {
-  const it = calcItStaff(input), pw = calcPowerStaff(input);
-  const hvac = calcHvacr(input);
+  // 归一化：从 segments 推导 total_cabinets
+  const segments = input.cabinet_power_segments || [];
+  const totalCabinets = input.total_cabinets || segments.reduce((s, seg) => s + seg.count, 0);
+
+  const normalizedInput = { ...input, total_cabinets: totalCabinets };
+
+  const it = calcItStaff(normalizedInput), pw = calcPowerStaff(normalizedInput);
+  const hvac = calcHvacr(normalizedInput);
   const gen = { 主测: 1, 记录员: 1, 小计: 2 };
-  const fire = calcFire(input.total_cabinets);
+  const fire = calcFire(totalCabinets);
   const weak = calcWeakCurrent(it.同时在场人数 + pw.同时在场人数, hvac.暖通总组数);
   const fixed = { 项目经理: 1, 资料员: 1, 电气主测: 1, 暖通主测: 1, 弱电主测: 1, 消防主测: 1, 小计: 6 };
   const loads = calcLoads(input);
@@ -183,10 +211,16 @@ export function calculateResource(input: ResourceInput): ResourceReport {
     { name: '风冷机架式假负载', count: 2, days: dur, totalUnits: 2 * dur, spare: 0, spec: '2000KW/台' },
   ];
 
-  const cabs = input.total_cabinets;
+  const cabs = totalCabinets;
 
   return {
-    项目信息: { 总容量: `${input.total_mw}MW`, 工期: `${dur}天`, 单机柜功率: `${input.cabinet_power}kW`, 总机柜: `${cabs}个`, 空调: normAc(input.ac_type) },
+    项目信息: {
+      总容量: `${input.total_mw}MW`, 工期: `${dur}天`,
+      单机柜功率: segments.length > 0
+        ? segments.map(s => `${s.power}kW×${s.count}柜`).join(' + ')
+        : `${input.cabinet_power || '-'}kW`,
+      总机柜: `${cabs}个`, 空调: normAc(input.ac_type),
+    },
     IT链路: it, 动力链路: pw, 暖通: hvac, 柴发: gen, 弱电: weak, 消防: fire, 固定人员: fixed,
     负载: loads, 汇总: { 峰值同时在场: peakStaff, 总人天: totalManDays },
     工具清单: tools, 假负载清单: fakeLoads, 劳务清单: { 总人天: totalManDays },

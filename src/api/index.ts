@@ -22,9 +22,11 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 // ============ 资源计算 ============
 
 export interface CalcInput {
-  total_mw: number; total_duration: number; cabinet_power: number;
+  total_mw: number; total_duration: number;
+  cabinet_power?: number;
+  cabinet_power_segments?: { power: number; count: number }[];
   it_transformers: [number, number][]; power_transformers: [number, number][];
-  total_cabinets: number; ac_type: string;
+  total_cabinets?: number; ac_type: string;
 }
 
 export interface CalcResponse {

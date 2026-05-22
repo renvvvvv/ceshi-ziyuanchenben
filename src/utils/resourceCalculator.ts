@@ -5,13 +5,16 @@
 
 // ============ 类型 ============
 
+export interface PowerSegment { power: number; count: number; }
+
 export interface ResourceInput {
   total_mw: number;
   total_duration: number;
-  cabinet_power: number;
-  it_transformers: [number, number][]; // [容量(MW), 台数]
+  cabinet_power?: number;
+  cabinet_power_segments?: PowerSegment[];
+  it_transformers: [number, number][];
   power_transformers: [number, number][];
-  total_cabinets: number;
+  total_cabinets?: number;
   ac_type: string;
 }
 
@@ -163,15 +166,27 @@ function calcLoads(input: ResourceInput): LoadResult {
   const powerLoadCfg = config.power_load_config;
   const owned = config.owned_loads;
 
-  const cpKey = String(input.cabinet_power);
-  const itCfg = itLoadCfg[cpKey];
-  if (!itCfg) {
-    return { IT负载配置: {}, '6kW': { 总需求: 0, 自有: 0, 需租赁: 0 }, '8kW': { 总需求: 0, 自有: 0, 需租赁: 0 }, '500kW': { 总需求: 0, 需租赁: 0 }, '300kW': { 总需求: 0, 需租赁: 0 } };
-  }
-
   const totalIt = input.it_transformers.reduce((s, [, n]) => s + n, 0);
-  const total6kw = Math.ceil(totalIt * itCfg['6kw'] * redundancy);
-  const total8kw = Math.ceil(totalIt * itCfg['8kw'] * redundancy);
+  let total6kw = 0, total8kw = 0;
+  let powerDesc = '';
+
+  // 多功率段
+  const segments = input.cabinet_power_segments || [];
+  if (segments.length > 0) {
+    for (const seg of segments) {
+      const itCfg = itLoadCfg[String(seg.power)] || { '6kw': 0, '8kw': 0 };
+      const segMW = seg.power * seg.count / 1000;
+      total6kw += totalIt * itCfg['6kw'] * redundancy * segMW / input.total_mw;
+      total8kw += totalIt * itCfg['8kw'] * redundancy * segMW / input.total_mw;
+    }
+    powerDesc = segments.map(s => `${s.power}kW×${s.count}柜`).join(' + ');
+  } else {
+    const cp = input.cabinet_power || 12;
+    const itCfg = itLoadCfg[String(cp)] || { '6kw': 0, '8kw': 0 };
+    total6kw = totalIt * itCfg['6kw'] * redundancy;
+    total8kw = totalIt * itCfg['8kw'] * redundancy;
+    powerDesc = `${cp}kW`;
+  }
 
   const totalPw = input.power_transformers.reduce((s, [, n]) => s + n, 0);
   let total500kw = 0, total300kw = 0;
@@ -185,9 +200,9 @@ function calcLoads(input: ResourceInput): LoadResult {
 
   return {
     IT负载配置: {
-      单机柜功率: `${input.cabinet_power}kW`,
+      单机柜功率: powerDesc,
       IT变压器总台数: totalIt,
-      每台1_1MW配置: `6kW:${itCfg['6kw']}台, 8kW:${itCfg['8kw']}台`,
+      每台1_1MW配置: '按功率段汇总',
     },
     '6kW': { 总需求: total6kw, 自有: Math.min(total6kw, owned['6kw']), 需租赁: Math.max(0, total6kw - owned['6kw']) },
     '8kW': { 总需求: total8kw, 自有: Math.min(total8kw, owned['8kw']), 需租赁: Math.max(0, total8kw - owned['8kw']) },
@@ -257,12 +272,16 @@ function calcFire(cabinetCount: number) {
 
 export function calculateResource(input: ResourceInput): ResourceReport {
   const normalizedInput = { ...input, ac_type: normalizeAcType(input.ac_type) };
+  // 从 segments 推导 total_cabinets
+  const segments = input.cabinet_power_segments || [];
+  const totalCabinets = input.total_cabinets || segments.reduce((s: number, seg) => s + seg.count, 0);
+  normalizedInput.total_cabinets = totalCabinets;
 
   const it = calcItStaff(normalizedInput);
   const pw = calcPowerStaff(normalizedInput);
   const hvac = calcHvacr(normalizedInput);
   const gen = calcGenerator();
-  const fire = calcFire(normalizedInput.total_cabinets);
+  const fire = calcFire(totalCabinets);
   const weak = calcWeakCurrent(it.同时在场人数 + pw.同时在场人数, hvac.暖通总组数);
   const fixed = calcFixedStaff();
   const loads = calcLoads(normalizedInput);
