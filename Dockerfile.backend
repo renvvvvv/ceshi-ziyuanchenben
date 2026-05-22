@@ -12,6 +12,7 @@ COPY server/package.json ./
 RUN npm install --ignore-scripts --legacy-peer-deps
 
 COPY server/tsconfig.json ./
+COPY server/config_v7.json ./
 COPY server/src/ ./src/
 COPY server/scripts/ ./scripts/
 COPY note/ ./note/

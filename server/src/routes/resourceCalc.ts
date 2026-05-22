@@ -2,6 +2,8 @@ import { Router, Request, Response } from 'express';
 import { execFile } from 'child_process';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { writeFileSync, unlinkSync } from 'fs';
+import { tmpdir } from 'os';
 import db from '../database.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -10,9 +12,13 @@ const PY = 'python3';
 
 const router = Router();
 
-function runPy(script: string, args: string[]): Promise<string> {
+function runPy(jsonInput: Record<string, unknown>): Promise<string> {
   return new Promise((resolve, reject) => {
-    execFile(PY, [script, ...args], { cwd: SCRIPTS_DIR, maxBuffer: 10 * 1024 * 1024 }, (err, stdout, stderr) => {
+    const tmpFile = join(tmpdir(), `rc_${Date.now()}.json`);
+    writeFileSync(tmpFile, JSON.stringify(jsonInput), 'utf-8');
+    const script = join(SCRIPTS_DIR, 'resource_plan.py');
+    execFile(PY, [script, '--input', tmpFile], { cwd: SCRIPTS_DIR, maxBuffer: 10 * 1024 * 1024 }, (err, stdout, stderr) => {
+      try { unlinkSync(tmpFile); } catch {}
       if (err) reject(new Error(stderr || err.message));
       else resolve(stdout);
     });
@@ -46,7 +52,7 @@ router.post('/', async (req: Request, res: Response) => {
       ac_type: input.ac_type,
     };
 
-    const stdout = await runPy('resource_plan.py', [JSON.stringify(pyInput)]);
+    const stdout = await runPy(pyInput);
     const report = JSON.parse(stdout);
 
     // 存入历史
@@ -106,7 +112,7 @@ router.post('/batch', async (req: Request, res: Response) => {
           ac_type: input.ac_type,
         };
 
-        const stdout = await runPy('resource_plan.py', [JSON.stringify(pyInput)]);
+        const stdout = await runPy(pyInput);
         const report = JSON.parse(stdout);
 
         db.prepare(`INSERT INTO resource_calc_history
