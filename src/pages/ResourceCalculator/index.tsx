@@ -152,8 +152,8 @@ function ResourceCalculator() {
     if (!values.total_mw || !values.total_duration) { message.warning('请填写必填字段：总兆瓦数、总工期'); return null; }
     if (values.total_mw < 10 || values.total_mw > 66) { message.warning('总兆瓦数需在 10~66 MW 之间'); return null; }
     if (values.total_duration < 1 || values.total_duration > 365) { message.warning('工期需在 1~365 天之间'); return null; }
-    if ((values.it_transCount || 1) < 1 || (values.it_transCount || 1) > 20) { message.warning('IT变压器台数需在 1~20 之间'); return null; }
-    if ((values.pw_transCount || 1) < 1 || (values.pw_transCount || 1) > 20) { message.warning('动力变压器台数需在 1~20 之间'); return null; }
+    if ((values.it_transCount || 1) < 1) { message.warning('IT变压器台数至少为1'); return null; }
+    if ((values.pw_transCount || 1) < 1) { message.warning('动力变压器台数至少为1'); return null; }
     if (powerSegments.length === 0) { message.warning('请添加至少一个功率段'); return null; }
     const totalCabs = powerSegments.reduce((s, seg) => s + seg.count, 0);
     if (totalCabs < 1) { message.warning('总机柜数不能为0'); return null; }
