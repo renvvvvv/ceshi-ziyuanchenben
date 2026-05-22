@@ -3,6 +3,9 @@ FROM docker.m.daocloud.io/library/node:20-slim
 
 WORKDIR /app
 
+# 安装 Python3（resource_plan.py 需要）
+RUN apt-get update && apt-get install -y python3 && rm -rf /var/lib/apt/lists/*
+
 COPY server/package.json ./
 RUN npm install --ignore-scripts --legacy-peer-deps
 
