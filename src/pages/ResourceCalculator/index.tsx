@@ -61,7 +61,7 @@ function ResourceCalculator() {
   const [historyData, setHistoryData] = useState<HistoryGroupItem[]>([]);
   const [historyTotal, setHistoryTotal] = useState(0);
   const [historyPage, setHistoryPage] = useState(1);
-  const [historyPageSize, setHistoryPageSize] = useState(20);
+  const [historyPageSize, setHistoryPageSize] = useState(50);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [filterType, setFilterType] = useState<'all' | 'single' | 'batch'>('all');
   const [filterDate, setFilterDate] = useState('');
@@ -334,7 +334,7 @@ function ResourceCalculator() {
               pageSize: historyPageSize,
               total: historyTotal,
               showSizeChanger: true,
-              pageSizeOptions: ['10', '20', '50'],
+              pageSizeOptions: ['20', '50', '100'],
               showTotal: (t: number) => `共 ${t} 条`,
               onChange: (p, s) => loadHistory(p, s),
             }}
