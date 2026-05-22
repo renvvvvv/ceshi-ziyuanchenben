@@ -27,7 +27,7 @@ export function buildStaffSheet(report: ResourceReport, input: ResourceInput) {
     [7, '电气测试员', elecOnSite, elecDur, `IT${it.同时在场人数}+动力${pw.同时在场人数}`],
     [8, '暖通测试员', hvac.峰值同时在场, dur, `功能${hvac.功能测试.同时在场}/场景${hvac.场景压测.同时在场}/冷源${hvac.前端冷源.人数}/安装${hvac.安装检查.人数}`],
     [9, '弱电记录员', report.弱电.记录员小计, dur, `电气${report.弱电.电气记录员}+暖通${report.弱电.暖通记录员}`],
-    [10, '消防测试员', report.消防.测试员, dur, `${input.total_cabinets}柜，每850柜增1人`],
+    [10, '消防测试员', report.消防.测试员, dur, `${input.total_cabinets || 0}柜，每850柜增1人`],
     [11, '记录员', report.柴发.记录员 + report.弱电.暖通记录员, dur, '柴发+暖通'],
     ['合计', '-', report.汇总.峰值同时在场, report.汇总.总人天, '-'],
   ];
