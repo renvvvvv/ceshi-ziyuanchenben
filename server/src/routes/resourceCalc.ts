@@ -94,6 +94,7 @@ router.post('/batch', (req: Request, res: Response) => {
 /** GET /api/resource-calc/history — 查询历史（已分组，群算合并为一行） */
 router.get('/history', (req: Request, res: Response) => {
   try {
+    console.log('[HISTORY] request received, query:', req.query);
     const page = parseInt(req.query.page as string) || 1;
     const size = parseInt(req.query.size as string) || 20;
     const filterType = req.query.type as string || 'all';
@@ -125,6 +126,7 @@ router.get('/history', (req: Request, res: Response) => {
     ];
     merged.sort((a, b) => b.time.localeCompare(a.time));
 
+    console.log('[HISTORY] batchRows:', batchRows.length, 'singleRows:', singleRows.length, 'merged:', merged.length);
     const total = merged.length;
     const paged = merged.slice(offset, offset + size);
 
