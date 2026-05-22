@@ -1,0 +1,11 @@
+{
+  "total_mw": 21.6,
+  "total_duration": 21,
+  "cabinet_power": 12,
+  "it_transformers": [[2.3, 6]],
+  "power_transformers": [[1.3, 6]],
+  "total_cabinets": 1150,
+  "ac_type": "liquid",
+  "max_parallel_it": 2,
+  "max_parallel_power": 1
+}

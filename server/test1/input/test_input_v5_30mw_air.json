@@ -1,0 +1,12 @@
+{
+  "total_mw": 30,
+  "total_duration": 30,
+  "cabinet_power": 12,
+  "total_cabinets": 2500,
+  "ac_type": "traditional",
+  "it_transformers": [[2.5, 12]],
+  "power_transformers": [[2.5, 6]],
+  "architecture_type": "standard",
+  "max_parallel_it": 2,
+  "max_parallel_power": 1
+}
