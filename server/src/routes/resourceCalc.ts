@@ -127,6 +127,9 @@ router.get('/history', (req: Request, res: Response) => {
     merged.sort((a, b) => b.time.localeCompare(a.time));
 
     console.log('[HISTORY] batchRows:', batchRows.length, 'singleRows:', singleRows.length, 'merged:', merged.length);
+    // 直接查总数
+    const rawCount = db.prepare('SELECT count(*) as cnt FROM resource_calc_history').get();
+    console.log('[HISTORY] raw count:', rawCount);
     const total = merged.length;
     const paged = merged.slice(offset, offset + size);
 
