@@ -30,10 +30,12 @@ router.post('/', (req: Request, res: Response) => {
        total_cabinets, ac_type, peak_staff, total_man_days, result_json)
       VALUES (?,?,?,?,?,?,?,?,?,?,?)`);
 
+    const totalCab = input.total_cabinets || (input.cabinet_power_segments || []).reduce((s: number, seg) => s + seg.count, 0);
+
     stmt.run(
-      batchId, input.total_mw, input.total_duration, input.cabinet_power,
+      batchId, input.total_mw, input.total_duration, input.cabinet_power || 0,
       JSON.stringify(input.it_transformers), JSON.stringify(input.power_transformers),
-      input.total_cabinets, input.ac_type,
+      totalCab, input.ac_type,
       report.汇总.峰值同时在场, report.汇总.总人天,
       JSON.stringify(report),
     );
@@ -72,10 +74,11 @@ router.post('/batch', (req: Request, res: Response) => {
            total_cabinets, ac_type, peak_staff, total_man_days, result_json)
           VALUES (?,?,?,?,?,?,?,?,?,?,?)`);
 
+        const tc = input.total_cabinets || (input.cabinet_power_segments || []).reduce((s: number, seg) => s + seg.count, 0);
         stmt.run(
-          batchId, input.total_mw, input.total_duration, input.cabinet_power,
+          batchId, input.total_mw, input.total_duration, input.cabinet_power || 0,
           JSON.stringify(input.it_transformers), JSON.stringify(input.power_transformers),
-          input.total_cabinets, input.ac_type,
+          tc, input.ac_type,
           report.汇总.峰值同时在场, report.汇总.总人天,
           JSON.stringify(report),
         );
