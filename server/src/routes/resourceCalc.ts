@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import db from '../database.js';
-import { calculateResource, type ResourceInput } from '../services/resourceCalculator.js';
+import { calculateResource, type ResourceInput } from '../../scripts/resource_plan.js';
 
 const router = Router();
 

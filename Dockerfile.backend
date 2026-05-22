@@ -16,4 +16,4 @@ RUN mkdir -p /app/data
 EXPOSE 3001
 ENV PORT=3001 NODE_ENV=production
 
-CMD ["node", "dist/index.js"]
+CMD ["node", "dist/src/index.js"]

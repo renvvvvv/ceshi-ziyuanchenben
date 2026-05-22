@@ -1,0 +1,48 @@
+{
+  "_comment": "V7配置文件 - 简化版（移除巴拿马，优化负载配置）",
+  "_version": "7.0.0",
+  "_note": "电气以1MW为最小单位负载配置，1.1MW为变压器最小单元",
+
+  "load_config": {
+    "unit_mw": 1.1,
+    "redundancy": 1.1,
+    "_note": "IT负载按1.1MW为最小单元配置，总需求 = Σ(各容量变压器台数×每单元配置)，最后×1.1冗余"
+  },
+
+  "it_load_per_mw": {
+    "_note": "1.1MW变压器单元的负载配置（单机柜功率→负载数量）",
+    "12": {"6kw": 83, "8kw": 83, "per_cabinet": 2, "cabinets_per_unit": 92},
+    "16": {"6kw": 95, "8kw": 95, "per_cabinet": 2, "cabinets_per_unit": 69},
+    "18": {"6kw": 56, "8kw": 112, "per_cabinet": 3, "cabinets_per_unit": 61},
+    "20": {"6kw": 56, "8kw": 112, "per_cabinet": 3, "cabinets_per_unit": 55},
+    "22": {"6kw": 0, "8kw": 183, "per_cabinet": 3, "cabinets_per_unit": 50},
+    "24": {"6kw": 0, "8kw": 183, "per_cabinet": 3, "cabinets_per_unit": 45},
+    "26": {"6kw": 39, "8kw": 117, "per_cabinet": 4, "cabinets_per_unit": 42}
+  },
+
+  "power_load_config": {
+    "_note": "动力变压器负载配置（按变压器台数）",
+    "1.3": {"500kw": 2, "300kw": 0},
+    "2.3": {"500kw": 4, "300kw": 1},
+    "3.1": {"500kw": 5, "300kw": 0}
+  },
+
+  "owned_loads": {
+    "_note": "自有负载库存，超出2000台需租赁",
+    "6kw": 1000,
+    "8kw": 1000
+  },
+
+  "staff_per_transformer": {
+    "_note": "每台变压器需要的人员数（标准架构）",
+    "it": 6,
+    "power": 4
+  },
+
+  "days_per_transformer": {
+    "_note": "每台变压器测试天数",
+    "functional_test": 4,
+    "install_check": 2,
+    "total": 6
+  }
+}
