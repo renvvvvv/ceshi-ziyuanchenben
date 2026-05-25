@@ -94,14 +94,37 @@ def calc_loads(input_data: dict, config: dict) -> dict:
     power_load_cfg = config["power_load_config"]
     owned = config["owned_loads"]
 
-    cp_key = str(input_data["cabinet_power"])
-    if cp_key not in it_load_cfg:
-        return {"error": f"不支持的单机柜功率: {input_data['cabinet_power']}kW"}
-
-    it_cfg = it_load_cfg[cp_key]
     total_it = sum(count for _, count in input_data["it_transformers"])
-    total_6kw = math.ceil(total_it * it_cfg["6kw"] * redundancy)
-    total_8kw = math.ceil(total_it * it_cfg["8kw"] * redundancy)
+    total_mw = input_data["total_mw"]
+    total_6kw = 0.0
+    total_8kw = 0.0
+    power_desc = ""
+
+    # 多功率段支持
+    segments = input_data.get("cabinet_power_segments", [])
+    if segments:
+        for seg in segments:
+            seg_power = seg["power"]
+            seg_count = seg["count"]
+            cp_key = str(seg_power)
+            if cp_key not in it_load_cfg:
+                continue
+            seg_mw = seg_power * seg_count / 1000.0
+            it_cfg = it_load_cfg[cp_key]
+            total_6kw += total_it * it_cfg["6kw"] * redundancy * seg_mw / total_mw
+            total_8kw += total_it * it_cfg["8kw"] * redundancy * seg_mw / total_mw
+        power_desc = "+".join(f"{s['power']}kW" for s in segments)
+    else:
+        cp_key = str(input_data["cabinet_power"])
+        if cp_key not in it_load_cfg:
+            return {"error": f"不支持的单机柜功率: {input_data['cabinet_power']}kW"}
+        it_cfg = it_load_cfg[cp_key]
+        total_6kw = total_it * it_cfg["6kw"] * redundancy
+        total_8kw = total_it * it_cfg["8kw"] * redundancy
+        power_desc = f"{input_data['cabinet_power']}kW"
+
+    total_6kw = math.ceil(total_6kw)
+    total_8kw = math.ceil(total_8kw)
 
     total_pw = sum(count for _, count in input_data["power_transformers"])
     if total_pw > 0:
@@ -112,8 +135,8 @@ def calc_loads(input_data: dict, config: dict) -> dict:
         total_500kw = total_300kw = 0
 
     return {
-        "IT负载配置": {"单机柜功率": f"{input_data['cabinet_power']}kW", "IT变压器总台数": total_it,
-                     "每台1.1MW配置": f"6kW:{it_cfg['6kw']}台, 8kW:{it_cfg['8kw']}台"},
+        "IT负载配置": {"单机柜功率": power_desc, "IT变压器总台数": total_it,
+                     "每台1.1MW配置": f"6kW:{total_6kw}台, 8kW:{total_8kw}台"},
         "6kW": {"总需求": total_6kw, "自有": min(total_6kw, owned["6kw"]), "需租赁": max(0, total_6kw - owned["6kw"])},
         "8kW": {"总需求": total_8kw, "自有": min(total_8kw, owned["8kw"]), "需租赁": max(0, total_8kw - owned["8kw"])},
         "500kW": {"总需求": total_500kw, "需租赁": max(0, total_500kw)},

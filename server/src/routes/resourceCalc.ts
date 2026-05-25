@@ -38,19 +38,20 @@ router.post('/', async (req: Request, res: Response) => {
       return;
     }
 
-    // 归一化 cabinet_power / total_cabinets（多功率段兼容）
-    const cp = input.cabinet_power || (input.cabinet_power_segments || []).map((s: { power: number }) => s.power).join(',') || '0';
-    const tc = input.total_cabinets || (input.cabinet_power_segments || []).reduce((s: number, seg: { count: number }) => s + seg.count, 0);
+    const segs = input.cabinet_power_segments || [];
+    const tc = input.total_cabinets || segs.reduce((s: number, seg: { count: number }) => s + seg.count, 0);
+    const cp = input.cabinet_power || (segs.length === 1 ? segs[0].power : 0);
 
-    const pyInput = {
+    const pyInput: Record<string, unknown> = {
       total_mw: input.total_mw,
       total_duration: input.total_duration,
-      cabinet_power: parseInt(cp) || 0,
+      cabinet_power: cp,
       it_transformers: input.it_transformers,
       power_transformers: input.power_transformers,
       total_cabinets: tc,
       ac_type: input.ac_type,
     };
+    if (segs.length > 0) pyInput.cabinet_power_segments = segs;
 
     const stdout = await runPy(pyInput);
     const report = JSON.parse(stdout);
@@ -99,18 +100,20 @@ router.post('/batch', async (req: Request, res: Response) => {
           continue;
         }
 
-        const cp = (input.cabinet_power as string) || '0';
-        const tc = (input.total_cabinets as number) || 0;
+        const segs = (input.cabinet_power_segments as { power: number; count: number }[]) || [];
+        const tc = (input.total_cabinets as number) || segs.reduce((s, seg) => s + seg.count, 0);
+        const cp = (input.cabinet_power as number) || (segs.length === 1 ? segs[0].power : 0);
 
-        const pyInput = {
+        const pyInput: Record<string, unknown> = {
           total_mw: input.total_mw,
           total_duration: input.total_duration,
-          cabinet_power: parseInt(cp) || 0,
+          cabinet_power: cp,
           it_transformers: input.it_transformers,
           power_transformers: input.power_transformers,
           total_cabinets: tc,
           ac_type: input.ac_type,
         };
+        if (segs.length > 0) pyInput.cabinet_power_segments = segs;
 
         const stdout = await runPy(pyInput);
         const report = JSON.parse(stdout);
