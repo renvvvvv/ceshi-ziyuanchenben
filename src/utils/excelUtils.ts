@@ -98,16 +98,20 @@ function expandTransformers(transformers: [number, number][]): string {
 
 function buildSummaryRow(input: ResourceInput, report: ResourceReport): (string | number)[] {
   const cabinetCount = input.total_cabinets || 0;
-  const itCap = input.it_transformers.reduce((s, [c, n]) => s + c * n, 0);
+  // IT总容量 = 机柜数 × 单柜功率 / 1000（与 summary.csv 一致）
+  const segs = input.cabinet_power_segments || [];
+  const itLoadMW = segs.length > 0
+    ? segs.reduce((s, seg) => s + seg.power * seg.count, 0) / 1000
+    : (cabinetCount * (input.cabinet_power || 0)) / 1000;
   const pwCap = input.power_transformers.reduce((s, [c, n]) => s + c * n, 0);
   const itCount = input.it_transformers.reduce((s, [, n]) => s + n, 0);
   const pwCount = input.power_transformers.reduce((s, [, n]) => s + n, 0);
   const itComp = expandTransformers(input.it_transformers);
   const pwComp = expandTransformers(input.power_transformers);
-  const pue = itCap > 0 ? Math.round((input.total_mw / itCap) * 1000) / 1000 : 0;
+  const pue = itLoadMW > 0 ? Math.round((input.total_mw / itLoadMW) * 1000) / 1000 : 0;
 
   return [
-    input.cabinet_power || (input.cabinet_power_segments || []).map(s => s.power).join('/') || '-', cabinetCount, itCap, itComp, itCount,
+    input.cabinet_power || segs.map(s => s.power).join('/') || '-', cabinetCount, Math.round(itLoadMW * 100) / 100, itComp, itCount,
     pue, pwCap, pwComp, pwCount,
     input.total_mw, input.total_duration, input.ac_type,
     report.IT链路.所需并行数, report.IT链路.实际测试工期, report.IT链路.同时在场人数, report.IT链路.总人天,
