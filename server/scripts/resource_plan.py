@@ -219,7 +219,7 @@ def calculate_resource(input_data: dict, config: dict) -> dict:
 
     return {
         "项目信息": {"总容量": f"{input_data['total_mw']}MW", "工期": f"{dur}天",
-                   "单机柜功率": f"{input_data['cabinet_power']}kW",
+                   "单机柜功率": " + ".join(f"{s['power']}kW×{s['count']}" for s in input_data.get("cabinet_power_segments", [])) or f"{input_data['cabinet_power']}kW",
                    "总机柜": f"{input_data['total_cabinets']}个", "空调": input_data["ac_type"]},
         "IT链路": it, "动力链路": pw, "暖通": hvac,
         "柴发": gen, "弱电": weak, "消防": fire, "固定人员": fixed, "负载": loads,
