@@ -33,17 +33,20 @@ def is_liquid_cooled(ac_type: str) -> bool:
 # ============ 数据结构 ============
 
 def make_project_input(d: dict) -> dict:
-    return {
+    result = {
         "total_mw": float(d["total_mw"]),
         "total_duration": int(d["total_duration"]),
-        "cabinet_power": int(d["cabinet_power"]),
+        "cabinet_power": int(d.get("cabinet_power", 0)),
         "it_transformers": [(float(c), int(n)) for c, n in d["it_transformers"]],
         "power_transformers": [(float(c), int(n)) for c, n in d["power_transformers"]],
-        "total_cabinets": int(d["total_cabinets"]),
+        "total_cabinets": int(d.get("total_cabinets", 0)),
         "ac_type": normalize_ac_type(d["ac_type"]),
         "max_parallel_it": d.get("max_parallel_it"),
         "max_parallel_power": d.get("max_parallel_power"),
     }
+    if "cabinet_power_segments" in d:
+        result["cabinet_power_segments"] = d["cabinet_power_segments"]
+    return result
 
 
 # ============ 并行数计算 ============
