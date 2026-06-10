@@ -19,25 +19,25 @@ export interface ResourceInput {
 }
 
 export interface StaffResult {
-  架构?: string;
-  单台人数: number;
-  总台数: number;
+  台数: number;
   单台天数: number;
-  所需并行数: number;
-  实际测试工期: number;
-  同时在场人数: number;
-  总人天: number;
+  并行数: number;
+  实际工期: number;
+  计算最小并行: number;
+  每台人数: number;
+  在场: number;
+  人天: number;
 }
 
 export interface HvacrResult {
   空调间数: number;
   机房数: number;
-  功能测试: { 组数: number; 每组人数: number; 同时在场: number; 人天: number };
-  场景压测: { 组数: number; 每组人数: number; 同时在场: number; 人天: number };
+  功能测试: { 组数: number; 每组人数: number; 在场: number; 人天: number };
+  场景压测: { 组数: number; 每组人数: number; 在场: number; 人天: number };
   前端冷源: { 人数: number; 人天: number };
   安装检查: { 人数: number; 人天: number };
   暖通总组数: number;
-  峰值同时在场: number;
+  峰值在场: number;
   总人天: number;
 }
 
@@ -62,11 +62,12 @@ export interface ResourceReport {
   项目信息: Record<string, string>;
   IT链路: StaffResult;
   动力链路: StaffResult;
+  混合链路?: StaffResult;
   暖通: HvacrResult;
   柴发: { 主测: number; 记录员: number; 小计: number };
   弱电: { 主测: number; 电气记录员: number; 暖通记录员: number; 记录员小计: number; 小计: number };
   消防: { 主测: number; 测试员: number; 小计: number };
-  固定人员: { 项目经理: number; 资料员: number; 电气主测: number; 暖通主测: number; 弱电主测: number; 消防主测: number; 小计: number };
+  固定人员: { 项目经理: number; 资料员: number; 电气主测: number; 暖通主测: number; 工程师: number; 小计: number };
   负载: LoadResult;
   汇总: { 峰值同时在场: number; 总人天: number };
   工具清单: ToolItem[];
@@ -137,10 +138,10 @@ function calcItStaff(input: ResourceInput): StaffResult {
   const parallel = para.actual_parallel;
   const actualDur = Math.ceil(itCount / parallel) * daysPerUnit;
   return {
-    架构: '标准架构', 单台人数: perUnit, 总台数: itCount,
-    单台天数: daysPerUnit, 所需并行数: parallel,
-    实际测试工期: actualDur, 同时在场人数: perUnit * parallel,
-    总人天: perUnit * parallel * actualDur,
+    台数: itCount, 单台天数: daysPerUnit, 并行数: parallel,
+    实际工期: actualDur, 计算最小并行: para.min_parallel,
+    每台人数: perUnit, 在场: perUnit * parallel,
+    人天: perUnit * parallel * actualDur,
   };
 }
 
@@ -152,9 +153,10 @@ function calcPowerStaff(input: ResourceInput): StaffResult {
   const parallel = para.actual_parallel;
   const actualDur = Math.ceil(pwCount / parallel) * daysPerUnit;
   return {
-    单台人数: perUnit, 总台数: pwCount, 单台天数: daysPerUnit,
-    所需并行数: parallel, 实际测试工期: actualDur,
-    同时在场人数: perUnit * parallel, 总人天: perUnit * parallel * actualDur,
+    台数: pwCount, 单台天数: daysPerUnit, 并行数: parallel,
+    实际工期: actualDur, 计算最小并行: para.min_parallel,
+    每台人数: perUnit, 在场: perUnit * parallel,
+    人天: perUnit * parallel * actualDur,
   };
 }
 
@@ -214,7 +216,7 @@ function calcLoads(input: ResourceInput): LoadResult {
 // ============ 固定人员 / 柴发 ============
 
 function calcFixedStaff() {
-  return { 项目经理: 1, 资料员: 1, 电气主测: 1, 暖通主测: 1, 弱电主测: 1, 消防主测: 1, 小计: 6 };
+  return { 项目经理: 1, 资料员: 1, 电气主测: 1, 暖通主测: 1, 工程师: 2, 小计: 6 };
 }
 
 function calcGenerator() {
@@ -245,22 +247,22 @@ function calcHvacr(input: ResourceInput): HvacrResult {
 
   return {
     空调间数: acRooms, 机房数: idcRooms,
-    功能测试: { 组数: funcGrp, 每组人数: 3, 同时在场: funcPeak, 人天: funcMd },
-    场景压测: { 组数: scenGrp, 每组人数: 5, 同时在场: scenPeak, 人天: scenMd },
+    功能测试: { 组数: funcGrp, 每组人数: 3, 在场: funcPeak, 人天: funcMd },
+    场景压测: { 组数: scenGrp, 每组人数: 5, 在场: scenPeak, 人天: scenMd },
     前端冷源: { 人数: coldPeak, 人天: coldMd },
     安装检查: { 人数: instPeak, 人天: instMd },
     暖通总组数: funcGrp + scenGrp + (coldPeak > 0 ? 1 : 0) + 1,
-    峰值同时在场: Math.max(funcPeak, scenPeak, coldPeak, instPeak),
+    峰值在场: Math.max(funcPeak, scenPeak, coldPeak, instPeak),
     总人天: funcMd + scenMd + coldMd + instMd,
   };
 }
 
 // ============ 弱电 / 消防 ============
 
-function calcWeakCurrent(elecCount: number, hvacrGroups: number) {
-  const elecRec = Math.ceil(elecCount / 4);
-  const rec = elecRec + hvacrGroups;
-  return { 主测: 1, 电气记录员: elecRec, 暖通记录员: hvacrGroups, 记录员小计: rec, 小计: 1 + rec };
+function calcWeakCurrent(elecGroups: number, hvacGroups: number) {
+  const elecRec = Math.max(1, Math.ceil(elecGroups / 4));
+  const rec = elecRec + hvacGroups;
+  return { 主测: 1, 电气记录员: elecRec, 暖通记录员: hvacGroups, 记录员小计: rec, 小计: 1 + rec };
 }
 
 function calcFire(cabinetCount: number) {
@@ -282,22 +284,19 @@ export function calculateResource(input: ResourceInput): ResourceReport {
   const hvac = calcHvacr(normalizedInput);
   const gen = calcGenerator();
   const fire = calcFire(totalCabinets);
-  const weak = calcWeakCurrent(it.同时在场人数 + pw.同时在场人数, hvac.暖通总组数);
+  const elecGroups = it.并行数 + pw.并行数;
+  const weak = calcWeakCurrent(elecGroups, hvac.暖通总组数);
   const fixed = calcFixedStaff();
   const loads = calcLoads(normalizedInput);
 
   const dur = normalizedInput.total_duration;
-  const itMd = it.同时在场人数 * it.实际测试工期;
-  const pwMd = pw.同时在场人数 * pw.实际测试工期;
-
-  const peakStaff = it.同时在场人数 + pw.同时在场人数 + hvac.峰值同时在场
+  const peakStaff = it.在场 + pw.在场 + hvac.峰值在场
     + gen.小计 + weak.小计 + fire.小计 + fixed.小计;
-  const totalManDays = itMd + pwMd + hvac.总人天
+  const totalManDays = it.人天 + pw.人天 + hvac.总人天
     + gen.小计 * dur + weak.小计 * dur + fire.小计 * dur + fixed.小计 * dur;
 
   // 电气实际工期（取 IT/动力 中较大者）
-  const elecDur = Math.max(it.实际测试工期, pw.实际测试工期);
-  const elecOnSite = it.同时在场人数 + pw.同时在场人数;
+  const elecDur = Math.max(it.实际工期, pw.实际工期);
 
   // 工具清单（匹配 generate_excel.py 模板）
   const tools: ToolItem[] = [
@@ -320,7 +319,7 @@ export function calculateResource(input: ResourceInput): ResourceReport {
   ];
 
   // 假负载清单（+10%余量，匹配 generate_excel.py）
-  const spare = 0.1;
+  const spare = 0.29;
   const fakeLoads = [
     { name: '风冷机架式假负载', count: Math.ceil(loads['6kW'].总需求 * (1 + spare)), days: elecDur, totalUnits: Math.ceil(loads['6kW'].总需求 * (1 + spare)) * elecDur, spare, spec: '6KW/台' },
     { name: '风冷机架式假负载', count: Math.ceil(loads['8kW'].总需求 * (1 + spare)), days: elecDur, totalUnits: Math.ceil(loads['8kW'].总需求 * (1 + spare)) * elecDur, spare, spec: '8KW/台' },
@@ -354,6 +353,83 @@ export function calculateResource(input: ResourceInput): ResourceReport {
     机柜PDU清单: {
       机柜: { count: cabCount, days: dur, totalUnits: cabCount * dur },
       PDU: { count: cabCount * 2, days: dur, totalUnits: cabCount * 2 * dur },
+    },
+  };
+}
+
+// ============ 报告标准化 ============
+
+/** 将 Python 返回的原始报告或 TS 计算报告标准化，补全缺失的衍生字段 */
+export function normalizeReport(raw: Record<string, unknown>, input: ResourceInput): ResourceReport {
+  const dur = input.total_duration;
+
+  const it = raw['IT链路'] as StaffResult;
+  const pw = raw['动力链路'] as StaffResult;
+  const hvac = raw['暖通'] as HvacrResult;
+  const loads = raw['负载'] as LoadResult;
+  const gen = raw['柴发'] as Record<string, number> || { 小计: 2 };
+  const weak = raw['弱电'] as Record<string, number> || { 小计: 0 };
+  const fire = raw['消防'] as Record<string, number> || { 小计: 0 };
+  const fixed = raw['固定人员'] as Record<string, number> || { 小计: 4 };
+
+  // 电气实际工期（取 IT/动力 中较大者）
+  const elecDur = Math.max(it?.实际工期 || 0, pw?.实际工期 || 0);
+  if (elecDur === 0) (raw as any)._elecDur = dur;
+
+  // 工具清单
+  const rawTools = raw['工具清单'] as ToolItem[];
+  const tools: ToolItem[] = rawTools && rawTools.length > 0 ? rawTools : [
+    { name: '电能质量分析仪', count: 6, days: elecDur, totalUnits: 6 * elecDur, model: 'FLUKE 435', note: '配套6000A电流环至少6套；剩余至少2000A以上；配套数据传输线；要求435-2；配套内存卡2张' },
+    { name: '电能质量分析仪', count: 2, days: elecDur, totalUnits: 2 * elecDur, model: 'FLUKE 1775', note: '至少2000A以上电流环；配套数据传输线' },
+    { name: '热成像', count: 2, days: elecDur, totalUnits: 2 * elecDur, model: 'FLUKE Ti32', note: '' },
+    { name: '点温枪', count: 4, days: elecDur, totalUnits: 4 * elecDur, model: '阈值750℃', note: '' },
+    { name: '开口钳形电流表', count: 6, days: elecDur, totalUnits: 6 * elecDur, model: '/', note: '' },
+    { name: 'PDU相序仪', count: 6, days: elecDur, totalUnits: 6 * elecDur, model: '/', note: '' },
+    { name: '欧标转国标转接头', count: 10, days: elecDur, totalUnits: 10 * elecDur, model: '16A', note: 'PDU欧标' },
+    { name: '欧标转国标转接头', count: 10, days: elecDur, totalUnits: 10 * elecDur, model: '10A', note: 'PDU欧标' },
+    { name: '钳形电流表', count: 2, days: elecDur, totalUnits: 2 * elecDur, model: 'FLUKE 381', note: '配有大线圈，量程1500~2000A至少2台' },
+    { name: '温湿度仪', count: 4, days: elecDur, totalUnits: 4 * elecDur, model: 'FLUKE 971', note: '' },
+    { name: '万用表', count: 6, days: elecDur, totalUnits: 6 * elecDur, model: 'FLUKE 18B+', note: '' },
+    { name: '振动仪', count: 2, days: elecDur, totalUnits: 2 * elecDur, model: '/', note: '' },
+    { name: '风速仪', count: 2, days: elecDur, totalUnits: 2 * elecDur, model: '/', note: '' },
+    { name: '噪声仪', count: 2, days: elecDur, totalUnits: 2 * elecDur, model: '/', note: '' },
+    { name: '电池内阻仪', count: 2, days: elecDur, totalUnits: 2 * elecDur, model: '福禄克/日置', note: '' },
+    { name: 'HOBO', count: 3, days: elecDur, totalUnits: 3 * elecDur, model: '/', note: '机房最小需量，字节脚本单通道3需布置3台' },
+  ];
+
+  // 假负载清单（+10%余量）
+  const rawLoads = raw['假负载清单'] as Record<string, unknown>[];
+  const spare = 0.29;
+  const l6 = loads?.['6kW']?.总需求 || 0;
+  const l8 = loads?.['8kW']?.总需求 || 0;
+  const l500 = loads?.['500kW']?.总需求 || 0;
+  const l300 = loads?.['300kW']?.总需求 || 0;
+  const fakeLoads: Record<string, unknown>[] = rawLoads && rawLoads.length > 0 ? rawLoads : [
+    { name: '风冷机架式假负载', count: Math.ceil(l6 * (1 + spare)), days: elecDur, totalUnits: Math.ceil(l6 * (1 + spare)) * elecDur, spare, spec: '6KW/台' },
+    { name: '风冷机架式假负载', count: Math.ceil(l8 * (1 + spare)), days: elecDur, totalUnits: Math.ceil(l8 * (1 + spare)) * elecDur, spare, spec: '8KW/台' },
+    { name: '风冷机架式假负载', count: l500, days: dur, totalUnits: l500 * dur, spare: 0, spec: '500KW/台（0~500kW可调，每档≤10kW）' },
+    { name: '风冷机架式假负载', count: l300, days: dur, totalUnits: l300 * dur, spare: 0, spec: '300KW/台（0~300kW可调，每档≤10kW）' },
+    { name: '风冷机架式假负载', count: 2, days: dur, totalUnits: 2 * dur, spare: 0, spec: '2000KW/台' },
+  ];
+
+  return {
+    项目信息: raw['项目信息'] as ResourceReport['项目信息'],
+    IT链路: it,
+    动力链路: pw,
+    混合链路: raw['混合链路'] as StaffResult,
+    暖通: hvac,
+    柴发: gen as ResourceReport['柴发'],
+    弱电: weak as ResourceReport['弱电'],
+    消防: fire as ResourceReport['消防'],
+    固定人员: fixed as ResourceReport['固定人员'],
+    负载: loads,
+    汇总: raw['汇总'] as ResourceReport['汇总'],
+    工具清单: tools,
+    假负载清单: fakeLoads as ResourceReport['假负载清单'],
+    劳务清单: (raw['劳务清单'] as ResourceReport['劳务清单']) || { 总人天: (raw['汇总'] as Record<string, number>)?.['总人天'] || 0 },
+    机柜PDU清单: (raw['机柜PDU清单'] as ResourceReport['机柜PDU清单']) || {
+      机柜: { count: input.total_cabinets || 0, days: dur, totalUnits: (input.total_cabinets || 0) * dur },
+      PDU: { count: (input.total_cabinets || 0) * 2, days: dur, totalUnits: (input.total_cabinets || 0) * 2 * dur },
     },
   };
 }

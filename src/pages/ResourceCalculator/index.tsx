@@ -9,7 +9,7 @@ import {
   FileExcelOutlined, CloseCircleOutlined, CheckCircleOutlined,
   HistoryOutlined, InfoCircleOutlined, PlusOutlined,
 } from '@ant-design/icons';
-import { calculateResource, type ResourceInput, type ResourceReport } from '../../utils/resourceCalculator';
+import { calculateResource, normalizeReport, type ResourceInput, type ResourceReport } from '../../utils/resourceCalculator';
 import {
   exportReportToExcel, parseImportExcel, runBatchCalculation,
   exportBatchResultsToExcel, downloadBatchTemplate,
@@ -172,8 +172,12 @@ function ResourceCalculator() {
       if (!input) { setCalcLoading(false); return; }
       try {
         const res = await apiCalcResource(input);
-        setReport(res.data as unknown as ResourceReport);
-      } catch {
+        const normalized = normalizeReport(res.data as Record<string, unknown>, input);
+        console.log('[normalizeReport] 假负载清单:', normalized.假负载清单?.length, '工具清单:', normalized.工具清单?.length);
+        console.log('[normalizeReport] IT在场:', normalized.IT链路?.在场, '汇总:', normalized.汇总);
+        setReport(normalized);
+      } catch (e) {
+        console.error('[normalizeReport] 失败，回退到本地计算:', e);
         setReport(calculateResource(input));
       }
       setCurrentInput(input);
@@ -574,9 +578,9 @@ function buildSummaryRow(input: ResourceInput, report: ResourceReport): (string 
     input.total_cabinets || 0, Math.round(itLoadMW * 100) / 100, expandTf(input.it_transformers), itCount,
     pue, pwCap, expandTf(input.power_transformers), pwCount,
     input.total_mw, input.total_duration, input.ac_type,
-    report.IT链路.所需并行数, report.IT链路.实际测试工期, report.IT链路.同时在场人数, report.IT链路.总人天,
-    report.动力链路.所需并行数, report.动力链路.实际测试工期, report.动力链路.同时在场人数, report.动力链路.总人天,
-    report.暖通.暖通总组数, report.暖通.峰值同时在场, report.暖通.总人天,
+    report.IT链路.并行数, report.IT链路.实际工期, report.IT链路.在场, report.IT链路.人天,
+    report.动力链路.并行数, report.动力链路.实际工期, report.动力链路.在场, report.动力链路.人天,
+    report.暖通.暖通总组数, report.暖通.峰值在场, report.暖通.总人天,
     report.汇总.峰值同时在场, report.汇总.总人天,
     report.负载['6kW'].总需求, report.负载['6kW'].自有, report.负载['6kW'].需租赁,
     report.负载['8kW'].总需求, report.负载['8kW'].自有, report.负载['8kW'].需租赁,
@@ -601,8 +605,9 @@ function SingleResultView({ report, input, onExport, onBack }: {
       children: (
         <div>
           <Row gutter={24} style={{ marginBottom: 16 }}>
-            <Col span={6}><Statistic title="总容量" value={input.total_mw} suffix="MW" /></Col>
-            <Col span={6}><Statistic title="总工期" value={input.total_duration} suffix="天" /></Col>
+            <Col span={4}><Statistic title="总容量" value={input.total_mw} suffix="MW" /></Col>
+            <Col span={4}><Statistic title="总工期" value={input.total_duration} suffix="天" /></Col>
+            <Col span={4}><Statistic title="平均人数" value={Math.round(report.汇总.总人天 / input.total_duration * 10) / 10} suffix="人" valueStyle={{ color: '#faad14' }} /></Col>
             <Col span={6}><Statistic title="峰值同时在场" value={report.汇总.峰值同时在场} suffix="人" valueStyle={{ color: '#1677ff' }} /></Col>
             <Col span={6}><Statistic title="总人天" value={report.汇总.总人天} suffix="人·天" valueStyle={{ color: '#52c41a' }} /></Col>
           </Row>
@@ -615,19 +620,19 @@ function SingleResultView({ report, input, onExport, onBack }: {
       children: (
         <Table size="small" bordered pagination={false}
           dataSource={[
-            { key: 1, role: '测试经理', count: 1, manDays: dur },
-            { key: 2, role: '电气主测', count: 1, manDays: dur },
-            { key: 3, role: '电气测试员', count: report.IT链路.同时在场人数, manDays: report.IT链路.总人天 },
-            { key: 4, role: '动力测试员', count: report.动力链路.同时在场人数, manDays: report.动力链路.总人天 },
-            { key: 5, role: '暖通主测', count: 1, manDays: dur },
-            { key: 6, role: '暖通测试员', count: report.暖通.峰值同时在场, manDays: report.暖通.总人天 },
-            { key: 7, role: '弱电主测+记录', count: report.弱电.小计, manDays: report.弱电.小计 * dur },
-            { key: 8, role: '消防', count: report.消防.小计, manDays: report.消防.小计 * dur },
-            { key: 9, role: '柴发', count: report.柴发.小计, manDays: report.柴发.小计 * dur },
-            { key: 10, role: '固定人员', count: report.固定人员.小计, manDays: report.固定人员.小计 * dur },
-            { key: 'sum', role: <Text strong>合计</Text>, count: <Text strong>{report.汇总.峰值同时在场}</Text>, manDays: <Text strong>{report.汇总.总人天}</Text> },
+            { key: 1, role: '测试经理', count: 1, days: dur, manDays: dur },
+            { key: 2, role: '电气主测', count: 1, days: dur, manDays: dur },
+            { key: 3, role: '电气测试员', count: report.IT链路.在场, days: report.IT链路.实际工期, manDays: report.IT链路.人天 },
+            { key: 4, role: '动力测试员', count: report.动力链路.在场, days: report.动力链路.实际工期, manDays: report.动力链路.人天 },
+            { key: 5, role: '暖通主测', count: 1, days: dur, manDays: dur },
+            { key: 6, role: '暖通测试员', count: report.暖通.峰值在场, days: dur, manDays: report.暖通.总人天 },
+            { key: 7, role: '弱电主测+记录', count: report.弱电.小计, days: dur, manDays: report.弱电.小计 * dur },
+            { key: 8, role: '消防', count: report.消防.小计, days: dur, manDays: report.消防.小计 * dur },
+            { key: 9, role: '柴发', count: report.柴发.小计, days: dur, manDays: report.柴发.小计 * dur },
+            { key: 10, role: '固定人员', count: report.固定人员.小计, days: dur, manDays: report.固定人员.小计 * dur },
+            { key: 'sum', role: <Text strong>合计</Text>, count: <Text strong>{report.汇总.峰值同时在场}</Text>, days: <Text strong>{dur}</Text>, manDays: <Text strong>{report.汇总.总人天}</Text> },
           ]}
-          columns={[{ title: '岗位', dataIndex: 'role', width: 140 }, { title: '人数', dataIndex: 'count', width: 80 }, { title: '人天', dataIndex: 'manDays', width: 100 }]}
+          columns={[{ title: '岗位', dataIndex: 'role', width: 140 }, { title: '人数', dataIndex: 'count', width: 70 }, { title: '天数', dataIndex: 'days', width: 70 }, { title: '人天', dataIndex: 'manDays', width: 90 }]}
         />
       ),
     },
@@ -654,9 +659,9 @@ function SingleResultView({ report, input, onExport, onBack }: {
       key: 'detail', label: '详细',
       children: (
         <Collapse size="small" items={[
-          { key: 'it', label: 'IT链路', children: <Descs data={[['并行数', report.IT链路.所需并行数], ['测试工期', `${report.IT链路.实际测试工期}天`], ['在场', `${report.IT链路.同时在场人数}人`], ['人天', report.IT链路.总人天]]} /> },
-          { key: 'pw', label: '动力链路', children: <Descs data={[['并行数', report.动力链路.所需并行数], ['测试工期', `${report.动力链路.实际测试工期}天`], ['在场', `${report.动力链路.同时在场人数}人`], ['人天', report.动力链路.总人天]]} /> },
-          { key: 'hvac', label: '暖通', children: <Descs data={[['总组数', report.暖通.暖通总组数], ['峰值在场', `${report.暖通.峰值同时在场}人`], ['人天', report.暖通.总人天]]} /> },
+          { key: 'it', label: 'IT链路', children: <Descs data={[['并行数', report.IT链路.并行数], ['测试工期', `${report.IT链路.实际工期}天`], ['在场', `${report.IT链路.在场}人`], ['人天', report.IT链路.人天]]} /> },
+          { key: 'pw', label: '动力链路', children: <Descs data={[['并行数', report.动力链路.并行数], ['测试工期', `${report.动力链路.实际工期}天`], ['在场', `${report.动力链路.在场}人`], ['人天', report.动力链路.人天]]} /> },
+          { key: 'hvac', label: '暖通', children: <Descs data={[['总组数', report.暖通.暖通总组数], ['峰值在场', `${report.暖通.峰值在场}人`], ['人天', report.暖通.总人天]]} /> },
           { key: 'weak', label: '弱电/消防/柴发', children: <Descs data={[['弱电', `${report.弱电.小计}人`], ['消防', `${report.消防.小计}人`], ['柴发', `${report.柴发.小计}人`], ['固定', `${report.固定人员.小计}人`]]} /> },
         ]} />
       ),

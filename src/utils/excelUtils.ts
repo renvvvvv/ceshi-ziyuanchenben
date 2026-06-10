@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import { type ResourceInput, type ResourceReport } from './resourceCalculator';
+import { type ResourceInput, type ResourceReport, normalizeReport } from './resourceCalculator';
 
 // ============ 模板列名（匹配 V20 CSV 格式） ============
 
@@ -58,8 +58,8 @@ function ensureReportFields(report: ResourceReport): ResourceReport {
   return {
     ...report,
     假负载清单: report.假负载清单 || [
-      { name: '风冷机架式假负载', count: report.负载?.['6kW']?.总需求 || 0, days: 21, totalUnits: 0, spare: 0.1, spec: '6KW/台' },
-      { name: '风冷机架式假负载', count: report.负载?.['8kW']?.总需求 || 0, days: 21, totalUnits: 0, spare: 0.1, spec: '8KW/台' },
+      { name: '风冷机架式假负载', count: report.负载?.['6kW']?.总需求 || 0, days: 21, totalUnits: 0, spare: 0.29, spec: '6KW/台' },
+      { name: '风冷机架式假负载', count: report.负载?.['8kW']?.总需求 || 0, days: 21, totalUnits: 0, spare: 0.29, spec: '8KW/台' },
       { name: '风冷机架式假负载', count: report.负载?.['500kW']?.总需求 || 0, days: 21, totalUnits: 0, spare: 0, spec: '500KW/台' },
       { name: '风冷机架式假负载', count: report.负载?.['300kW']?.总需求 || 0, days: 21, totalUnits: 0, spare: 0, spec: '300KW/台' },
       { name: '风冷机架式假负载', count: 2, days: 21, totalUnits: 42, spare: 0, spec: '2000KW/台' },
@@ -114,9 +114,9 @@ function buildSummaryRow(input: ResourceInput, report: ResourceReport): (string 
     input.cabinet_power || segs.map(s => s.power).join('/') || '-', cabinetCount, Math.round(itLoadMW * 100) / 100, itComp, itCount,
     pue, pwCap, pwComp, pwCount,
     input.total_mw, input.total_duration, input.ac_type,
-    report.IT链路.所需并行数, report.IT链路.实际测试工期, report.IT链路.同时在场人数, report.IT链路.总人天,
-    report.动力链路.所需并行数, report.动力链路.实际测试工期, report.动力链路.同时在场人数, report.动力链路.总人天,
-    report.暖通.暖通总组数, report.暖通.峰值同时在场, report.暖通.总人天,
+    report.IT链路.并行数, report.IT链路.实际工期, report.IT链路.在场, report.IT链路.人天,
+    report.动力链路.并行数, report.动力链路.实际工期, report.动力链路.在场, report.动力链路.人天,
+    report.暖通.暖通总组数, report.暖通.峰值在场, report.暖通.总人天,
     report.汇总.峰值同时在场, report.汇总.总人天,
     report.负载['6kW'].总需求, report.负载['6kW'].自有, report.负载['6kW'].需租赁,
     report.负载['8kW'].总需求, report.负载['8kW'].自有, report.负载['8kW'].需租赁,
@@ -145,11 +145,11 @@ export function exportReportToExcel(input: ResourceInput, report: ResourceReport
     const data = [
       ['序号', '岗位', '人数', '人天', '说明'],
       [1, '测试经理', 1, dur, '固定配置，全程在场'],
-      [2, '电气主测', 1, dur, `IT变压器${r.IT链路.总台数}台，并行${r.IT链路.所需并行数}组`],
-      [3, '电气测试员', r.IT链路.同时在场人数, r.IT链路.总人天, `每台${r.IT链路.单台人数}人×并行${r.IT链路.所需并行数}组`],
-      [4, '动力测试员', r.动力链路.同时在场人数, r.动力链路.总人天, `动力变${r.动力链路.总台数}台，并行${r.动力链路.所需并行数}组`],
+      [2, '电气主测', 1, dur, `IT变压器${r.IT链路.台数}台，并行${r.IT链路.并行数}组`],
+      [3, '电气测试员', r.IT链路.在场, r.IT链路.人天, `每台${r.IT链路.每台人数}人×并行${r.IT链路.并行数}组`],
+      [4, '动力测试员', r.动力链路.在场, r.动力链路.人天, `动力变${r.动力链路.台数}台，并行${r.动力链路.并行数}组`],
       [5, '暖通主测', 1, dur, `功能${r.暖通.功能测试.组数}组+场景${r.暖通.场景压测.组数}组`],
-      [6, '暖通测试员', r.暖通.峰值同时在场, r.暖通.总人天, `功能${r.暖通.功能测试.同时在场}/场景${r.暖通.场景压测.同时在场}/冷源${r.暖通.前端冷源.人数}/安装${r.暖通.安装检查.人数}`],
+      [6, '暖通测试员', r.暖通.峰值在场, r.暖通.总人天, `功能${r.暖通.功能测试.在场}/场景${r.暖通.场景压测.在场}/冷源${r.暖通.前端冷源.人数}/安装${r.暖通.安装检查.人数}`],
       [7, '弱电主测', 1, dur, `记录员${r.弱电.记录员小计}人（电气${r.弱电.电气记录员}+暖通${r.弱电.暖通记录员}）`],
       [8, '弱电记录员', r.弱电.记录员小计, r.弱电.记录员小计 * dur, `电气${r.弱电.电气记录员}+暖通${r.弱电.暖通记录员}`],
       [9, '消防主测', 1, dur, `消防测试员${r.消防.测试员}人（${input.total_cabinets || 0}柜）`],
@@ -163,7 +163,7 @@ export function exportReportToExcel(input: ResourceInput, report: ResourceReport
     XLSX.utils.book_append_sheet(wb, ws, '人员投入清单');
   }
 
-  // Sheet 3: 假负载清单（+10%余量，匹配 generate_excel.py）
+  // Sheet 3: 假负载清单（+29%余量，匹配 generate_excel.py）
   {
     const data = [
       ['名称', '数量', '天数', '总台天', '余量', '规格'],
@@ -210,27 +210,26 @@ export function exportReportToExcel(input: ResourceInput, report: ResourceReport
       ['空调类型', input.ac_type],
       ['', ''],
       ['=== IT链路 ===', ''],
-      ['架构', r.IT链路.架构 || '标准架构'],
-      ['单台人数', r.IT链路.单台人数], ['总台数', r.IT链路.总台数],
-      ['单台天数', r.IT链路.单台天数], ['所需并行数', r.IT链路.所需并行数],
-      ['实际测试工期(天)', r.IT链路.实际测试工期], ['同时在场人数', r.IT链路.同时在场人数],
-      ['总人天', r.IT链路.总人天],
+      ['台数', r.IT链路.台数],
+      ['单台天数', r.IT链路.单台天数], ['并行数', r.IT链路.并行数],
+      ['实际工期(天)', r.IT链路.实际工期], ['在场人数', r.IT链路.在场],
+      ['人天', r.IT链路.人天],
       ['', ''],
       ['=== 动力链路 ===', ''],
-      ['单台人数', r.动力链路.单台人数], ['总台数', r.动力链路.总台数],
-      ['单台天数', r.动力链路.单台天数], ['所需并行数', r.动力链路.所需并行数],
-      ['实际测试工期(天)', r.动力链路.实际测试工期], ['同时在场人数', r.动力链路.同时在场人数],
-      ['总人天', r.动力链路.总人天],
+      ['台数', r.动力链路.台数],
+      ['单台天数', r.动力链路.单台天数], ['并行数', r.动力链路.并行数],
+      ['实际工期(天)', r.动力链路.实际工期], ['在场人数', r.动力链路.在场],
+      ['人天', r.动力链路.人天],
       ['', ''],
       ['=== 暖通 ===', ''],
       ['空调间数', r.暖通.空调间数], ['机房数', r.暖通.机房数],
       ['功能测试-组数', r.暖通.功能测试.组数], ['功能测试-每组人数', r.暖通.功能测试.每组人数],
-      ['功能测试-同时在场', r.暖通.功能测试.同时在场], ['功能测试-人天', r.暖通.功能测试.人天],
+      ['功能测试-在场', r.暖通.功能测试.在场], ['功能测试-人天', r.暖通.功能测试.人天],
       ['场景压测-组数', r.暖通.场景压测.组数], ['场景压测-每组人数', r.暖通.场景压测.每组人数],
-      ['场景压测-同时在场', r.暖通.场景压测.同时在场], ['场景压测-人天', r.暖通.场景压测.人天],
+      ['场景压测-在场', r.暖通.场景压测.在场], ['场景压测-人天', r.暖通.场景压测.人天],
       ['前端冷源-人数', r.暖通.前端冷源.人数], ['前端冷源-人天', r.暖通.前端冷源.人天],
       ['安装检查-人数', r.暖通.安装检查.人数], ['安装检查-人天', r.暖通.安装检查.人天],
-      ['暖通总组数', r.暖通.暖通总组数], ['暖通峰值同时在场', r.暖通.峰值同时在场],
+      ['暖通总组数', r.暖通.暖通总组数], ['暖通峰值在场', r.暖通.峰值在场],
       ['暖通总人天', r.暖通.总人天],
       ['', ''],
       ['=== 弱电 ===', ''],
@@ -429,8 +428,15 @@ export async function runBatchCalculation(inputs: ParsedInput[]): Promise<BatchR
       body: JSON.stringify({ inputs: validInputs, batch_id: batchId }),
     });
     if (res.ok) {
-      const json = await res.json() as { success: boolean; data: { index: number; input: ResourceInput; report: ResourceReport; error?: string }[] };
-      return [...json.data, ...errors];
+      const json = await res.json() as { success: boolean; data: (Record<string, unknown>)[] };
+      const normalized: BatchReportRow[] = json.data.map((item: Record<string, unknown>) => {
+        if (item.error) return { index: Number(item.index), input: {} as ResourceInput, report: {} as ResourceReport, error: String(item.error) };
+        const idx = Number(item.index);
+        const input = validInputs[idx - 1] || validInputs[0];
+        const report = normalizeReport(item, input);
+        return { index: idx, input, report };
+      });
+      return [...normalized, ...errors];
     }
   } catch {}
 
@@ -484,34 +490,34 @@ export function exportBatchResultsToExcel(batchResults: BatchReportRow[]): void 
       ['=== 人员投入清单 ===', '', '', ''],
       ['序号', '岗位', '人数', '人天'],
       [1, '测试经理', 1, dur], [2, '电气主测', 1, dur],
-      [3, '电气测试员', rep.IT链路.同时在场人数, rep.IT链路.总人天],
-      [4, '动力测试员', rep.动力链路.同时在场人数, rep.动力链路.总人天],
-      [5, '暖通主测', 1, dur], [6, '暖通测试员', rep.暖通.峰值同时在场, rep.暖通.总人天],
+      [3, '电气测试员', rep.IT链路.在场, rep.IT链路.人天],
+      [4, '动力测试员', rep.动力链路.在场, rep.动力链路.人天],
+      [5, '暖通主测', 1, dur], [6, '暖通测试员', rep.暖通.峰值在场, rep.暖通.总人天],
       [7, '弱电主测', 1, dur], [8, '弱电记录员', rep.弱电.记录员小计, rep.弱电.记录员小计 * dur],
       [9, '消防主测', 1, dur], [10, '消防测试员', rep.消防.测试员, rep.消防.测试员 * dur],
       [11, '柴发主测', 1, dur], [12, '柴发记录员', 1, dur],
       [13, '资料员', 1, dur],
       ['合计', '-', rep.汇总.峰值同时在场, rep.汇总.总人天],
       ['', ''],
-      ['=== IT链路详情 ===', ''], ['总台数', rep.IT链路.总台数], ['单台人数', rep.IT链路.单台人数],
-      ['单台天数', rep.IT链路.单台天数], ['所需并行数', rep.IT链路.所需并行数],
-      ['实际测试工期', `${rep.IT链路.实际测试工期}天`], ['同时在场人数', rep.IT链路.同时在场人数],
-      ['总人天', rep.IT链路.总人天],
+      ['=== IT链路详情 ===', ''], ['台数', rep.IT链路.台数], ['每台人数', rep.IT链路.每台人数],
+      ['单台天数', rep.IT链路.单台天数], ['并行数', rep.IT链路.并行数],
+      ['实际工期', `${rep.IT链路.实际工期}天`], ['在场人数', rep.IT链路.在场],
+      ['人天', rep.IT链路.人天],
       ['', ''],
-      ['=== 动力链路详情 ===', ''], ['总台数', rep.动力链路.总台数], ['单台人数', rep.动力链路.单台人数],
-      ['单台天数', rep.动力链路.单台天数], ['所需并行数', rep.动力链路.所需并行数],
-      ['实际测试工期', `${rep.动力链路.实际测试工期}天`], ['同时在场人数', rep.动力链路.同时在场人数],
-      ['总人天', rep.动力链路.总人天],
+      ['=== 动力链路详情 ===', ''], ['台数', rep.动力链路.台数], ['每台人数', rep.动力链路.每台人数],
+      ['单台天数', rep.动力链路.单台天数], ['并行数', rep.动力链路.并行数],
+      ['实际工期', `${rep.动力链路.实际工期}天`], ['在场人数', rep.动力链路.在场],
+      ['人天', rep.动力链路.人天],
       ['', ''],
       ['=== 暖通详情 ===', ''], ['空调间数', rep.暖通.空调间数], ['机房数', rep.暖通.机房数],
-      ['功能测试', `${rep.暖通.功能测试.组数}组×${rep.暖通.功能测试.每组人数}人,在场${rep.暖通.功能测试.同时在场}人,${rep.暖通.功能测试.人天}人天`],
-      ['场景压测', `${rep.暖通.场景压测.组数}组×${rep.暖通.场景压测.每组人数}人,在场${rep.暖通.场景压测.同时在场}人,${rep.暖通.场景压测.人天}人天`],
+      ['功能测试', `${rep.暖通.功能测试.组数}组×${rep.暖通.功能测试.每组人数}人,在场${rep.暖通.功能测试.在场}人,${rep.暖通.功能测试.人天}人天`],
+      ['场景压测', `${rep.暖通.场景压测.组数}组×${rep.暖通.场景压测.每组人数}人,在场${rep.暖通.场景压测.在场}人,${rep.暖通.场景压测.人天}人天`],
       ['前端冷源', `${rep.暖通.前端冷源.人数}人,${rep.暖通.前端冷源.人天}人天`],
       ['安装检查', `${rep.暖通.安装检查.人数}人,${rep.暖通.安装检查.人天}人天`],
-      ['暖通总组数', rep.暖通.暖通总组数], ['峰值同时在场', rep.暖通.峰值同时在场],
+      ['暖通总组数', rep.暖通.暖通总组数], ['峰值在场', rep.暖通.峰值在场],
       ['总人天', rep.暖通.总人天],
       ['', ''],
-      ['=== 假负载清单（+10%余量） ===', '', '', '', ''],
+      ['=== 假负载清单（+29%余量） ===', '', '', '', ''],
       ['名称', '数量', '天数', '总台天', '规格'],
       ...rep.假负载清单.map(f => [f.name, f.count, f.days, f.totalUnits, f.spec]),
       ['', '', '', '', ''],

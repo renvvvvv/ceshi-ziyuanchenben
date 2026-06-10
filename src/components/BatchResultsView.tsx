@@ -25,21 +25,22 @@ function MiniReport({ report, input }: { report: ResourceReport; input: Resource
           children: (
             <Table size="small" bordered pagination={false}
               dataSource={[
-                { key: 1, role: '测试经理', count: 1, manDays: dur },
-                { key: 2, role: '电气主测', count: 1, manDays: dur },
-                { key: 3, role: '电气测试员', count: report.IT链路.同时在场人数, manDays: report.IT链路.总人天 },
-                { key: 4, role: '动力测试员', count: report.动力链路.同时在场人数, manDays: report.动力链路.总人天 },
-                { key: 5, role: '暖通主测', count: 1, manDays: dur },
-                { key: 6, role: '暖通测试员', count: report.暖通.峰值同时在场, manDays: report.暖通.总人天 },
-                { key: 7, role: '弱电主测+记录员', count: report.弱电.小计, manDays: report.弱电.小计 * dur },
-                { key: 8, role: '消防', count: report.消防.小计, manDays: report.消防.小计 * dur },
-                { key: 9, role: '柴发', count: report.柴发.小计, manDays: report.柴发.小计 * dur },
-                { key: 10, role: '固定人员', count: report.固定人员.小计, manDays: report.固定人员.小计 * dur },
-                { key: 'sum', role: <Text strong>合计</Text>, count: <Text strong>{report.汇总.峰值同时在场}</Text>, manDays: <Text strong>{report.汇总.总人天}</Text> },
+                { key: 1, role: '测试经理', count: 1, days: dur, manDays: dur },
+                { key: 2, role: '电气主测', count: 1, days: dur, manDays: dur },
+                { key: 3, role: '电气测试员', count: report.IT链路.在场, days: report.IT链路.实际工期, manDays: report.IT链路.人天 },
+                { key: 4, role: '动力测试员', count: report.动力链路.在场, days: report.动力链路.实际工期, manDays: report.动力链路.人天 },
+                { key: 5, role: '暖通主测', count: 1, days: dur, manDays: dur },
+                { key: 6, role: '暖通测试员', count: report.暖通.峰值在场, days: dur, manDays: report.暖通.总人天 },
+                { key: 7, role: '弱电主测+记录员', count: report.弱电.小计, days: dur, manDays: report.弱电.小计 * dur },
+                { key: 8, role: '消防', count: report.消防.小计, days: dur, manDays: report.消防.小计 * dur },
+                { key: 9, role: '柴发', count: report.柴发.小计, days: dur, manDays: report.柴发.小计 * dur },
+                { key: 10, role: '固定人员', count: report.固定人员.小计, days: dur, manDays: report.固定人员.小计 * dur },
+                { key: 'sum', role: <Text strong>合计</Text>, count: <Text strong>{report.汇总.峰值同时在场}</Text>, days: <Text strong>{dur}</Text>, manDays: <Text strong>{report.汇总.总人天}</Text> },
               ]}
               columns={[
                 { title: '岗位', dataIndex: 'role', width: 140 },
                 { title: '人数', dataIndex: 'count', width: 70 },
+                { title: '天数', dataIndex: 'days', width: 70 },
                 { title: '人天', dataIndex: 'manDays', width: 80 },
               ]}
             />
@@ -79,16 +80,16 @@ function MiniReport({ report, input }: { report: ResourceReport; input: Resource
           key: 'detail', label: <><InfoCircleOutlined /> 详细计算</>,
           children: (
             <Descriptions column={2} size="small" bordered>
-              <Descriptions.Item label="IT并行数">{report.IT链路.所需并行数}</Descriptions.Item>
-              <Descriptions.Item label="IT测试工期">{report.IT链路.实际测试工期}天</Descriptions.Item>
-              <Descriptions.Item label="IT同时在场">{report.IT链路.同时在场人数}人</Descriptions.Item>
-              <Descriptions.Item label="IT总人天">{report.IT链路.总人天}</Descriptions.Item>
-              <Descriptions.Item label="动力并行数">{report.动力链路.所需并行数}</Descriptions.Item>
-              <Descriptions.Item label="动力测试工期">{report.动力链路.实际测试工期}天</Descriptions.Item>
-              <Descriptions.Item label="动力同时在场">{report.动力链路.同时在场人数}人</Descriptions.Item>
-              <Descriptions.Item label="动力总人天">{report.动力链路.总人天}</Descriptions.Item>
+              <Descriptions.Item label="IT并行数">{report.IT链路.并行数}</Descriptions.Item>
+              <Descriptions.Item label="IT测试工期">{report.IT链路.实际工期}天</Descriptions.Item>
+              <Descriptions.Item label="IT同时在场">{report.IT链路.在场}人</Descriptions.Item>
+              <Descriptions.Item label="IT总人天">{report.IT链路.人天}</Descriptions.Item>
+              <Descriptions.Item label="动力并行数">{report.动力链路.并行数}</Descriptions.Item>
+              <Descriptions.Item label="动力测试工期">{report.动力链路.实际工期}天</Descriptions.Item>
+              <Descriptions.Item label="动力同时在场">{report.动力链路.在场}人</Descriptions.Item>
+              <Descriptions.Item label="动力总人天">{report.动力链路.人天}</Descriptions.Item>
               <Descriptions.Item label="暖通总组数">{report.暖通.暖通总组数}</Descriptions.Item>
-              <Descriptions.Item label="暖通峰值在场">{report.暖通.峰值同时在场}人</Descriptions.Item>
+              <Descriptions.Item label="暖通峰值在场">{report.暖通.峰值在场}人</Descriptions.Item>
               <Descriptions.Item label="暖通总人天">{report.暖通.总人天}</Descriptions.Item>
               <Descriptions.Item label="6kW总需求">{report.负载?.['6kW']?.总需求 || 0}台</Descriptions.Item>
               <Descriptions.Item label="8kW总需求">{report.负载?.['8kW']?.总需求 || 0}台</Descriptions.Item>

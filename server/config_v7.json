@@ -10,14 +10,14 @@
   },
 
   "it_load_per_mw": {
-    "_note": "1.1MW变压器单元的负载配置（单机柜功率→负载数量）",
-    "12": {"6kw": 83, "8kw": 83, "per_cabinet": 2, "cabinets_per_unit": 92},
-    "16": {"6kw": 95, "8kw": 95, "per_cabinet": 2, "cabinets_per_unit": 69},
-    "18": {"6kw": 56, "8kw": 112, "per_cabinet": 3, "cabinets_per_unit": 61},
-    "20": {"6kw": 56, "8kw": 112, "per_cabinet": 3, "cabinets_per_unit": 55},
-    "22": {"6kw": 0, "8kw": 183, "per_cabinet": 3, "cabinets_per_unit": 50},
-    "24": {"6kw": 0, "8kw": 183, "per_cabinet": 3, "cabinets_per_unit": 45},
-    "26": {"6kw": 39, "8kw": 117, "per_cabinet": 4, "cabinets_per_unit": 42}
+    "_note": "1.1MW变压器单元的负载配置，新规则：12kW配1×6+1×8，>12kW配2×6+1~2×8，优先用6kW库存减少租赁",
+    "12": {"6kw": 90, "8kw": 90, "per_cabinet": 2, "cabinets_per_unit": 92},
+    "16": {"6kw": 140, "8kw": 70, "per_cabinet": 3, "cabinets_per_unit": 69},
+    "18": {"6kw": 125, "8kw": 65, "per_cabinet": 3, "cabinets_per_unit": 61},
+    "20": {"6kw": 110, "8kw": 110, "per_cabinet": 4, "cabinets_per_unit": 55},
+    "22": {"6kw": 100, "8kw": 100, "per_cabinet": 4, "cabinets_per_unit": 50},
+    "24": {"6kw": 90, "8kw": 90, "per_cabinet": 4, "cabinets_per_unit": 45},
+    "26": {"6kw": 90, "8kw": 90, "per_cabinet": 4, "cabinets_per_unit": 42}
   },
 
   "power_load_config": {
@@ -34,9 +34,10 @@
   },
 
   "staff_per_transformer": {
-    "_note": "每台变压器需要的人员数（标准架构）",
-    "it": 6,
-    "power": 4
+    "_note": "每台变压器需要的人员数（V200.1校准：匹配乌兰大三期实际42人）",
+    "it": 1,
+    "power": 1,
+    "hybrid": 1
   },
 
   "days_per_transformer": {
