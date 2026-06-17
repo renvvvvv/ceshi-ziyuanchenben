@@ -59,44 +59,50 @@ function Projects() {
     setEditingProject(null);
   };
 
-  const columns: ColumnsType<Project> = [
+  const columns: ColumnsType<Project> = useMemo(() => [
     {
       title: '项目名称',
       dataIndex: 'name',
       key: 'name',
+      width: 240,
       render: (text: string, record: Project) => (
-        <a onClick={() => navigate(`/projects/${record.id}`)}>{text}</a>
+        <a onClick={() => navigate(`/projects/${record.id}`)} style={{ color: '#7cb8ff' }}>{text}</a>
       ),
     },
-    { title: '客户', dataIndex: 'customer', key: 'customer' },
+    { title: '项目经理', dataIndex: 'manager', key: 'manager', width: 100 },
+    { title: '客户', dataIndex: 'customer', key: 'customer', width: 100 },
     {
       title: '状态',
       dataIndex: 'status',
       key: 'status',
+      width: 90,
       render: (status: string) => <StatusTag status={status} />,
     },
     {
       title: '优先级',
       dataIndex: 'priority',
       key: 'priority',
+      width: 80,
       render: (p: string) => {
-        const colors: Record<string, string> = { '高': 'red', '中': 'orange', '低': 'default' };
         return <StatusTag status={p} />;
       },
     },
-    { title: '开始日期', dataIndex: 'startDate', key: 'startDate', sorter: (a, b) => a.startDate.localeCompare(b.startDate) },
-    { title: '结束日期', dataIndex: 'endDate', key: 'endDate', sorter: (a, b) => a.endDate.localeCompare(b.endDate) },
-    { title: 'IT产出（MW）', dataIndex: 'itOutput', key: 'itOutput', sorter: (a, b) => a.itOutput - b.itOutput },
+    { title: '开始日期', dataIndex: 'startDate', key: 'startDate', width: 110, sorter: (a, b) => a.startDate.localeCompare(b.startDate) },
+    { title: '结束日期', dataIndex: 'endDate', key: 'endDate', width: 110, sorter: (a, b) => a.endDate.localeCompare(b.endDate) },
+    { title: '计划交付日期', dataIndex: 'plannedDeliveryDate', key: 'plannedDeliveryDate', width: 120, sorter: (a, b) => (a.plannedDeliveryDate || '').localeCompare(b.plannedDeliveryDate || '') },
+    { title: '实际交付日期', dataIndex: 'actualDeliveryDate', key: 'actualDeliveryDate', width: 120, sorter: (a, b) => (a.actualDeliveryDate || '').localeCompare(b.actualDeliveryDate || '') },
+    { title: 'IT产出（MW）', dataIndex: 'itOutput', key: 'itOutput', width: 110, sorter: (a, b) => a.itOutput - b.itOutput },
     {
       title: '操作',
       key: 'action',
-      width: 200,
+      width: 160,
+      fixed: 'right' as const,
       render: (_: unknown, record: Project) => (
-        <Space>
-          <Button type="link" size="small" icon={<EyeOutlined />} onClick={() => navigate(`/projects/${record.id}`)}>
+        <Space size={4}>
+          <Button type="link" size="small" icon={<EyeOutlined />} onClick={() => navigate(`/projects/${record.id}`)} style={{ color: '#4d9fff', fontFamily: 'var(--font-primary)', padding: '0 4px' }}>
             查看
           </Button>
-          <Button type="link" size="small" icon={<EditOutlined />} onClick={() => handleEdit(record)}>
+          <Button type="link" size="small" icon={<EditOutlined />} onClick={() => handleEdit(record)} style={{ color: '#4d9fff', fontFamily: 'var(--font-primary)', padding: '0 4px' }}>
             编辑
           </Button>
           <Popconfirm
@@ -106,33 +112,48 @@ function Projects() {
             okText="确认"
             cancelText="取消"
           >
-            <Button type="link" size="small" danger icon={<DeleteOutlined />}>
+            <Button type="link" size="small" danger icon={<DeleteOutlined />} style={{ fontFamily: 'var(--font-primary)', padding: '0 4px' }}>
               删除
             </Button>
           </Popconfirm>
         </Space>
       ),
     },
-  ];
+  ], [navigate]);
 
   return (
     <div>
       <div className="page-header">
         <h3>项目管理</h3>
-        <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
+        <Button
+          type="primary"
+          icon={<PlusOutlined />}
+          onClick={handleCreate}
+          style={{ background: 'linear-gradient(135deg, #4d9fff, #69b1ff)', border: 'none', fontFamily: 'var(--font-primary)', fontWeight: 500, borderRadius: 8, boxShadow: '0 4px 14px rgba(77,159,255,0.35)' }}
+        >
           创建项目
         </Button>
       </div>
 
-      <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
-        <Select value={statusFilter} onChange={setStatusFilter} style={{ width: 120 }}>
+      <div style={{ display: 'flex', gap: 12, marginBottom: 18, flexWrap: 'wrap' as const }}>
+        <Select
+          value={statusFilter}
+          onChange={setStatusFilter}
+          style={{ width: 130, fontFamily: 'var(--font-primary)' }}
+          popupMatchSelectWidth={false}
+        >
           <Select.Option value="全部">全部状态</Select.Option>
           <Select.Option value="未开始">未开始</Select.Option>
           <Select.Option value="测试中">测试中</Select.Option>
           <Select.Option value="已完成">已完成</Select.Option>
           <Select.Option value="阻塞">阻塞</Select.Option>
         </Select>
-        <Select value={priorityFilter} onChange={setPriorityFilter} style={{ width: 120 }}>
+        <Select
+          value={priorityFilter}
+          onChange={setPriorityFilter}
+          style={{ width: 130, fontFamily: 'var(--font-primary)' }}
+          popupMatchSelectWidth={false}
+        >
           <Select.Option value="全部">全部优先级</Select.Option>
           <Select.Option value="高">高</Select.Option>
           <Select.Option value="中">中</Select.Option>
@@ -140,25 +161,30 @@ function Projects() {
         </Select>
         <Input
           placeholder="搜索项目名称或客户"
-          prefix={<SearchOutlined />}
+          prefix={<SearchOutlined style={{ color: 'rgba(255,255,255,0.3)' }} />}
           value={searchText}
           onChange={(e) => setSearchText(e.target.value)}
-          style={{ width: 250 }}
+          style={{ width: 250, fontFamily: 'var(--font-primary)', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)', color: '#fff' }}
           allowClear
+          variant="borderless"
         />
       </div>
 
-      <Table
-        columns={columns}
-        dataSource={filteredProjects}
-        rowKey="id"
-        pagination={{
-          pageSize: 10,
-          showSizeChanger: true,
-          showTotal: (total) => `共 ${total} 个项目`,
-        }}
-        scroll={{ x: 1100 }}
-      />
+      <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, overflow: 'hidden' }}>
+        <Table
+          columns={columns}
+          dataSource={filteredProjects}
+          rowKey="id"
+          pagination={{
+            pageSize: 10,
+            showSizeChanger: true,
+            showTotal: (total) => `共 ${total} 个项目`,
+            size: 'small' as const,
+          }}
+          scroll={{ x: 1300 }}
+          size="middle"
+        />
+      </div>
 
       <ProjectModal
         open={modalOpen}

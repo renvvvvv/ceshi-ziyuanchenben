@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { Layout, Menu, Button, Avatar, Dropdown, theme } from 'antd';
+import { Layout, Menu, Button, Avatar, Dropdown } from 'antd';
 import {
   DashboardOutlined,
   ProjectOutlined,
@@ -11,7 +11,6 @@ import {
   MenuUnfoldOutlined,
   UserOutlined,
   LogoutOutlined,
-  CloudServerOutlined,
   CalculatorOutlined,
 } from '@ant-design/icons';
 
@@ -60,7 +59,7 @@ function MainLayout() {
         trigger={null}
         collapsible
         collapsed={collapsed}
-        width={200}
+        width={220}
         style={{
           overflow: 'auto',
           height: '100vh',
@@ -71,9 +70,32 @@ function MainLayout() {
           zIndex: 100,
         }}
       >
-        <div className="logo-container">
-          <CloudServerOutlined className="logo-icon" />
-          {!collapsed && <h2>测试验证平台</h2>}
+        <div
+          className="logo-container"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '18px 12px',
+            borderBottom: '1px solid rgba(255,255,255,0.06)',
+            cursor: 'pointer',
+          }}
+          onClick={() => navigate('/dashboard')}
+        >
+          <div
+            style={{
+              fontSize: 15,
+              fontWeight: 700,
+              color: 'var(--text-primary)',
+              fontFamily: 'var(--font-primary)',
+              lineHeight: 1.4,
+              textAlign: 'center',
+              letterSpacing: '0.5px',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            智航万恒测试验证管理平台
+          </div>
         </div>
         <Menu
           theme="dark"
@@ -83,22 +105,22 @@ function MainLayout() {
           onClick={onMenuClick}
         />
       </Sider>
-      <Layout style={{ marginLeft: collapsed ? 80 : 200, transition: 'all 0.2s' }}>
+      <Layout style={{ marginLeft: collapsed ? 72 : 220, transition: 'margin-left 0.2s ease' }}>
         <div className="app-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
             <Button
               type="text"
               icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
               onClick={() => setCollapsed(!collapsed)}
-              style={{ fontSize: 16, width: 40, height: 40 }}
+              style={{ fontSize: 16, width: 40, height: 40, color: 'rgba(255,255,255,0.6)' }}
             />
             <h3>{currentTitle}</h3>
           </div>
           <div className="header-right">
             <Dropdown menu={{ items: userMenuItems }} placement="bottomRight">
               <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Avatar icon={<UserOutlined />} style={{ backgroundColor: '#1677ff' }} />
-                <span>管理员</span>
+                <Avatar icon={<UserOutlined />} style={{ background: 'linear-gradient(135deg, #4d9fff, #69b1ff)', boxShadow: '0 2px 8px rgba(77,159,255,0.35)', fontFamily: 'var(--font-primary)', fontWeight: 500 }} />
+                <span style={{ color: 'rgba(255,255,255,0.6)', fontFamily: 'var(--font-primary)', fontSize: 13 }}>管理员</span>
               </div>
             </Dropdown>
           </div>

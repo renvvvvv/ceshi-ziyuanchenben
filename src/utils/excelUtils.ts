@@ -389,8 +389,8 @@ export function parseImportExcel(file: File): Promise<ParsedInput[]> {
 
 export interface BatchReportRow {
   index: number;
-  input: ResourceInput;
-  report: ResourceReport;
+  input?: ResourceInput;
+  report?: ResourceReport;
   error?: string;
 }
 
@@ -402,7 +402,7 @@ export async function runBatchCalculation(inputs: ParsedInput[]): Promise<BatchR
   for (let i = 0; i < inputs.length; i++) {
     const item = inputs[i];
     if (item._errors.length > 0) {
-      errors.push({ index: i + 1, input: {} as ResourceInput, report: {} as ResourceReport, error: item._errors.join('; ') });
+      errors.push({ index: i + 1, error: item._errors.join('; ') });
       continue;
     }
     validInputs.push({
@@ -430,7 +430,7 @@ export async function runBatchCalculation(inputs: ParsedInput[]): Promise<BatchR
     if (res.ok) {
       const json = await res.json() as { success: boolean; data: (Record<string, unknown>)[] };
       const normalized: BatchReportRow[] = json.data.map((item: Record<string, unknown>) => {
-        if (item.error) return { index: Number(item.index), input: {} as ResourceInput, report: {} as ResourceReport, error: String(item.error) };
+        if (item.error) return { index: Number(item.index), error: String(item.error) };
         const idx = Number(item.index);
         const input = validInputs[idx - 1] || validInputs[0];
         const report = normalizeReport(item, input);
@@ -447,7 +447,7 @@ export async function runBatchCalculation(inputs: ParsedInput[]): Promise<BatchR
       const report = calculateResource(input);
       return { index: idx + 1, input, report };
     } catch (e) {
-      return { index: idx + 1, input, report: {} as ResourceReport, error: String(e) };
+      return { index: idx + 1, input, error: String(e) };
     }
   });
   return [...localResults, ...errors];
@@ -464,7 +464,7 @@ export function exportBatchResultsToExcel(batchResults: BatchReportRow[]): void 
         if (r.error) {
           return [r.index, 'ERROR', '', '', '', '', '', '', r.error, ...Array(SUMMARY_HEADERS.length - 9).fill('')];
         }
-        return buildSummaryRow(r.input, r.report);
+        return buildSummaryRow(r.input!, r.report!);
       }),
     ];
     const { ws } = aoaToSheet(data, SUMMARY_HEADERS.map(() => 16));
@@ -474,8 +474,8 @@ export function exportBatchResultsToExcel(batchResults: BatchReportRow[]): void 
   // Individual detail sheets
   for (const r of batchResults) {
     if (r.error) continue;
-    const inp = r.input;
-    const rep = ensureReportFields(r.report);
+    const inp = r.input!;
+    const rep = ensureReportFields(r.report!);
     const dur = inp.total_duration;
     const itSpecStr = inp.it_transformers.map(([c, n]) => `${c}MW×${n}台`).join('+');
     const pwSpecStr = inp.power_transformers.map(([c, n]) => `${c}MW×${n}台`).join('+');

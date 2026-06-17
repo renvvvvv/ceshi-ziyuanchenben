@@ -1,6 +1,6 @@
 export type ProjectStatus = '未开始' | '测试中' | '已完成' | '阻塞';
 export type Priority = '高' | '中' | '低';
-export type MemberStatus = '在线' | '忙碌' | '离线';
+export type MemberStatus = '空闲' | '测试中';
 
 export interface Project {
   id: string;
@@ -11,6 +11,8 @@ export interface Project {
   manager: string;
   startDate: string;
   endDate: string;
+  plannedDeliveryDate?: string;
+  actualDeliveryDate?: string;
   itOutput: number; // MW
   contractAmount?: number;
   businessType?: string;
@@ -46,6 +48,12 @@ export interface TimelineEvent {
   description: string;
 }
 
+export interface MemberProject {
+  projectName: string;
+  startDate: string;
+  endDate: string;
+}
+
 export interface TeamMember {
   id: string;
   name: string;
@@ -56,16 +64,26 @@ export interface TeamMember {
   currentProjects: string[];
   email?: string;
   phone?: string;
+  projects?: MemberProject[];
 }
 
 export interface HistoricalProject {
   id: string;
   name: string;
-  itOutput: number;
+  customer: string;
+  status: ProjectStatus;
+  priority: Priority;
+  manager: string;
   startDate: string;
   endDate: string;
-  customer: string;
+  plannedDeliveryDate?: string;
+  actualDeliveryDate?: string;
+  itOutput: number;
+  contractAmount?: number;
+  businessType?: string;
+  description?: string;
   docLink: string;
+  updatedAt: string;
 }
 
 export interface TestDoc {
@@ -74,4 +92,8 @@ export interface TestDoc {
   category: string;
   lastUpdated: string;
   content?: string;
+  fileName?: string;
+  fileSize?: string;
+  fileType?: string;
+  fileUrl?: string;
 }

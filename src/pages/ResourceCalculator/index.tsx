@@ -127,11 +127,11 @@ function ResourceCalculator() {
       const res = await apiGetBatchDetail(batchId);
       const items = res.data;
       const rows: BatchReportRow[] = items.map((h, i) => {
-        if (!h.result_json) return { index: i + 1, input: {} as ResourceInput, report: {} as ResourceReport, error: '缺数据' };
+        if (!h.result_json) return { index: i + 1, error: '缺数据' };
         try {
           const report = JSON.parse(h.result_json) as ResourceReport;
           return { index: i + 1, input: { total_mw: h.total_mw, total_duration: h.total_duration, cabinet_power: h.cabinet_power, it_transformers: parseItTrans(h.it_transformers), power_transformers: parseItTrans(h.power_transformers), total_cabinets: h.total_cabinets, ac_type: h.ac_type }, report };
-        } catch { return { index: i + 1, input: {} as ResourceInput, report: {} as ResourceReport, error: '解析失败' }; }
+        } catch { return { index: i + 1, error: '解析失败' }; }
       });
       setBatchResults(rows);
       setMode('batch');
@@ -597,7 +597,7 @@ function SingleResultView({ report, input, onExport, onBack }: {
     title: h, dataIndex: `c${i}`, key: `c${i}`, width: h.length > 6 ? 130 : 100,
     render: (v: string | number) => v,
   }));
-  const summaryData = [{ ...summaryRow.reduce((acc, v, i) => ({ ...acc, [`c${i}`]: v, key: '1' }), {} as Record<string, unknown>) }];
+  const summaryData = [{ ...summaryRow.reduce<Record<string, string | number>>((acc, v, i) => ({ ...acc, [`c${i}`]: v }), { key: '1' }) }];
 
   const tabItems = [
     {

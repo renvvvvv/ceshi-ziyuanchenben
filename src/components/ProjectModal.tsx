@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { Modal, Form, Input, Select, DatePicker, InputNumber, message } from 'antd';
 import dayjs from 'dayjs';
-import type { Project, ProjectStatus, Priority } from '../types';
+import type { Project } from '../types';
 
 interface ProjectModalProps {
   open: boolean;
@@ -21,6 +21,8 @@ function ProjectModal({ open, project, onCancel, onSubmit }: ProjectModalProps) 
           ...project,
           startDate: dayjs(project.startDate),
           endDate: project.endDate ? dayjs(project.endDate) : undefined,
+          plannedDeliveryDate: project.plannedDeliveryDate ? dayjs(project.plannedDeliveryDate) : undefined,
+          actualDeliveryDate: project.actualDeliveryDate ? dayjs(project.actualDeliveryDate) : undefined,
         });
       } else {
         form.resetFields();
@@ -35,6 +37,8 @@ function ProjectModal({ open, project, onCancel, onSubmit }: ProjectModalProps) 
         ...values,
         startDate: values.startDate.format('YYYY-MM-DD'),
         endDate: values.endDate ? values.endDate.format('YYYY-MM-DD') : '',
+        plannedDeliveryDate: values.plannedDeliveryDate ? values.plannedDeliveryDate.format('YYYY-MM-DD') : '',
+        actualDeliveryDate: values.actualDeliveryDate ? values.actualDeliveryDate.format('YYYY-MM-DD') : '',
       };
       onSubmit(data);
       message.success(isEdit ? '项目更新成功' : '项目创建成功');
@@ -55,14 +59,24 @@ function ProjectModal({ open, project, onCancel, onSubmit }: ProjectModalProps) 
       }}
       width={640}
       destroyOnClose
+      styles={{
+        header: { background: 'transparent', borderBottom: '1px solid rgba(255,255,255,0.1)' },
+        body: { paddingTop: 20 },
+        footer: { borderTop: '1px solid rgba(255,255,255,0.1)' },
+      }}
     >
       <Form form={form} layout="vertical" style={{ marginTop: 16 }}>
         <Form.Item name="name" label="项目名称" rules={[{ required: true, message: '请输入项目名称' }]}>
           <Input placeholder="请输入项目名称" />
         </Form.Item>
-        <Form.Item name="customer" label="客户" rules={[{ required: true, message: '请输入客户名称' }]}>
-          <Input placeholder="请输入客户名称" />
-        </Form.Item>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+          <Form.Item name="customer" label="客户" rules={[{ required: true, message: '请输入客户名称' }]}>
+            <Input placeholder="请输入客户名称" />
+          </Form.Item>
+          <Form.Item name="manager" label="项目经理" rules={[{ required: true, message: '请输入项目经理' }]}>
+            <Input placeholder="请输入项目经理姓名" />
+          </Form.Item>
+        </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
           <Form.Item name="status" label="状态" rules={[{ required: true, message: '请选择状态' }]}>
             <Select placeholder="请选择状态">
@@ -80,15 +94,20 @@ function ProjectModal({ open, project, onCancel, onSubmit }: ProjectModalProps) 
             </Select>
           </Form.Item>
         </div>
-        <Form.Item name="manager" label="项目经理" rules={[{ required: true, message: '请输入项目经理' }]}>
-          <Input placeholder="请输入项目经理姓名" />
-        </Form.Item>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
           <Form.Item name="startDate" label="开始日期" rules={[{ required: true, message: '请选择开始日期' }]}>
             <DatePicker style={{ width: '100%' }} placeholder="请选择开始日期" />
           </Form.Item>
           <Form.Item name="endDate" label="结束日期">
             <DatePicker style={{ width: '100%' }} placeholder="请选择结束日期" />
+          </Form.Item>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+          <Form.Item name="plannedDeliveryDate" label="计划交付日期">
+            <DatePicker style={{ width: '100%' }} placeholder="请选择计划交付日期" />
+          </Form.Item>
+          <Form.Item name="actualDeliveryDate" label="实际交付日期">
+            <DatePicker style={{ width: '100%' }} placeholder="请选择实际交付日期" />
           </Form.Item>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>

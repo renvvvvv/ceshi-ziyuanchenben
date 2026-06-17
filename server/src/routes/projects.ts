@@ -22,7 +22,8 @@ router.get('/', (req: Request, res: Response) => {
 
     res.json({ success: true, data: rows, page, size, total });
   } catch (e) {
-    res.status(500).json({ error: '查询失败' });
+    console.error('[Projects Query Error]', e);
+    res.status(500).json({ error: '查询失败', detail: String(e) });
   }
 });
 
@@ -40,7 +41,8 @@ router.post('/', (req: Request, res: Response) => {
 
     res.json({ success: true, id: result.lastInsertRowid });
   } catch (e) {
-    res.status(500).json({ error: '创建失败' });
+    console.error('[Projects Create Error]', e);
+    res.status(500).json({ error: '创建失败', detail: String(e) });
   }
 });
 
@@ -52,7 +54,8 @@ router.put('/:id', (req: Request, res: Response) => {
       .run(name, customer, status, priority, manager, start_date, end_date, it_output, contract_amount, business_type, description, req.params.id);
     res.json({ success: true });
   } catch (e) {
-    res.status(500).json({ error: '更新失败' });
+    console.error('[Projects Update Error]', e);
+    res.status(500).json({ error: '更新失败', detail: String(e) });
   }
 });
 
@@ -62,15 +65,21 @@ router.delete('/:id', (req: Request, res: Response) => {
     db.prepare('DELETE FROM test_projects WHERE id=?').run(req.params.id);
     res.json({ success: true });
   } catch (e) {
-    res.status(500).json({ error: '删除失败' });
+    console.error('[Projects Delete Error]', e);
+    res.status(500).json({ error: '删除失败', detail: String(e) });
   }
 });
 
 /** GET /api/projects/:id — 项目详情 */
 router.get('/:id', (req: Request, res: Response) => {
-  const row = db.prepare('SELECT * FROM test_projects WHERE id=?').get(req.params.id);
-  if (!row) { res.status(404).json({ error: '项目不存在' }); return; }
-  res.json({ success: true, data: row });
+  try {
+    const row = db.prepare('SELECT * FROM test_projects WHERE id=?').get(req.params.id);
+    if (!row) { res.status(404).json({ error: '项目不存在' }); return; }
+    res.json({ success: true, data: row });
+  } catch (e) {
+    console.error('[Projects GetById Error]', e);
+    res.status(500).json({ error: '查询失败', detail: String(e) });
+  }
 });
 
 /** GET /api/history-projects — 历史项目 */

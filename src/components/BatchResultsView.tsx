@@ -139,26 +139,26 @@ function BatchResultsView({ batchResults, onClose }: BatchResultsViewProps) {
         expandable={{
           expandedRowRender: (r: BatchReportRow) => {
             if (r.error) return <Text type="danger">{r.error}</Text>;
-            return <MiniReport report={r.report} input={r.input} />;
+            return <MiniReport report={r.report!} input={r.input!} />;
           },
           rowExpandable: (r: BatchReportRow) => !r.error,
         }}
         columns={[
           { title: '序号', dataIndex: 'index', width: 60 },
-          { title: '总MW', width: 70, render: (_: unknown, r: BatchReportRow) => r.error ? '-' : r.input.total_mw },
-          { title: '工期', width: 60, render: (_: unknown, r: BatchReportRow) => r.error ? '-' : r.input.total_duration },
-          { title: '单柜kW', width: 65, render: (_: unknown, r: BatchReportRow) => r.error ? '-' : r.input.cabinet_power || (r.input.cabinet_power_segments || []).map((s: {power: number}) => s.power).join('/') || '-' },
-          { title: '机柜数', width: 65, render: (_: unknown, r: BatchReportRow) => r.error ? '-' : r.input.total_cabinets || 0 },
-          { title: 'IT配置', width: 160, render: (_: unknown, r: BatchReportRow) => r.error ? '-' : r.input.it_transformers.map(([c, n]) => `${c}MW×${n}`).join('+') },
-          { title: '动力配置', width: 160, render: (_: unknown, r: BatchReportRow) => r.error ? '-' : r.input.power_transformers.map(([c, n]) => `${c}MW×${n}`).join('+') },
+          { title: '总MW', width: 70, render: (_: unknown, r: BatchReportRow) => r.error ? '-' : r.input!.total_mw },
+          { title: '工期', width: 60, render: (_: unknown, r: BatchReportRow) => r.error ? '-' : r.input!.total_duration },
+          { title: '单柜kW', width: 65, render: (_: unknown, r: BatchReportRow) => r.error ? '-' : r.input!.cabinet_power || (r.input!.cabinet_power_segments || []).map((s: {power: number}) => s.power).join('/') || '-' },
+          { title: '机柜数', width: 65, render: (_: unknown, r: BatchReportRow) => r.error ? '-' : r.input!.total_cabinets || 0 },
+          { title: 'IT配置', width: 160, render: (_: unknown, r: BatchReportRow) => r.error ? '-' : r.input!.it_transformers.map(([c, n]) => `${c}MW×${n}`).join('+') },
+          { title: '动力配置', width: 160, render: (_: unknown, r: BatchReportRow) => r.error ? '-' : r.input!.power_transformers.map(([c, n]) => `${c}MW×${n}`).join('+') },
           { title: '峰值在场', width: 80, render: (_: unknown, r: BatchReportRow) => r.error ? '-' : `${r.report?.汇总?.峰值同时在场 || 0}人` },
           { title: '总人天', width: 80, render: (_: unknown, r: BatchReportRow) => r.error ? '-' : r.report?.汇总?.总人天 || 0 },
-          { title: '空调', dataIndex: '', width: 80, render: (_: unknown, r: BatchReportRow) => r.error ? '-' : <Tag>{r.input.ac_type}</Tag> },
+          { title: '空调', dataIndex: '', width: 80, render: (_: unknown, r: BatchReportRow) => r.error ? '-' : <Tag>{r.input!.ac_type}</Tag> },
           {
             title: '操作', width: 100,
             render: (_: unknown, r: BatchReportRow) => r.error ? null : (
               <Button size="small" type="link" icon={<ExportOutlined />}
-                onClick={() => { exportReportToExcel(r.input, r.report); message.success('已下载'); }}>
+                onClick={() => { exportReportToExcel(r.input!, r.report!); message.success('已下载'); }}>
                 下载
               </Button>
             ),

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Table, Button, Spin } from 'antd';
 import { ReloadOutlined, ProjectOutlined, CheckCircleOutlined, ThunderboltOutlined, ClockCircleOutlined } from '@ant-design/icons';
@@ -33,13 +33,19 @@ function Dashboard() {
     setTimeout(() => setLoading(false), 500);
   };
 
-  const statusPieOption = {
+  const statusPieOption = useMemo(() => ({
+    backgroundColor: 'transparent',
     tooltip: {
       trigger: 'item' as const,
       formatter: '{b}: {c} 个 ({d}%)',
+      backgroundColor: 'rgba(13, 31, 60, 0.92)',
+      borderColor: 'rgba(77, 159, 255, 0.3)',
+      borderWidth: 1,
+      textStyle: { color: 'rgba(255,255,255,0.85)', fontFamily: 'Outfit, Noto Sans SC, sans-serif', fontSize: 12 },
     },
     legend: {
       bottom: 0,
+      textStyle: { color: 'rgba(255,255,255,0.5)', fontFamily: 'Outfit, Noto Sans SC, sans-serif', fontSize: 12 },
     },
     series: [
       {
@@ -49,12 +55,15 @@ function Dashboard() {
         center: ['50%', '50%'],
         avoidLabelOverlap: false,
         itemStyle: {
-          borderRadius: 4,
-          borderColor: '#fff',
-          borderWidth: 2,
+          borderRadius: 6,
+          borderColor: 'rgba(8, 14, 28, 0.8)',
+          borderWidth: 3,
         },
         label: {
           show: true,
+          color: 'rgba(255,255,255,0.7)',
+          fontFamily: 'Outfit, Noto Sans SC, sans-serif',
+          fontSize: 12,
           formatter: '{b}\n{d}%',
         },
         data: mockStatusDistribution.map((item) => ({
@@ -65,7 +74,7 @@ function Dashboard() {
               item.name === '未开始'
                 ? '#faad14'
                 : item.name === '测试中'
-                ? '#1677ff'
+                ? '#4d9fff'
                 : item.name === '已完成'
                 ? '#52c41a'
                 : '#ff4d4f',
@@ -73,12 +82,17 @@ function Dashboard() {
         })),
       },
     ],
-  };
+  }), [mockStatusDistribution]);
 
-  const contractBarOption = {
+  const contractBarOption = useMemo(() => ({
+    backgroundColor: 'transparent',
     tooltip: {
       trigger: 'axis' as const,
       formatter: '{b}: {c} 万元',
+      backgroundColor: 'rgba(13, 31, 60, 0.92)',
+      borderColor: 'rgba(77, 159, 255, 0.3)',
+      borderWidth: 1,
+      textStyle: { color: 'rgba(255,255,255,0.85)', fontFamily: 'Outfit, Noto Sans SC, sans-serif', fontSize: 12 },
     },
     grid: {
       left: '3%',
@@ -89,11 +103,18 @@ function Dashboard() {
     xAxis: {
       type: 'category' as const,
       data: mockCustomerContracts.map((item) => item.name),
-      axisLabel: { rotate: 0 },
+      axisLabel: { color: 'rgba(255,255,255,0.5)', fontFamily: 'Outfit, Noto Sans SC, sans-serif', fontSize: 11 },
+      axisLine: { lineStyle: { color: 'rgba(255,255,255,0.1)' } },
+      axisTick: { show: false },
     },
     yAxis: {
       type: 'value' as const,
-      name: '合同金额（万元）',
+      name: '万元',
+      nameTextStyle: { color: 'rgba(255,255,255,0.4)', fontFamily: 'Outfit, Noto Sans SC, sans-serif', fontSize: 11 },
+      axisLabel: { color: 'rgba(255,255,255,0.5)', fontFamily: 'Outfit, Noto Sans SC, sans-serif', fontSize: 11 },
+      axisLine: { show: false },
+      axisTick: { show: false },
+      splitLine: { lineStyle: { color: 'rgba(255,255,255,0.06)' } },
     },
     series: [
       {
@@ -102,27 +123,28 @@ function Dashboard() {
         data: mockCustomerContracts.map((item) => item.amount),
         itemStyle: {
           color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: '#1677ff' },
-            { offset: 1, color: '#69b1ff' },
+            { offset: 0, color: '#4d9fff' },
+            { offset: 1, color: '#1a5fa5' },
           ]),
-          borderRadius: [4, 4, 0, 0],
+          borderRadius: [6, 6, 0, 0],
         },
         barWidth: '50%',
       },
     ],
-  };
+  }), [mockCustomerContracts]);
 
-  const watchProjects = mockProjects
+  const watchProjects = useMemo(() => mockProjects
     .filter((p) => p.status === '测试中' || p.status === '未开始')
-    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+  , [mockProjects]);
 
-  const columns = [
+  const columns = useMemo(() => [
     {
       title: '项目名称',
       dataIndex: 'name',
       key: 'name',
       render: (text: string, record: (typeof watchProjects)[0]) => (
-        <a onClick={() => navigate(`/projects/${record.id}`)}>{text}</a>
+        <a onClick={() => navigate(`/projects/${record.id}`)} style={{ color: '#7cb8ff' }}>{text}</a>
       ),
     },
     { title: '客户', dataIndex: 'customer', key: 'customer' },
@@ -139,16 +161,16 @@ function Dashboard() {
       title: '操作',
       key: 'action',
       render: (_: unknown, record: (typeof watchProjects)[0]) => (
-        <Button type="link" size="small" onClick={() => navigate(`/projects/${record.id}`)}>
+        <Button type="link" size="small" onClick={() => navigate(`/projects/${record.id}`)} style={{ color: '#4d9fff', fontFamily: 'var(--font-primary)' }}>
           查看
         </Button>
       ),
     },
-  ];
+  ], [navigate]);
 
   if (loading) {
     return (
-      <div style={{ textAlign: 'center', padding: 120 }}>
+      <div style={{ textAlign: 'center', padding: 120, color: 'rgba(255,255,255,0.6)', fontFamily: 'var(--font-primary)' }}>
         <Spin size="large" tip="加载中..." />
       </div>
     );
@@ -158,7 +180,12 @@ function Dashboard() {
     <div>
       <div className="page-header">
         <h3>工作概览</h3>
-        <Button icon={<ReloadOutlined />} onClick={handleRefresh}>
+        <Button
+          icon={<ReloadOutlined />}
+          onClick={handleRefresh}
+          className="glass-btn"
+          style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.6)', fontFamily: 'var(--font-primary)', borderRadius: 8 }}
+        >
           刷新
         </Button>
       </div>
@@ -168,7 +195,7 @@ function Dashboard() {
           title="进行中项目数"
           value={kpiData.activeProjects}
           trend={kpiData.activeProjectsTrend}
-          icon={<ProjectOutlined style={{ color: '#1677ff' }} />}
+          icon={<ProjectOutlined style={{ color: '#4d9fff' }} />}
           tooltip="当前正在进行中的测试项目总数"
         />
         <KpiCard
@@ -191,7 +218,7 @@ function Dashboard() {
           value={kpiData.avgProjectCycle}
           trend={kpiData.avgProjectCycleTrend}
           suffix="天"
-          icon={<ClockCircleOutlined style={{ color: '#722ed1' }} />}
+          icon={<ClockCircleOutlined style={{ color: '#00d4aa' }} />}
           tooltip="所有已完成项目的平均执行周期"
         />
       </div>
@@ -199,21 +226,21 @@ function Dashboard() {
       <div className="charts-row">
         <div className="chart-container">
           <h4>项目状态分布</h4>
-          <ReactEChartsCore echarts={echarts} option={statusPieOption} style={{ height: 320 }} />
+          <ReactEChartsCore echarts={echarts} option={statusPieOption} style={{ height: 300 }} />
         </div>
         <div className="chart-container">
           <h4>客户合同金额分布</h4>
-          <ReactEChartsCore echarts={echarts} option={contractBarOption} style={{ height: 320 }} />
+          <ReactEChartsCore echarts={echarts} option={contractBarOption} style={{ height: 300 }} />
         </div>
       </div>
 
-      <div className="chart-container">
+      <div className="chart-container" style={{ marginBottom: 20 }}>
         <h4 style={{ marginBottom: 16 }}>项目关注列表</h4>
         <Table
           columns={columns}
           dataSource={watchProjects}
           rowKey="id"
-          pagination={{ pageSize: 10, showTotal: (total) => `共 ${total} 个项目` }}
+          pagination={{ pageSize: 10, showTotal: (total: number) => `共 ${total} 个项目`, size: 'small' as const }}
           scroll={{ x: 900 }}
         />
       </div>

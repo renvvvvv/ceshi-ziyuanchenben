@@ -372,9 +372,8 @@ export function normalizeReport(raw: Record<string, unknown>, input: ResourceInp
   const fire = raw['消防'] as Record<string, number> || { 小计: 0 };
   const fixed = raw['固定人员'] as Record<string, number> || { 小计: 4 };
 
-  // 电气实际工期（取 IT/动力 中较大者）
-  const elecDur = Math.max(it?.实际工期 || 0, pw?.实际工期 || 0);
-  if (elecDur === 0) (raw as any)._elecDur = dur;
+  // 电气实际工期（取 IT/动力 中较大者；若均为0则取总工期）
+  const elecDur = Math.max(it?.实际工期 || 0, pw?.实际工期 || 0) || dur;
 
   // 工具清单
   const rawTools = raw['工具清单'] as ToolItem[];

@@ -22,7 +22,7 @@ function KpiCard({ title, value, trend, icon, suffix, tooltip }: KpiCardProps) {
         </div>
         <div className="kpi-value">
           {value}
-          {suffix && <span style={{ fontSize: 14, fontWeight: 400, color: '#999', marginLeft: 4 }}>{suffix}</span>}
+          {suffix && <span className="suffix">{suffix}</span>}
         </div>
         <div className={`kpi-trend ${isUp ? 'up' : 'down'}`}>
           {isUp ? <ArrowUpOutlined /> : <ArrowDownOutlined />}

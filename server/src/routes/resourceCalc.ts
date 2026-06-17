@@ -149,15 +149,27 @@ router.get('/history', (req: Request, res: Response) => {
     const filterDate = req.query.date as string || '';
     const offset = (page - 1) * size;
 
-    const batchRows = db.prepare(`SELECT batch_id, COUNT(*) as count, MIN(total_mw) as min_mw, MAX(total_mw) as max_mw,
+    let batchQuery = `SELECT batch_id, COUNT(*) as count, MIN(total_mw) as min_mw, MAX(total_mw) as max_mw,
       SUM(peak_staff) as total_peak, SUM(total_man_days) as total_md, MAX(created_at) as created_at
-      FROM resource_calc_history WHERE batch_id IS NOT NULL ${filterDate ? `AND created_at LIKE '${filterDate}%'` : ''}
-      GROUP BY batch_id ORDER BY created_at DESC`).all();
-
-    const singleRows = db.prepare(`SELECT id, batch_id, total_mw, total_duration, cabinet_power, it_transformers, power_transformers,
+      FROM resource_calc_history WHERE batch_id IS NOT NULL`;
+    let singleQuery = `SELECT id, batch_id, total_mw, total_duration, cabinet_power, it_transformers, power_transformers,
       total_cabinets, ac_type, peak_staff, total_man_days, result_json, created_at
-      FROM resource_calc_history WHERE batch_id IS NULL ${filterDate ? `AND created_at LIKE '${filterDate}%'` : ''}
-      ORDER BY created_at DESC`).all();
+      FROM resource_calc_history WHERE batch_id IS NULL`;
+    const dateParams: string[] = [];
+    if (filterDate) {
+      batchQuery += ` AND created_at LIKE ?`;
+      singleQuery += ` AND created_at LIKE ?`;
+      dateParams.push(`${filterDate}%`);
+    }
+    batchQuery += ` GROUP BY batch_id ORDER BY created_at DESC`;
+    singleQuery += ` ORDER BY created_at DESC`;
+
+    const batchRows = dateParams.length > 0
+      ? db.prepare(batchQuery).all(...dateParams)
+      : db.prepare(batchQuery).all();
+    const singleRows = dateParams.length > 0
+      ? db.prepare(singleQuery).all(...dateParams)
+      : db.prepare(singleQuery).all();
 
     type Row = { type: string; time: string; [key: string]: unknown };
     const merged: Row[] = [
