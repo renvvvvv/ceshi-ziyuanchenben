@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { execFile } from 'child_process';
+import { execFile, execSync } from 'child_process';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { writeFileSync, unlinkSync } from 'fs';
@@ -8,7 +8,7 @@ import db from '../database.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SCRIPTS_DIR = join(__dirname, '..', '..', '..', 'scripts');
-const PY = 'python3';
+const PY = process.platform === 'win32' ? 'python' : 'python3';
 
 const router = Router();
 
@@ -17,7 +17,7 @@ function runPy(jsonInput: Record<string, unknown>): Promise<string> {
     const tmpFile = join(tmpdir(), `rc_${Date.now()}.json`);
     writeFileSync(tmpFile, JSON.stringify(jsonInput), 'utf-8');
     const script = join(SCRIPTS_DIR, 'resource_plan.py');
-    execFile(PY, [script, '--input', tmpFile], { cwd: SCRIPTS_DIR, maxBuffer: 10 * 1024 * 1024 }, (err, stdout, stderr) => {
+    execFile(PY, [script, '--input', tmpFile], { cwd: SCRIPTS_DIR, maxBuffer: 10 * 1024 * 1024, env: { ...process.env, PATH: process.env.PATH + ';C:\\Program Files\\Python39' } }, (err, stdout, stderr) => {
       try { unlinkSync(tmpFile); } catch {}
       if (err) reject(new Error(stderr || err.message));
       else resolve(stdout);
@@ -52,6 +52,10 @@ router.post('/', async (req: Request, res: Response) => {
       ac_type: input.ac_type,
     };
     if (segs.length > 0) pyInput.cabinet_power_segments = segs;
+    if (input.project_type) pyInput.project_type = input.project_type;
+    if (input.target_duration) pyInput.target_duration = input.target_duration;
+    if (input.hybrid_transformers?.length) pyInput.hybrid_transformers = input.hybrid_transformers;
+    if (input.tight_schedule) pyInput.tight_schedule = input.tight_schedule;
 
     const stdout = await runPy(pyInput);
     const report = JSON.parse(stdout);

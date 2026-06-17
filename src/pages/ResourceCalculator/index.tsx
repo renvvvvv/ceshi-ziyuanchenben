@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import {
-  Form, InputNumber, Select, Button, Card, Table, Row, Col, Statistic, Space, message,
+  Form, InputNumber, Select, Button, Card, Table, Row, Col, Statistic, Space, message, Switch,
   Typography, Modal, Alert, Tooltip, Tabs, Collapse, Descriptions, Popconfirm, Tag,
 } from 'antd';
 import {
@@ -27,8 +27,8 @@ const CABINET_POWER_OPTIONS = [
   { label: '26 kW', value: 26 },
 ];
 const AC_TYPE_OPTIONS = [
-  { label: '传统风冷', value: '传统风冷' }, { label: '液冷', value: '液冷' },
-  { label: '双冷源', value: '双冷源' }, { label: '水冷', value: '水冷' },
+  { label: '风冷', value: '风冷' }, { label: '水冷', value: '水冷' },
+  { label: '液冷', value: '液冷' }, { label: '双冷源', value: '双冷源' },
 ];
 const TRANSFORMER_SPECS = [1.25, 2.0, 2.15, 2.5, 3.15];
 
@@ -148,12 +148,11 @@ function ResourceCalculator() {
     const values = form.getFieldsValue();
     const itTrans: [number, number][] = (values.it_transSpecs || []).map((s: number) => [s, values.it_transCount || 1]);
     const pwTrans: [number, number][] = (values.pw_transSpecs || []).map((s: number) => [s, values.pw_transCount || 1]);
-    if (itTrans.length === 0 || pwTrans.length === 0) { message.warning('请选择变压器规格'); return null; }
+    if (itTrans.length === 0) { message.warning('请选择IT变压器规格'); return null; }
     if (!values.total_mw || !values.total_duration) { message.warning('请填写必填字段：总兆瓦数、总工期'); return null; }
     if (values.total_mw < 10 || values.total_mw > 66) { message.warning('总兆瓦数需在 10~66 MW 之间'); return null; }
     if (values.total_duration < 1 || values.total_duration > 365) { message.warning('工期需在 1~365 天之间'); return null; }
     if ((values.it_transCount || 1) < 1) { message.warning('IT变压器台数至少为1'); return null; }
-    if ((values.pw_transCount || 1) < 1) { message.warning('动力变压器台数至少为1'); return null; }
     if (powerSegments.length === 0) { message.warning('请添加至少一个功率段'); return null; }
     const totalCabs = powerSegments.reduce((s, seg) => s + seg.count, 0);
     if (totalCabs < 1) { message.warning('总机柜数不能为0'); return null; }
@@ -162,6 +161,8 @@ function ResourceCalculator() {
       cabinet_power_segments: powerSegments,
       it_transformers: itTrans, power_transformers: pwTrans,
       total_cabinets: totalCabs, ac_type: values.ac_type,
+      project_type: values.is_panama ? '阿里巴拿马3.0' : undefined,
+      target_duration: values.target_duration || undefined,
     };
   };
 
@@ -402,8 +403,7 @@ function ResourceCalculator() {
         <Form form={form} layout="vertical" initialValues={{
           total_mw: 30.0, total_duration: 25,
           it_transSpecs: [2.0], it_transCount: 6,
-          pw_transSpecs: [1.25], pw_transCount: 6,
-          ac_type: '液冷',
+          ac_type: '风冷',
         }}>
           <Row gutter={16}>
             <Col span={12}>
@@ -471,22 +471,28 @@ function ResourceCalculator() {
           </Row>
           <Row gutter={16}>
             <Col span={12}>
-              <Form.Item label="动力变压器规格" required>
-                <Form.Item name="pw_transSpecs" noStyle rules={[{ required: true }]}>
-                  <Select mode="multiple" placeholder="规格" options={TRANSFORMER_SPECS.filter(s => s !== 3.15).map(s => ({ label: `${s} MW`, value: s }))} />
+              <Form.Item label="动力变压器规格（可选）">
+                <Form.Item name="pw_transSpecs" noStyle>
+                  <Select mode="multiple" placeholder="不填则无" allowClear options={TRANSFORMER_SPECS.filter(s => s !== 3.15).map(s => ({ label: `${s} MW`, value: s }))} />
                 </Form.Item>
               </Form.Item>
             </Col>
             <Col span={12}>
               <Form.Item label="动力变压器台数">
                 <Form.Item name="pw_transCount" noStyle>
-                  <InputNumber style={{ width: '100%' }} min={1} placeholder="台数" />
+                  <InputNumber style={{ width: '100%' }} min={0} placeholder="台数" />
                 </Form.Item>
               </Form.Item>
             </Col>
           </Row>
           <Form.Item name="ac_type" label="空调类型" rules={[{ required: true }]}>
             <Select options={AC_TYPE_OPTIONS} />
+          </Form.Item>
+          <Form.Item name="is_panama" label="阿里巴拿马3.0" valuePropName="checked">
+            <Switch checkedChildren="是" unCheckedChildren="否" />
+          </Form.Item>
+          <Form.Item name="target_duration" label="目标工期/天（可选，不填则输出多版本）">
+            <InputNumber min={5} max={365} style={{ width: '100%' }} placeholder="留空=标准+紧凑+压缩三版" />
           </Form.Item>
         </Form>
       </Modal>

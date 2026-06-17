@@ -14,8 +14,12 @@ export interface ResourceInput {
   cabinet_power_segments?: PowerSegment[];
   it_transformers: [number, number][];
   power_transformers: [number, number][];
+  hybrid_transformers?: [number, number][];
   total_cabinets?: number;
   ac_type: string;
+  project_type?: string;
+  target_duration?: number;
+  tight_schedule?: boolean;
 }
 
 export interface StaffResult {
@@ -45,6 +49,7 @@ export interface LoadResult {
   IT负载配置: Record<string, unknown>;
   '6kW': { 总需求: number; 自有: number; 需租赁: number };
   '8kW': { 总需求: number; 自有: number; 需租赁: number };
+  '30kW'?: { 总需求: number; 需租赁: number };
   '500kW': { 总需求: number; 需租赁: number };
   '300kW': { 总需求: number; 需租赁: number };
 }
