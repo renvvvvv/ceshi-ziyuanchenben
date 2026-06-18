@@ -15,7 +15,7 @@ import {
   exportBatchResultsToExcel, downloadBatchTemplate,
   type ParsedInput, type BatchReportRow,
 } from '../../utils/excelUtils';
-import { apiCalcResource, apiGetHistory, apiDeleteHistory, apiGetBatchDetail, type HistoryItem, type HistoryGroupItem } from '../../api';
+import { apiCalcResource, apiGetHistory, apiDeleteHistory, apiGetBatchDetail, type HistoryItem, type HistoryGroupItem, resourceCalcApi } from '../../api';
 import BatchResultsView from '../../components/BatchResultsView';
 
 const { Title, Text, Paragraph } = Typography;
@@ -73,8 +73,13 @@ function ResourceCalculator() {
     setHistoryLoading(true);
     try {
       const res = await apiGetHistory(page, size, filterType, filterDate);
-      setHistoryData(res.data);
-      setHistoryTotal(res.total);
+      if (res.success && res.data) {
+        setHistoryData(res.data.items || []);
+        setHistoryTotal(res.data.total || 0);
+      } else {
+        setHistoryData([]);
+        setHistoryTotal(0);
+      }
       setHistoryPage(page);
       setHistoryPageSize(size);
       setBackendOnline(true);
@@ -125,7 +130,7 @@ function ResourceCalculator() {
   const handleBatchHistoryLoad = async (batchId: string) => {
     try {
       const res = await apiGetBatchDetail(batchId);
-      const items = res.data;
+      const items = res.data || [];
       const rows: BatchReportRow[] = items.map((h, i) => {
         if (!h.result_json) return { index: i + 1, error: '缺数据' };
         try {
@@ -172,7 +177,7 @@ function ResourceCalculator() {
       if (!input) { setCalcLoading(false); return; }
       try {
         const res = await apiCalcResource(input);
-        const normalized = normalizeReport(res.data as Record<string, unknown>, input);
+        const normalized = normalizeReport(res.data?.data as Record<string, unknown> || {}, input);
         console.log('[normalizeReport] 假负载清单:', normalized.假负载清单?.length, '工具清单:', normalized.工具清单?.length);
         console.log('[normalizeReport] IT在场:', normalized.IT链路?.在场, '汇总:', normalized.汇总);
         setReport(normalized);
@@ -366,7 +371,7 @@ function ResourceCalculator() {
                           // 删整批：先取详情再逐条删
                           try {
                             const res2 = await apiGetBatchDetail(r.batch_id!);
-                            for (const h of res2.data) await apiDeleteHistory(h.id);
+                            for (const h of res2.data || []) await apiDeleteHistory(h.id);
                             loadHistory(1, historyPageSize); message.success('已删除');
                           } catch { message.error('删除失败'); }
                         }}>删除</Button>

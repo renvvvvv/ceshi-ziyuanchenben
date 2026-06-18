@@ -20,6 +20,8 @@ import type { TeamMember, MemberStatus, MemberProject } from '../../types';
 const statusConfig: Record<MemberStatus, { bg: string; color: string; dot: string }> = {
   '空闲': { bg: 'rgba(82, 196, 26, 0.12)', color: '#52c41a', dot: '#52c41a' },
   '测试中': { bg: 'rgba(235, 87, 108, 0.12)', color: '#eb576c', dot: '#eb576c' },
+  '休假': { bg: 'rgba(24, 144, 255, 0.12)', color: '#1890ff', dot: '#1890ff' },
+  '出差': { bg: 'rgba(114, 46, 209, 0.12)', color: '#722ed1', dot: '#722ed1' },
 };
 
 const PROJECTS = [
