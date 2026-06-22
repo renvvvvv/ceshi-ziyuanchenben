@@ -60,6 +60,14 @@ router.post('/', async (req: Request, res: Response) => {
     const stdout = await runPy(pyInput);
     const report = JSON.parse(stdout);
 
+    // 提取标准版数据存历史
+    let stdReport = report;
+    if (report.多版本对比 && report.详细结果) {
+      const keys = Object.keys(report.详细结果);
+      const stdKey = keys.find((k: string) => k.includes('标准')) || keys[0];
+      stdReport = report.详细结果[stdKey];
+    }
+
     // 存入历史
     const batchId = (req.body as { batch_id?: string }).batch_id || null;
     db.prepare(`INSERT INTO resource_calc_history
@@ -69,7 +77,7 @@ router.post('/', async (req: Request, res: Response) => {
       batchId, input.total_mw, input.total_duration, cp,
       JSON.stringify(input.it_transformers), JSON.stringify(input.power_transformers),
       tc, input.ac_type,
-      report.汇总.峰值同时在场, report.汇总.总人天,
+      stdReport.汇总.峰值同时在场, stdReport.汇总.总人天,
       JSON.stringify(report),
     );
 

@@ -40,9 +40,12 @@ function ResourceCalculator() {
 
   // 单算
   const [report, setReport] = useState<ResourceReport | null>(null);
+  const [multiReports, setMultiReports] = useState<Record<string, ResourceReport> | null>(null);
+  const [multiSummary, setMultiSummary] = useState<Record<string, Record<string, unknown>> | null>(null);
   const [currentInput, setCurrentInput] = useState<ResourceInput | null>(null);
   const [calcLoading, setCalcLoading] = useState(false);
   const [singleModalOpen, setSingleModalOpen] = useState(false);
+  const [activeVersion, setActiveVersion] = useState<string>('');
 
   // 群算
   const [batchResults, setBatchResults] = useState<BatchReportRow[]>([]);
@@ -93,14 +96,28 @@ function ResourceCalculator() {
     if (!item.result_json) { message.warning('该记录缺少完整数据'); return; }
     try {
       const r = JSON.parse(item.result_json);
-      setReport(r as ResourceReport);
-      setCurrentInput({
+      const input: ResourceInput = {
         total_mw: item.total_mw!, total_duration: item.total_duration!,
         cabinet_power: item.cabinet_power || 12,
         it_transformers: parseItTrans(item.it_transformers || '[[2,6]]'),
         power_transformers: parseItTrans(item.power_transformers || '[[1.25,6]]'),
-        total_cabinets: item.total_cabinets || 1150, ac_type: item.ac_type || '传统风冷',
-      });
+        total_cabinets: item.total_cabinets || 1150, ac_type: item.ac_type || '风冷',
+      };
+      setCurrentInput(input);
+      setMultiReports(null); setMultiSummary(null); setReport(null);
+      if (r['多版本对比'] && r['详细结果']) {
+        const detailResults = r['详细结果'] as Record<string, Record<string, unknown>>;
+        const normalized: Record<string, ResourceReport> = {};
+        for (const [key, val] of Object.entries(detailResults)) {
+          normalized[key] = normalizeReport(val, input);
+        }
+        setMultiReports(normalized);
+        setMultiSummary(r['多版本对比'] as Record<string, Record<string, unknown>>);
+        const keys = Object.keys(normalized);
+        setActiveVersion(keys.find(k => k.includes('标准')) || keys[0]);
+      } else {
+        setReport(normalizeReport(r as Record<string, unknown>, input));
+      }
       setMode('single'); setSingleModalOpen(false);
       message.success('已加载历史记录');
     } catch { message.error('记录解析失败'); }
@@ -109,14 +126,24 @@ function ResourceCalculator() {
   const handleHistoryDownload = (item: HistoryGroupItem) => {
     if (!item.result_json) { message.warning('该记录缺少完整数据'); return; }
     try {
-      const report = JSON.parse(item.result_json) as ResourceReport;
+      const r = JSON.parse(item.result_json);
       const input: ResourceInput = {
         total_mw: item.total_mw!, total_duration: item.total_duration!,
         cabinet_power: item.cabinet_power || 12,
         it_transformers: parseItTrans(item.it_transformers || '[[2,6]]'),
         power_transformers: parseItTrans(item.power_transformers || '[[1.25,6]]'),
-        total_cabinets: item.total_cabinets || 1150, ac_type: item.ac_type || '传统风冷',
+        total_cabinets: item.total_cabinets || 1150, ac_type: item.ac_type || '风冷',
       };
+      // 检测多版本，取标准版导出
+      let report: ResourceReport;
+      if (r['多版本对比'] && r['详细结果']) {
+        const detailResults = r['详细结果'] as Record<string, Record<string, unknown>>;
+        const keys = Object.keys(detailResults);
+        const stdKey = keys.find(k => k.includes('标准')) || keys[0];
+        report = normalizeReport(detailResults[stdKey], input);
+      } else {
+        report = normalizeReport(r as Record<string, unknown>, input);
+      }
       exportReportToExcel(input, report);
       message.success('已下载');
     } catch { message.error('导出失败'); }
@@ -173,12 +200,26 @@ function ResourceCalculator() {
       if (!input) { setCalcLoading(false); return; }
       try {
         const res = await apiCalcResource(input);
-        const normalized = normalizeReport(res.data as Record<string, unknown>, input);
-        console.log('[normalizeReport] 假负载清单:', normalized.假负载清单?.length, '工具清单:', normalized.工具清单?.length);
-        console.log('[normalizeReport] IT在场:', normalized.IT链路?.在场, '汇总:', normalized.汇总);
-        setReport(normalized);
+        const data = res.data as Record<string, unknown>;
+        if (data['多版本对比'] && data['详细结果']) {
+          const detailResults = data['详细结果'] as Record<string, Record<string, unknown>>;
+          const normalized: Record<string, ResourceReport> = {};
+          for (const [key, r] of Object.entries(detailResults)) {
+            normalized[key] = normalizeReport(r, input);
+          }
+          setMultiReports(normalized);
+          setMultiSummary(data['多版本对比'] as Record<string, Record<string, unknown>>);
+          const keys = Object.keys(normalized);
+          const stdKey = keys.find(k => k.includes('标准')) || keys[0];
+          setActiveVersion(stdKey);
+          setReport(null);
+        } else {
+          setMultiReports(null); setMultiSummary(null);
+          setReport(normalizeReport(data, input));
+        }
       } catch (e) {
         console.error('[normalizeReport] 失败，回退到本地计算:', e);
+        setMultiReports(null); setMultiSummary(null);
         setReport(calculateResource(input));
       }
       setCurrentInput(input);
@@ -249,7 +290,8 @@ function ResourceCalculator() {
 
   // ============ 回到首页 ============
   const goHome = () => {
-    setMode('home'); setReport(null); setCurrentInput(null);
+    setMode('home'); setReport(null); setMultiReports(null); setMultiSummary(null);
+    setCurrentInput(null);
     setBatchResults([]); setSingleModalOpen(false);
     loadHistory(1, historyPageSize);
   };
@@ -273,7 +315,18 @@ function ResourceCalculator() {
     );
   }
 
-  // ============ 单算结果页 ============
+  // ============ 单算结果页（多版本） ============
+  if (mode === 'single' && multiReports && multiSummary && currentInput) {
+    return <MultiVersionResultView
+      multiReports={multiReports} multiSummary={multiSummary}
+      activeVersion={activeVersion} setActiveVersion={setActiveVersion}
+      input={currentInput}
+      onExport={(report) => exportReportToExcel(currentInput!, report)}
+      onBack={goHome}
+    />;
+  }
+
+  // ============ 单算结果页（单版本） ============
   if (mode === 'single' && report && currentInput) {
     return <SingleResultView
       report={report} input={currentInput}
@@ -549,6 +602,88 @@ function ResourceCalculator() {
   );
 }
 
+// ============ 多版本结果页 ============
+
+function MultiVersionResultView({ multiReports, multiSummary, activeVersion, setActiveVersion, input, onExport, onBack }: {
+  multiReports: Record<string, ResourceReport>;
+  multiSummary: Record<string, Record<string, unknown>>;
+  activeVersion: string; setActiveVersion: (v: string) => void;
+  input: ResourceInput; onExport: (report: ResourceReport) => void; onBack: () => void;
+}) {
+  const versions = Object.keys(multiReports);
+  const curVersion = versions.includes(activeVersion) ? activeVersion : (versions[0] || '');
+  const report = multiReports[curVersion];
+
+  // 多版本对比表
+  const compColumns = [
+    { title: '版本', dataIndex: 'version', key: 'version', width: 140, render: (v: string) => <Text strong>{v}</Text> },
+    { title: '工期', dataIndex: 'dur', key: 'dur', width: 80 },
+    { title: '峰值在场', dataIndex: 'peak', key: 'peak', width: 90 },
+    { title: '总人天', dataIndex: 'md', key: 'md', width: 90 },
+    { title: 'IT并行', dataIndex: 'itP', key: 'itP', width: 70 },
+    { title: '动力并行', dataIndex: 'pwP', key: 'pwP', width: 75 },
+    { title: '混合并行', dataIndex: 'hbP', key: 'hbP', width: 75 },
+    { title: '每台IT人数', dataIndex: 'itPer', key: 'itPer', width: 90 },
+    { title: '平均人数', dataIndex: 'avg', key: 'avg', width: 80 },
+  ];
+  const compData = versions.map((v, i) => {
+    const s = multiSummary[v] || {};
+    return {
+      key: i, version: v,
+      dur: s['工期'] || '-',
+      peak: String(s['峰值同时在场'] ?? '-'),
+      md: String(s['总人天'] ?? '-'),
+      itP: String(s['IT并行组数'] ?? '-'),
+      pwP: String(s['动力并行组数'] ?? '-'),
+      hbP: String(s['混合并行组数'] ?? '-'),
+      itPer: String(s['每台IT人数'] ?? '-'),
+      avg: s['总人天'] ? Math.round(Number(s['总人天']) / Number(String(s['工期']).replace('天', '')) * 10) / 10 : '-',
+    };
+  });
+
+  if (!report) {
+    return (
+      <div style={{ padding: 40, textAlign: 'center' }}>
+        <Title level={4}>计算结果加载失败</Title>
+        <Button onClick={onBack}>返回首页</Button>
+      </div>
+    );
+  }
+
+  // 用 Tabs 展示不同版本，每个 tab 是独立版本详情
+  const versionTabs = versions.map((v) => ({
+    key: v,
+    label: v,
+    children: <SingleResultView report={multiReports[v]} input={input} onExport={() => onExport(multiReports[v])} onBack={() => {}} embedded />,
+  }));
+
+  return (
+    <div>
+      <div className="page-header">
+        <div>
+          <Title level={3} style={{ margin: 0 }}><CalculatorOutlined style={{ marginRight: 8 }} />计算结果 — 多版本对比</Title>
+          <Text type="secondary">{input.total_mw}MW / {input.total_duration}天 / {input.ac_type}</Text>
+        </div>
+        <Space>
+          <Button icon={<ExportOutlined />} type="primary" onClick={() => onExport(report)}>导出当前版本Excel</Button>
+          <Button onClick={onBack}>← 返回首页</Button>
+        </Space>
+      </div>
+
+      <Card title="版本对比" size="small" style={{ marginBottom: 16 }}>
+        <Table columns={compColumns} dataSource={compData} pagination={false} size="small" bordered
+          onRow={(r) => ({
+            onClick: () => setActiveVersion(r.version),
+            style: { cursor: 'pointer', fontWeight: r.version === activeVersion ? 'bold' : 'normal', background: r.version === activeVersion ? '#e6f4ff' : undefined },
+          })}
+        />
+      </Card>
+
+      <Tabs activeKey={curVersion} onChange={setActiveVersion} items={versionTabs} size="large" />
+    </div>
+  );
+}
+
 // ============ 单算结果页 ============
 
 const SUMMARY_HEADERS = [
@@ -594,8 +729,8 @@ function buildSummaryRow(input: ResourceInput, report: ResourceReport): (string 
   ];
 }
 
-function SingleResultView({ report, input, onExport, onBack }: {
-  report: ResourceReport; input: ResourceInput; onExport: () => void; onBack: () => void;
+function SingleResultView({ report, input, onExport, onBack, embedded }: {
+  report: ResourceReport; input: ResourceInput; onExport: () => void; onBack: () => void; embedded?: boolean;
 }) {
   const dur = input.total_duration;
   const summaryRow = buildSummaryRow(input, report);
@@ -676,16 +811,18 @@ function SingleResultView({ report, input, onExport, onBack }: {
 
   return (
     <div>
-      <div className="page-header">
-        <div>
-          <Title level={3} style={{ margin: 0 }}><CalculatorOutlined style={{ marginRight: 8 }} />计算结果</Title>
-          <Text type="secondary">{input.total_mw}MW / {input.total_duration}天 / {input.ac_type}</Text>
+      {!embedded && (
+        <div className="page-header">
+          <div>
+            <Title level={3} style={{ margin: 0 }}><CalculatorOutlined style={{ marginRight: 8 }} />计算结果</Title>
+            <Text type="secondary">{input.total_mw}MW / {input.total_duration}天 / {input.ac_type}</Text>
+          </div>
+          <Space>
+            <Button icon={<ExportOutlined />} type="primary" onClick={onExport}>导出Excel</Button>
+            <Button onClick={onBack}>← 返回首页</Button>
+          </Space>
         </div>
-        <Space>
-          <Button icon={<ExportOutlined />} type="primary" onClick={onExport}>导出Excel</Button>
-          <Button onClick={onBack}>← 返回首页</Button>
-        </Space>
-      </div>
+      )}
       <Tabs items={tabItems} defaultActiveKey="summary" size="large" />
     </div>
   );

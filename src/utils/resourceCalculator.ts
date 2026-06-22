@@ -72,7 +72,7 @@ export interface ResourceReport {
   柴发: { 主测: number; 记录员: number; 小计: number };
   弱电: { 主测: number; 电气记录员: number; 暖通记录员: number; 记录员小计: number; 小计: number };
   消防: { 主测: number; 测试员: number; 小计: number };
-  固定人员: { 项目经理: number; 资料员: number; 电气主测: number; 暖通主测: number; 工程师: number; 小计: number };
+  固定人员: { 项目经理: number; 资料员: number; 电气主测: number; 暖通主测: number; 小计: number };
   负载: LoadResult;
   汇总: { 峰值同时在场: number; 总人天: number };
   工具清单: ToolItem[];
@@ -100,7 +100,7 @@ const config = {
     '3.1': { '500kw': 5, '300kw': 0 },
   } as Record<string, Record<string, number>>,
   owned_loads: { '6kw': 1000, '8kw': 1000 },
-  staff_per_transformer: { it: 6, power: 4 },
+  staff_per_transformer: { it: 6, power: 4, hybrid: 5 },
   days_per_transformer: { functional_test: 4, install_check: 2, total: 6 },
 };
 
@@ -221,7 +221,8 @@ function calcLoads(input: ResourceInput): LoadResult {
 // ============ 固定人员 / 柴发 ============
 
 function calcFixedStaff() {
-  return { 项目经理: 1, 资料员: 1, 电气主测: 1, 暖通主测: 1, 工程师: 2, 小计: 6 };
+  // V200: 弱电主测和消防主测已在各自专业链路计数，此处排除
+  return { 项目经理: 1, 资料员: 1, 电气主测: 1, 暖通主测: 1, 小计: 4 };
 }
 
 function calcGenerator() {
@@ -265,9 +266,9 @@ function calcHvacr(input: ResourceInput): HvacrResult {
 // ============ 弱电 / 消防 ============
 
 function calcWeakCurrent(elecGroups: number, hvacGroups: number) {
-  const elecRec = Math.max(1, Math.ceil(elecGroups / 4));
-  const rec = elecRec + hvacGroups;
-  return { 主测: 1, 电气记录员: elecRec, 暖通记录员: hvacGroups, 记录员小计: rec, 小计: 1 + rec };
+  // V200: 按组数配置，一组电气/暖通配一个弱电记录员（非人头/4）
+  const rec = elecGroups + hvacGroups;
+  return { 主测: 1, 电气记录员: elecGroups, 暖通记录员: hvacGroups, 记录员小计: rec, 小计: 1 + rec };
 }
 
 function calcFire(cabinetCount: number) {
@@ -324,7 +325,7 @@ export function calculateResource(input: ResourceInput): ResourceReport {
   ];
 
   // 假负载清单（+10%余量，匹配 generate_excel.py）
-  const spare = 0.29;
+  const spare = 0.1;
   const fakeLoads = [
     { name: '风冷机架式假负载', count: Math.ceil(loads['6kW'].总需求 * (1 + spare)), days: elecDur, totalUnits: Math.ceil(loads['6kW'].总需求 * (1 + spare)) * elecDur, spare, spec: '6KW/台' },
     { name: '风冷机架式假负载', count: Math.ceil(loads['8kW'].总需求 * (1 + spare)), days: elecDur, totalUnits: Math.ceil(loads['8kW'].总需求 * (1 + spare)) * elecDur, spare, spec: '8KW/台' },
@@ -381,9 +382,33 @@ export function normalizeReport(raw: Record<string, unknown>, input: ResourceInp
   const elecDur = Math.max(it?.实际工期 || 0, pw?.实际工期 || 0);
   if (elecDur === 0) (raw as any)._elecDur = dur;
 
-  // 工具清单
-  const rawTools = raw['工具清单'] as ToolItem[];
-  const tools: ToolItem[] = rawTools && rawTools.length > 0 ? rawTools : [
+  // 工具清单 — 优先从后端工器具结构构建
+  const rawGongJu = raw['工器具'] as Record<string, Record<string, number>> | null;
+  let rawTools: ToolItem[] = [];
+  if (rawGongJu) {
+    const specs: Record<string, string> = {
+      '电能质量分析仪435': 'FLUKE 435', '电能质量分析仪1775': 'FLUKE 1775',
+      '热成像': 'FLUKE Ti32', '万用表': 'FLUKE 18B+',
+      '钳形电流表': 'FLUKE 381', '钳形电流表381': 'FLUKE 381',
+      '钳形电流表319': 'FLUKE 319', '相序仪': '/', '温湿度仪971': 'FLUKE 971',
+      '点温枪': '阈值750℃', '振动仪': '/', '风速仪': '/',
+      '噪声仪': '/', '电池内阻仪': '福禄克/日置',
+      'HOBO': '/', '温湿度仪971_暖通': 'FLUKE 971',
+      '热成像_暖通': 'FLUKE Ti32',
+    };
+    const notes: Record<string, string> = {
+      '电能质量分析仪435': '配套6000A电流环；要求435-2',
+      '电能质量分析仪1775': '至少2000A以上电流环',
+    };
+    const elecT = rawGongJu['电气工器具'] || {};
+    const hvacT = rawGongJu['暖通工器具'] || {};
+    const d = elecDur || dur;
+    for (const [k, v] of Object.entries({ ...elecT, ...hvacT })) {
+      if (k === '暖通基准机房数') continue;
+      rawTools.push({ name: k, count: v, days: d, totalUnits: v * d, model: specs[k] || '', note: notes[k] || '' });
+    }
+  }
+  const tools: ToolItem[] = rawTools.length > 0 ? rawTools : [
     { name: '电能质量分析仪', count: 6, days: elecDur, totalUnits: 6 * elecDur, model: 'FLUKE 435', note: '配套6000A电流环至少6套；剩余至少2000A以上；配套数据传输线；要求435-2；配套内存卡2张' },
     { name: '电能质量分析仪', count: 2, days: elecDur, totalUnits: 2 * elecDur, model: 'FLUKE 1775', note: '至少2000A以上电流环；配套数据传输线' },
     { name: '热成像', count: 2, days: elecDur, totalUnits: 2 * elecDur, model: 'FLUKE Ti32', note: '' },
@@ -402,19 +427,21 @@ export function normalizeReport(raw: Record<string, unknown>, input: ResourceInp
     { name: 'HOBO', count: 3, days: elecDur, totalUnits: 3 * elecDur, model: '/', note: '机房最小需量，字节脚本单通道3需布置3台' },
   ];
 
-  // 假负载清单（+10%余量）
+  // 假负载清单
   const rawLoads = raw['假负载清单'] as Record<string, unknown>[];
-  const spare = 0.29;
+  const spare = 0.1;
   const l6 = loads?.['6kW']?.总需求 || 0;
   const l8 = loads?.['8kW']?.总需求 || 0;
+  const l30 = (loads as unknown as Record<string, { 总需求?: number }>)?.['30kW']?.总需求 || 0;
   const l500 = loads?.['500kW']?.总需求 || 0;
   const l300 = loads?.['300kW']?.总需求 || 0;
   const fakeLoads: Record<string, unknown>[] = rawLoads && rawLoads.length > 0 ? rawLoads : [
-    { name: '风冷机架式假负载', count: Math.ceil(l6 * (1 + spare)), days: elecDur, totalUnits: Math.ceil(l6 * (1 + spare)) * elecDur, spare, spec: '6KW/台' },
-    { name: '风冷机架式假负载', count: Math.ceil(l8 * (1 + spare)), days: elecDur, totalUnits: Math.ceil(l8 * (1 + spare)) * elecDur, spare, spec: '8KW/台' },
-    { name: '风冷机架式假负载', count: l500, days: dur, totalUnits: l500 * dur, spare: 0, spec: '500KW/台（0~500kW可调，每档≤10kW）' },
-    { name: '风冷机架式假负载', count: l300, days: dur, totalUnits: l300 * dur, spare: 0, spec: '300KW/台（0~300kW可调，每档≤10kW）' },
-    { name: '风冷机架式假负载', count: 2, days: dur, totalUnits: 2 * dur, spare: 0, spec: '2000KW/台' },
+    ...(l6 > 0 ? [{ name: '风冷机架式假负载', count: Math.ceil(l6 * (1 + spare) - 1e-12), days: dur, totalUnits: Math.ceil(l6 * (1 + spare) - 1e-12) * dur, spare, spec: '6KW/台' }] : []),
+    ...(l8 > 0 ? [{ name: '风冷机架式假负载', count: Math.ceil(l8 * (1 + spare) - 1e-12), days: dur, totalUnits: Math.ceil(l8 * (1 + spare) - 1e-12) * dur, spare, spec: '8KW/台' }] : []),
+    ...(l30 > 0 ? [{ name: '液冷机架式假负载', count: Math.ceil(l30 * (1 + spare) - 1e-12), days: dur, totalUnits: Math.ceil(l30 * (1 + spare) - 1e-12) * dur, spare, spec: '30KW/台' }] : []),
+    { name: '风冷集中式假负载', count: l500, days: dur, totalUnits: l500 * dur, spare: 0, spec: '500KW/台' },
+    { name: '风冷集中式假负载', count: l300, days: dur, totalUnits: l300 * dur, spare: 0, spec: '300KW/台' },
+    { name: '风冷高压柴发假负载', count: 0, days: 0, totalUnits: 0, spare: 0, spec: '2000KW/台' },
   ];
 
   return {
