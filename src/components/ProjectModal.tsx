@@ -69,9 +69,12 @@ function ProjectModal({ open, project, onCancel, onSubmit }: ProjectModalProps) 
         <Form.Item name="name" label="项目名称" rules={[{ required: true, message: '请输入项目名称' }]}>
           <Input placeholder="请输入项目名称" />
         </Form.Item>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
           <Form.Item name="customer" label="客户" rules={[{ required: true, message: '请输入客户名称' }]}>
             <Input placeholder="请输入客户名称" />
+          </Form.Item>
+          <Form.Item name="city" label="城市">
+            <Input placeholder="请输入所在城市" />
           </Form.Item>
           <Form.Item name="manager" label="项目经理" rules={[{ required: true, message: '请输入项目经理' }]}>
             <Input placeholder="请输入项目经理姓名" />

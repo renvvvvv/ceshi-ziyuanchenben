@@ -23,7 +23,7 @@ function Projects() {
       if (priorityFilter !== '全部' && p.priority !== priorityFilter) return false;
       if (searchText) {
         const kw = searchText.toLowerCase();
-        if (!p.name.toLowerCase().includes(kw) && !p.customer.toLowerCase().includes(kw)) return false;
+        if (!p.name.toLowerCase().includes(kw) && !p.city?.toLowerCase().includes(kw) && !p.customer.toLowerCase().includes(kw)) return false;
       }
       return true;
     });
@@ -70,7 +70,8 @@ function Projects() {
       ),
     },
     { title: '项目经理', dataIndex: 'manager', key: 'manager', width: 100 },
-    { title: '客户', dataIndex: 'customer', key: 'customer', width: 100 },
+    { title: '城市', dataIndex: 'city', key: 'city', width: 100 },
+    { title: '客户', dataIndex: 'customer', key: 'customer', width: 110 },
     {
       title: '状态',
       dataIndex: 'status',

@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { Tag } from 'antd';
 import { PROJECT_STATUS_COLORS, PRIORITY_COLORS } from '../utils/common';
 import type { ProjectStatus, Priority } from '../types';
@@ -27,6 +28,7 @@ function StatusTag({ status, type = 'status' }: StatusTagProps) {
         fontSize: 11,
         fontWeight: 500,
         padding: '1px 8px',
+        transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
       }}
     >
       {status}
@@ -34,4 +36,4 @@ function StatusTag({ status, type = 'status' }: StatusTagProps) {
   );
 }
 
-export default StatusTag;
+export default memo(StatusTag);

@@ -7,7 +7,7 @@ export type ProjectStatus = '未开始' | '测试中' | '已完成' | '阻塞';
 export type Priority = '高' | '中' | '低';
 export type MemberStatus = '空闲' | '测试中' | '休假' | '出差';
 
-export type BusinessType = '新建测试' | '扩容测试' | '年度复测' | '改造测试';
+export type BusinessType = '新建测试' | '扩容测试' | '年度复测' | '改造测试' | '验收测试';
 
 export type DocCategory = '电气系统' | '暖通系统' | '弱电系统' | '消防系统';
 
@@ -15,7 +15,8 @@ export type DocCategory = '电气系统' | '暖通系统' | '弱电系统' | '�
 export interface Project {
   id: string;
   name: string;
-  customer: string;
+  city?: string;              // 所在城市
+  customer: string;           // 客户名称
   status: ProjectStatus;
   priority: Priority;
   manager: string;
@@ -58,7 +59,26 @@ export interface CustomerContract {
   amount: number;
 }
 
-// -------------------- 项目时间线 --------------------
+// -------------------- 项目阶段（时间线） --------------------
+export interface ProjectPhaseFile {
+  id: string;
+  fileName: string;
+  fileSize?: string;
+  fileType?: string;
+  uploadedAt: string;
+}
+
+export interface ProjectPhase {
+  key: string;                    // 阶段标识
+  name: string;                   // 阶段名称
+  description: string;            // 阶段说明
+  status: 'pending' | 'in_progress' | 'completed'; // 阶段状态
+  date?: string;                  // 完成日期
+  files: ProjectPhaseFile[];      // 已上传文件
+  allowUpload: boolean;           // 是否允许上传
+}
+
+// -------------------- 时间线事件（兼容旧数据） --------------------
 export interface TimelineEvent {
   id: string;
   timestamp: string;

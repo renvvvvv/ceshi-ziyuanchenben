@@ -68,6 +68,7 @@ function MainLayout() {
           top: 0,
           bottom: 0,
           zIndex: 100,
+          transition: 'width 0.28s cubic-bezier(0.4, 0, 0.2, 1)',
         }}
       >
         <div
@@ -79,6 +80,7 @@ function MainLayout() {
             padding: '18px 12px',
             borderBottom: '1px solid rgba(255,255,255,0.06)',
             cursor: 'pointer',
+            transition: 'background 0.3s ease',
           }}
           onClick={() => navigate('/dashboard')}
         >
@@ -92,6 +94,8 @@ function MainLayout() {
               textAlign: 'center',
               letterSpacing: '0.5px',
               whiteSpace: 'nowrap',
+              opacity: collapsed ? 0 : 1,
+              transition: 'opacity 0.2s ease',
             }}
           >
             智航万恒测试验证管理平台
@@ -105,28 +109,38 @@ function MainLayout() {
           onClick={onMenuClick}
         />
       </Sider>
-      <Layout style={{ marginLeft: collapsed ? 72 : 220, transition: 'margin-left 0.2s ease' }}>
+      <Layout style={{ marginLeft: collapsed ? 72 : 220, transition: 'margin-left 0.28s cubic-bezier(0.4, 0, 0.2, 1)' }}>
         <div className="app-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
             <Button
               type="text"
               icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
               onClick={() => setCollapsed(!collapsed)}
-              style={{ fontSize: 16, width: 40, height: 40, color: 'rgba(255,255,255,0.6)' }}
+              style={{ fontSize: 16, width: 40, height: 40, color: 'rgba(255,255,255,0.6)', transition: 'all 0.3s ease', borderRadius: 8 }}
             />
-            <h3>{currentTitle}</h3>
+            <h3 style={{ transition: 'color 0.3s ease' }}>{currentTitle}</h3>
           </div>
           <div className="header-right">
             <Dropdown menu={{ items: userMenuItems }} placement="bottomRight">
-              <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Avatar icon={<UserOutlined />} style={{ background: 'linear-gradient(135deg, #4d9fff, #69b1ff)', boxShadow: '0 2px 8px rgba(77,159,255,0.35)', fontFamily: 'var(--font-primary)', fontWeight: 500 }} />
+              <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, transition: 'opacity 0.2s ease' }}>
+                <Avatar
+                  icon={<UserOutlined />}
+                  style={{
+                    background: 'linear-gradient(135deg, #4d9fff, #69b1ff)',
+                    boxShadow: '0 2px 8px rgba(77,159,255,0.35)',
+                    fontFamily: 'var(--font-primary)',
+                    fontWeight: 500,
+                    transition: 'transform 0.3s ease, box-shadow 0.3s ease',
+                  }}
+                />
                 <span style={{ color: 'rgba(255,255,255,0.6)', fontFamily: 'var(--font-primary)', fontSize: 13 }}>管理员</span>
               </div>
             </Dropdown>
           </div>
         </div>
         <Content>
-          <div className="app-content">
+          {/* key 触发路由切换时的淡入动画 */}
+          <div className="app-content" key={location.pathname}>
             <Outlet />
           </div>
         </Content>

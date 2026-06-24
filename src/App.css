@@ -39,6 +39,16 @@
   --header-height: 60px;
   --content-radius: 14px;
   --card-radius: 12px;
+
+  /* 动画缓动函数 */
+  --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-out-back: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-in-out-circ: cubic-bezier(0.85, 0, 0.15, 1);
+
+  /* 动画时长 */
+  --duration-fast: 0.18s;
+  --duration-normal: 0.28s;
+  --duration-slow: 0.4s;
 }
 
 body {
@@ -129,7 +139,7 @@ body {
   margin: 4px 0 !important;
   height: 42px !important;
   line-height: 42px !important;
-  transition: all 0.2s ease !important;
+  transition: all var(--duration-normal) var(--ease-smooth) !important;
 }
 
 .app-layout .ant-menu-item:hover {
@@ -224,7 +234,7 @@ body {
 
 .app-layout > .ant-layout {
   margin-left: var(--sidebar-width);
-  transition: margin-left 0.2s ease;
+  transition: margin-left var(--duration-normal) var(--ease-smooth);
   background: transparent !important;
 }
 
@@ -232,6 +242,7 @@ body {
   margin-left: var(--sidebar-collapsed-width);
 }
 
+/* 内容区 + 路由切换淡入动画 */
 .app-content {
   margin: 24px !important;
   padding: 0 !important;
@@ -239,6 +250,23 @@ body {
   min-height: calc(100vh - var(--header-height) - 48px) !important;
   border-radius: 0 !important;
   box-shadow: none !important;
+  animation: pageFadeIn var(--duration-slow) var(--ease-smooth) both;
+}
+
+@keyframes pageFadeIn {
+  0% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 内容区滚动行为优化 */
+.app-layout > .ant-layout > .ant-layout-content {
+  scroll-behavior: smooth;
 }
 
 /* ============================================
@@ -252,7 +280,7 @@ body {
   border: 1px solid var(--glass-border);
   border-radius: var(--card-radius);
   padding: 20px 22px;
-  transition: all 0.25s ease;
+  transition: all var(--duration-normal) var(--ease-smooth);
 }
 
 .glass-card:hover {
@@ -325,11 +353,29 @@ body {
   border: 1px solid var(--glass-border) !important;
   border-radius: var(--card-radius) !important;
   padding: 20px 22px !important;
-  transition: all 0.25s ease !important;
+  transition: all var(--duration-normal) var(--ease-smooth) !important;
   cursor: default;
   position: relative;
   overflow: hidden;
+  animation: cardSlideIn var(--duration-slow) var(--ease-smooth) both;
 }
+
+@keyframes cardSlideIn {
+  0% {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* KPI 卡片逐个延迟入场 */
+.kpi-cards-row .kpi-card:nth-child(1) { animation-delay: 0.05s; }
+.kpi-cards-row .kpi-card:nth-child(2) { animation-delay: 0.1s; }
+.kpi-cards-row .kpi-card:nth-child(3) { animation-delay: 0.15s; }
+.kpi-cards-row .kpi-card:nth-child(4) { animation-delay: 0.2s; }
 
 .kpi-card::before {
   content: '';
@@ -340,14 +386,14 @@ body {
   height: 2px;
   background: linear-gradient(90deg, transparent, var(--accent-blue), transparent);
   opacity: 0;
-  transition: opacity 0.25s;
+  transition: opacity var(--duration-normal) var(--ease-smooth);
 }
 
 .kpi-card:hover {
   background: var(--glass-bg-hover) !important;
   border-color: var(--glass-border-strong) !important;
-  transform: translateY(-2px);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(77, 159, 255, 0.1) !important;
+  transform: translateY(-3px);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(77, 159, 255, 0.12) !important;
 }
 
 .kpi-card:hover::before {
@@ -483,16 +529,17 @@ body {
   border-radius: var(--card-radius) !important;
   padding: 20px 16px !important;
   text-align: center;
-  transition: all 0.25s ease;
+  transition: all var(--duration-normal) var(--ease-smooth);
   cursor: pointer;
   position: relative;
+  animation: cardSlideIn var(--duration-slow) var(--ease-smooth) both;
 }
 
 .member-card:hover {
   background: var(--glass-bg-hover) !important;
   border-color: var(--glass-border-strong) !important;
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25) !important;
+  transform: translateY(-3px);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.3) !important;
 }
 
 .member-card .member-name {
@@ -551,11 +598,31 @@ body {
   font-family: var(--font-primary) !important;
   font-size: 13px !important;
   padding: 12px 16px !important;
-  transition: background 0.15s !important;
+  transition: background var(--duration-fast) var(--ease-smooth), color var(--duration-fast) var(--ease-smooth) !important;
+}
+
+.ant-table-tbody > tr {
+  transition: background var(--duration-fast) var(--ease-smooth) !important;
 }
 
 .ant-table-tbody > tr:hover > td {
-  background: rgba(255, 255, 255, 0.04) !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+}
+
+/* 表格行交错入场动画 */
+.ant-table-tbody > tr {
+  animation: tableRowSlide var(--duration-slow) var(--ease-smooth) both;
+}
+
+@keyframes tableRowSlide {
+  0% {
+    opacity: 0;
+    transform: translateX(-8px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
 .ant-table-wrapper .ant-table-pagination {
@@ -582,6 +649,7 @@ body {
   display: grid;
   grid-template-columns: 340px 1fr;
   gap: 20px;
+  align-items: start;
 }
 
 @media (max-width: 992px) {
@@ -626,7 +694,7 @@ body {
   display: flex;
   gap: 12px;
   z-index: 10;
-  transition: left 0.2s ease;
+  transition: left var(--duration-normal) var(--ease-smooth);
 }
 
 /* ============================================
@@ -644,14 +712,15 @@ body {
   border: 1px solid var(--glass-border);
   border-radius: 10px;
   margin-bottom: 10px;
-  transition: all 0.2s ease;
+  transition: all var(--duration-normal) var(--ease-smooth);
   cursor: pointer;
 }
 
 .doc-list-item:hover {
   background: var(--glass-bg-hover);
   border-color: var(--glass-border-strong);
-  transform: translateX(4px);
+  transform: translateX(6px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
 }
 
 .doc-list-item .doc-info {
@@ -760,6 +829,28 @@ body {
   border: 1px solid var(--glass-border-strong) !important;
   border-radius: 16px !important;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5) !important;
+  animation: modalSlideIn var(--duration-slow) var(--ease-out-back) both;
+}
+
+@keyframes modalSlideIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.96) translateY(8px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* Modal 遮罩淡入 */
+.ant-modal-mask {
+  animation: maskFadeIn var(--duration-normal) var(--ease-smooth) both;
+}
+
+@keyframes maskFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 .ant-modal-header {
@@ -801,13 +892,18 @@ body {
   font-family: var(--font-primary) !important;
   font-weight: 500 !important;
   border-radius: 8px !important;
-  transition: all 0.2s ease !important;
+  transition: all var(--duration-normal) var(--ease-smooth) !important;
 }
 
 .ant-btn-primary:hover {
   background: linear-gradient(135deg, #69b1ff, var(--accent-blue)) !important;
-  box-shadow: 0 6px 20px rgba(77, 159, 255, 0.5) !important;
-  transform: translateY(-1px);
+  box-shadow: 0 8px 24px rgba(77, 159, 255, 0.5) !important;
+  transform: translateY(-2px);
+}
+
+.ant-btn-primary:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 8px rgba(77, 159, 255, 0.35) !important;
 }
 
 .ant-btn-default {
@@ -816,22 +912,39 @@ body {
   color: var(--text-secondary) !important;
   font-family: var(--font-primary) !important;
   border-radius: 8px !important;
-  transition: all 0.2s ease !important;
+  transition: all var(--duration-normal) var(--ease-smooth) !important;
 }
 
 .ant-btn-default:hover {
   background: var(--glass-bg-hover) !important;
   border-color: var(--accent-blue) !important;
   color: var(--accent-blue-light) !important;
+  transform: translateY(-1px);
 }
 
 .ant-btn-link {
   color: var(--accent-blue) !important;
   font-family: var(--font-primary) !important;
+  transition: all var(--duration-fast) var(--ease-smooth) !important;
 }
 
 .ant-btn-link:hover {
   color: var(--accent-blue-light) !important;
+  filter: brightness(1.1);
+}
+
+/* 按钮点击波纹效果增强 */
+.ant-btn::after {
+  border-radius: 8px !important;
+}
+
+/* 图标按钮 hover 微动画 */
+.ant-btn-icon-only {
+  transition: all var(--duration-normal) var(--ease-smooth) !important;
+}
+
+.ant-btn-icon-only:hover {
+  transform: scale(1.08);
 }
 
 /* ============================================
@@ -894,6 +1007,158 @@ body {
 .font-light { font-weight: 300; }
 .font-normal { font-weight: 400; }
 .font-medium { font-weight: 500; }
+
+/* ============================================
+   加载动画优化
+   ============================================ */
+
+.ant-spin {
+  animation: spinFadeIn var(--duration-normal) var(--ease-smooth) both;
+}
+
+@keyframes spinFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* ============================================
+   Tag 过渡动画
+   ============================================ */
+
+.ant-tag {
+  transition: all var(--duration-fast) var(--ease-smooth) !important;
+}
+
+.ant-tag:hover {
+  transform: scale(1.05);
+}
+
+/* ============================================
+   表单输入框聚焦过渡
+   ============================================ */
+
+.ant-input,
+.ant-input-affix-wrapper,
+.ant-select-selector,
+.ant-picker,
+.ant-input-number {
+  transition: all var(--duration-normal) var(--ease-smooth) !important;
+}
+
+.ant-input:hover,
+.ant-input-affix-wrapper:hover,
+.ant-select-selector:hover,
+.ant-picker:hover {
+  border-color: var(--accent-blue) !important;
+  box-shadow: 0 0 0 2px rgba(77, 159, 255, 0.05) !important;
+}
+
+/* ============================================
+   分页器优化
+   ============================================ */
+
+.ant-pagination-item,
+.ant-pagination-prev .ant-pagination-item-link,
+.ant-pagination-next .ant-pagination-item-link {
+  background: var(--glass-bg) !important;
+  border-color: var(--glass-border) !important;
+  color: var(--text-secondary) !important;
+  border-radius: 6px !important;
+  transition: all var(--duration-fast) var(--ease-smooth) !important;
+}
+
+.ant-pagination-item:hover,
+.ant-pagination-prev:hover .ant-pagination-item-link,
+.ant-pagination-next:hover .ant-pagination-item-link {
+  background: var(--glass-bg-hover) !important;
+  border-color: var(--accent-blue) !important;
+  color: var(--accent-blue-light) !important;
+}
+
+.ant-pagination-item-active {
+  background: linear-gradient(135deg, rgba(77, 159, 255, 0.2), rgba(77, 159, 255, 0.1)) !important;
+  border-color: var(--accent-blue) !important;
+  color: var(--accent-blue-light) !important;
+}
+
+/* ============================================
+   下拉菜单动画
+   ============================================ */
+
+.ant-select-dropdown,
+.ant-picker-panel-container,
+.ant-popover-inner {
+  animation: dropdownSlideIn var(--duration-normal) var(--ease-smooth) both;
+}
+
+@keyframes dropdownSlideIn {
+  0% {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* ============================================
+   ECharts 图表入场动画
+   ============================================ */
+
+.chart-container {
+  background: var(--glass-bg);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--card-radius);
+  padding: 20px 22px;
+  animation: chartFadeIn var(--duration-slow) var(--ease-smooth) both;
+  transition: all var(--duration-normal) var(--ease-smooth);
+}
+
+.chart-container:hover {
+  border-color: var(--glass-border-strong);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+}
+
+@keyframes chartFadeIn {
+  0% {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ============================================
+   性能优化：will-change 提示
+   ============================================ */
+
+.kpi-card,
+.member-card,
+.glass-card,
+.chart-container,
+.doc-list-item {
+  will-change: transform;
+}
+
+/* ============================================
+   prefers-reduced-motion 适配
+   ============================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
 .font-semi { font-weight: 600; }
 .font-bold { font-weight: 700; }
 

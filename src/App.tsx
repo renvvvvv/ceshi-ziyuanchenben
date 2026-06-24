@@ -13,16 +13,22 @@ const TeamPool = lazy(() => import('./pages/TeamPool'));
 const TestGuide = lazy(() => import('./pages/TestGuide'));
 const ResourceCalculator = lazy(() => import('./pages/ResourceCalculator'));
 
-// 加载中组件
+// 加载中组件（带淡入动画）
 function PageLoading() {
   return (
     <div style={{
       display: 'flex',
+      flexDirection: 'column',
       justifyContent: 'center',
       alignItems: 'center',
       minHeight: '400px',
+      gap: 16,
+      animation: 'pageFadeIn 0.3s cubic-bezier(0.4, 0, 0.2, 1) both',
     }}>
       <Spin size="large" />
+      <span style={{ color: 'rgba(255,255,255,0.4)', fontFamily: 'var(--font-primary)', fontSize: 13 }}>
+        加载中...
+      </span>
     </div>
   );
 }

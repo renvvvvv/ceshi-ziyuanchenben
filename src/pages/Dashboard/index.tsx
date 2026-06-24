@@ -12,7 +12,7 @@ import StatusTag from '../../components/StatusTag';
 import {
   mockKpiData,
   mockStatusDistribution,
-  mockCustomerContracts,
+  mockRegionMwOutput,
   mockProjects,
 } from '../../data/mock';
 
@@ -84,11 +84,11 @@ function Dashboard() {
     ],
   }), [mockStatusDistribution]);
 
-  const contractBarOption = useMemo(() => ({
+  const regionMwBarOption = useMemo(() => ({
     backgroundColor: 'transparent',
     tooltip: {
       trigger: 'axis' as const,
-      formatter: '{b}: {c} 万元',
+      formatter: '{b}: {c} MW',
       backgroundColor: 'rgba(13, 31, 60, 0.92)',
       borderColor: 'rgba(77, 159, 255, 0.3)',
       borderWidth: 1,
@@ -102,14 +102,14 @@ function Dashboard() {
     },
     xAxis: {
       type: 'category' as const,
-      data: mockCustomerContracts.map((item) => item.name),
+      data: mockRegionMwOutput.map((item) => item.name),
       axisLabel: { color: 'rgba(255,255,255,0.5)', fontFamily: 'Outfit, Noto Sans SC, sans-serif', fontSize: 11 },
       axisLine: { lineStyle: { color: 'rgba(255,255,255,0.1)' } },
       axisTick: { show: false },
     },
     yAxis: {
       type: 'value' as const,
-      name: '万元',
+      name: 'MW',
       nameTextStyle: { color: 'rgba(255,255,255,0.4)', fontFamily: 'Outfit, Noto Sans SC, sans-serif', fontSize: 11 },
       axisLabel: { color: 'rgba(255,255,255,0.5)', fontFamily: 'Outfit, Noto Sans SC, sans-serif', fontSize: 11 },
       axisLine: { show: false },
@@ -118,20 +118,28 @@ function Dashboard() {
     },
     series: [
       {
-        name: '合同金额',
+        name: '兆瓦产出',
         type: 'bar',
-        data: mockCustomerContracts.map((item) => item.amount),
+        data: mockRegionMwOutput.map((item) => item.mwOutput),
         itemStyle: {
           color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: '#4d9fff' },
-            { offset: 1, color: '#1a5fa5' },
+            { offset: 0, color: '#faad14' },
+            { offset: 1, color: '#d48806' },
           ]),
           borderRadius: [6, 6, 0, 0],
         },
         barWidth: '50%',
+        label: {
+          show: true,
+          position: 'top' as const,
+          color: 'rgba(250,173,20,0.85)',
+          fontSize: 11,
+          fontFamily: 'Outfit, Noto Sans SC, sans-serif',
+          formatter: '{c} MW',
+        },
       },
     ],
-  }), [mockCustomerContracts]);
+  }), [mockRegionMwOutput]);
 
   const watchProjects = useMemo(() => mockProjects
     .filter((p) => p.status === '测试中' || p.status === '未开始')
@@ -148,6 +156,7 @@ function Dashboard() {
       ),
     },
     { title: '客户', dataIndex: 'customer', key: 'customer' },
+    { title: '城市', dataIndex: 'city', key: 'city' },
     {
       title: '状态',
       dataIndex: 'status',
@@ -229,8 +238,8 @@ function Dashboard() {
           <ReactEChartsCore echarts={echarts} option={statusPieOption} style={{ height: 300 }} />
         </div>
         <div className="chart-container">
-          <h4>客户合同金额分布</h4>
-          <ReactEChartsCore echarts={echarts} option={contractBarOption} style={{ height: 300 }} />
+          <h4>地区兆瓦数分布</h4>
+          <ReactEChartsCore echarts={echarts} option={regionMwBarOption} style={{ height: 300 }} />
         </div>
       </div>
 
