@@ -155,6 +155,10 @@ def make_input(d: dict) -> dict:
 
     target_dur = d.get("target_duration")
     proj_type_override = d.get("project_type")
+    cert = d.get("cert_name", "")
+    cert_scope = d.get("cert_scope", "")
+    pdu_type = d.get("pdu_type", "C19")
+    has_gen_load = d.get("has_gen_load", False)
 
     return {
         "mw": float(d["total_mw"]),
@@ -179,6 +183,10 @@ def make_input(d: dict) -> dict:
             "power": _resolve_parallel("parallel_power", "max_parallel_power", d),
             "hybrid": _resolve_parallel("parallel_hybrid", "max_parallel_hybrid", d),
         },
+        "cert_name": cert,
+        "cert_scope": cert_scope,
+        "pdu_type": pdu_type,
+        "has_gen_load": bool(has_gen_load),
     }
 
 
@@ -492,9 +500,9 @@ def calc_fixed(type_cfg: dict = None) -> dict:
         type_cfg = {}
     n = type_cfg.get("fixed_count", 4)
     if n <= 2:
-        return {"项目经理": 1, "电气主测": 1, "小计": 2}
+        return {"项目经理": 1, "资料员": 1, "小计": 2}
     elif n == 3:
-        return {"项目经理": 1, "资料员": 1, "电气主测": 1, "小计": 3}
+        return {"项目经理": 1, "电气主测": 1, "暖通主测": 1, "小计": 3}
     elif n == 5:
         return {"项目经理": 1, "电气主测": 2, "暖通主测": 2, "小计": 5}
     else:
@@ -544,6 +552,7 @@ def calc_tools(elec_groups: int, total_cabinets: int,
         "振动仪": 1,
         "噪声仪": 1 * it_n,
         "电池内阻仪": 1,
+        "PDU测试仪": max(2, round(total_cabinets / 150)),  # ~2台/300柜机房
     }
     # 暖通：以单个机房为单位（~300柜/机房），王志强标准
     # 971×4, 风速仪×2, 热成像×2（工具共用，不乘机房数）
@@ -553,8 +562,15 @@ def calc_tools(elec_groups: int, total_cabinets: int,
         "热成像_暖通": 2,
     }
 
-    # 应用项目类型的工具系数调整（双侧都可能存在，只调基值>0的）
+    # 应用项目类型的工具系数调整（乘法缩放，解决固定偏移不随项目规模缩放的问题）
     if type_cfg:
+        coef = type_cfg.get("tool_coef", {})
+        for k, v in coef.items():
+            if k in elec_per and elec_per[k] > 0:
+                elec_per[k] = max(0, round(elec_per[k] * v))
+            if k in hvac_per and hvac_per[k] > 0:
+                hvac_per[k] = max(0, round(hvac_per[k] * v))
+        # 加法调整保留给固定值工具（如点温枪、电池内阻仪等基数=1的工具）
         adjust = type_cfg.get("tool_adjust", {})
         for k, v in adjust.items():
             if k in elec_per:
@@ -567,6 +583,67 @@ def calc_tools(elec_groups: int, total_cabinets: int,
         "暖通工器具": hvac_per,
         "暖通基准机房数": hvac_rooms,
         "天数": dur,
+    }
+
+
+# ============================================================================
+# 人员职级映射
+# ============================================================================
+
+
+def build_rank_summary(it, pw, hb, hvac, gen, weak, fire, fixed) -> dict:
+    """按职级汇总人员: TO-3(主测/经理), TO-4(测试员), TO-6(记录员)"""
+    # TO-3: 主测 + 项目经理
+    t3 = {
+        "测试经理": fixed.get("项目经理", 0),
+        "电气主测": fixed.get("电气主测", 0),
+        "柴发主测": gen.get("主测", 0),
+        "暖通主测": fixed.get("暖通主测", 0),
+        "消防主测": fire.get("主测", 0),
+        "弱电主测": weak.get("主测", 0),
+    }
+    t3["小计"] = sum(t3.values())
+
+    # TO-4: 测试员
+    weak_testers = weak.get("电气记录员", 0)
+    t4 = {
+        "电气测试员": it.get("在场", 0) + pw.get("在场", 0) + hb.get("在场", 0),
+        "暖通测试员": hvac.get("峰值在场", 0),
+        "弱电测试员": weak_testers,
+        "消防测试员": fire.get("测试员", fire.get("小计", 0) - fire.get("主测", 0)),
+    }
+    t4["小计"] = sum(t4.values())
+
+    # TO-6: 记录员
+    t6 = {
+        "记录员": weak.get("暖通记录员", 0) + gen.get("记录员", 0),
+    }
+    t6["小计"] = sum(t6.values())
+
+    return {"公司属性": "测试服务部", "TO-3": t3, "TO-4": t4, "TO-6": t6}
+
+
+# ============================================================================
+# PDU / 线缆 / 连接器
+# ============================================================================
+
+
+PDU_DEFAULTS = {"C14": ("10A", "C13/C15电源线", "IEC C14"),
+                 "C19": ("16A", "C20电源线", "IEC C19"),
+                 "GB": ("32A", "国标电源线", "GB 1002")}
+
+
+def calc_pdu(total_cabinets: int, pdu_type: str = "C19") -> dict:
+    """机柜PDU规格、线缆和工业连接器配置，默认C19(16A)"""
+    pdu_count = total_cabinets * 2  # 每柜2条PDU
+    current, cable, connector = PDU_DEFAULTS.get(pdu_type, PDU_DEFAULTS["C19"])
+    return {
+        "机柜数量": total_cabinets,
+        "PDU数量": pdu_count,
+        "PDU类型": pdu_type,
+        "额定电流": current,
+        "线缆规格": cable,
+        "工业连接器": connector,
     }
 
 
@@ -623,6 +700,16 @@ def calculate(inp: dict, cfg: dict) -> dict:
     inp["dur"] = orig_dur
     inp["tight"] = orig_tight
 
+    # 人员职级映射
+    ranks = build_rank_summary(it, pw, hb, hvac, gen, weak, fire, fixed)
+    # PDU配置
+    pdu = calc_pdu(inp["cabs"], inp.get("pdu_type", "C19"))
+    # 柴发负载
+    gen_load = {"规格": "2500KVA 阻容一体", "数量": 1, "电缆": "10KV高压电缆"} if inp.get("has_gen_load") else {"规格": "", "数量": 0, "电缆": ""}
+
+    cert_name = inp.get("cert_name", "")
+    cert_scope = inp.get("cert_scope", "")
+
     return {"项目信息": {"总容量": f"{inp['mw']}MW",
                          "工期": f"{eff_dur}天",
                          "原始工期": f"{orig_dur}天",
@@ -631,6 +718,8 @@ def calculate(inp: dict, cfg: dict) -> dict:
             "IT链路": it, "动力链路": pw, "混合链路": hb,
             "暖通": hvac, "柴发": gen, "弱电": weak, "消防": fire, "固定人员": fixed,
             "负载": loads, "工器具": tools,
+            "职级配置": ranks, "PDU配置": pdu, "柴发负载": gen_load,
+            "认证需求": {"证书名称": cert_name, "认证范围": cert_scope} if cert_name else None,
             "汇总": {"峰值同时在场": peak, "总人天": total_md}}
 
 

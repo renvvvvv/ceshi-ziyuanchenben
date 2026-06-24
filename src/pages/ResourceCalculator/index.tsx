@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import {
-  Form, InputNumber, Select, Button, Card, Table, Row, Col, Statistic, Space, message, Switch,
+  Form, InputNumber, Input, Select, Button, Card, Table, Row, Col, Statistic, Space, message, Switch,
   Typography, Modal, Alert, Tooltip, Tabs, Collapse, Descriptions, Popconfirm, Tag,
 } from 'antd';
 import {
@@ -25,10 +25,6 @@ const CABINET_POWER_OPTIONS = [
   { label: '18 kW', value: 18 }, { label: '20 kW', value: 20 },
   { label: '22 kW', value: 22 }, { label: '24 kW', value: 24 },
   { label: '26 kW', value: 26 },
-];
-const AC_TYPE_OPTIONS = [
-  { label: '风冷', value: '风冷' }, { label: '水冷', value: '水冷' },
-  { label: '液冷', value: '液冷' }, { label: '双冷源', value: '双冷源' },
 ];
 const TRANSFORMER_SPECS = [1.25, 2.0, 2.15, 2.5, 3.15];
 
@@ -181,8 +177,8 @@ function ResourceCalculator() {
     const itTrans: [number, number][] = (values.it_transSpecs || []).map((s: number) => [s, values.it_transCount || 1]);
     const pwTrans: [number, number][] = (values.pw_transSpecs || []).map((s: number) => [s, values.pw_transCount || 1]);
     if (itTrans.length === 0) { message.warning('请选择IT变压器规格'); return null; }
-    if (!values.total_mw || !values.total_duration) { message.warning('请填写必填字段：总兆瓦数、总工期'); return null; }
-    if (values.total_mw < 10 || values.total_mw > 66) { message.warning('总兆瓦数需在 10~66 MW 之间'); return null; }
+    if (!values.total_mw || !values.total_duration || !values.project_type) { message.warning('请填写必填字段：总兆瓦数、总工期、项目类型'); return null; }
+    if (values.total_mw < 1 || values.total_mw > 66) { message.warning('总兆瓦数需在 1~66 MW 之间'); return null; }
     if (values.total_duration < 1 || values.total_duration > 365) { message.warning('工期需在 1~365 天之间'); return null; }
     if ((values.it_transCount || 1) < 1) { message.warning('IT变压器台数至少为1'); return null; }
     if (powerSegments.length === 0) { message.warning('请添加至少一个功率段'); return null; }
@@ -192,9 +188,14 @@ function ResourceCalculator() {
       total_mw: values.total_mw, total_duration: values.total_duration,
       cabinet_power_segments: powerSegments,
       it_transformers: itTrans, power_transformers: pwTrans,
-      total_cabinets: totalCabs, ac_type: values.ac_type,
-      project_type: values.is_panama ? '阿里巴拿马3.0' : undefined,
+      total_cabinets: totalCabs,
+      project_type: values.project_type,
+      ac_type: values.project_type === '风冷' ? '风冷' : '水冷',
       target_duration: values.target_duration || undefined,
+      cert_name: values.cert_name || undefined,
+      cert_scope: values.cert_scope || undefined,
+      pdu_type: values.pdu_type || undefined,
+      has_gen_load: values.has_gen_load || false,
     };
   };
 
@@ -462,12 +463,11 @@ function ResourceCalculator() {
         <Form form={form} layout="vertical" initialValues={{
           total_mw: 30.0, total_duration: 25,
           it_transSpecs: [2.0], it_transCount: 6,
-          ac_type: '风冷',
         }}>
           <Row gutter={16}>
             <Col span={12}>
               <Form.Item name="total_mw" label="总兆瓦数 (MW)" rules={[{ required: true }]}>
-                <InputNumber style={{ width: '100%' }} min={10} max={66} step={0.1} />
+                <InputNumber style={{ width: '100%' }} min={1} max={66} step={0.1} />
               </Form.Item>
             </Col>
             <Col span={12}>
@@ -544,11 +544,30 @@ function ResourceCalculator() {
               </Form.Item>
             </Col>
           </Row>
-          <Form.Item name="ac_type" label="空调类型" rules={[{ required: true }]}>
-            <Select options={AC_TYPE_OPTIONS} />
+          <Form.Item name="project_type" label="项目类型" rules={[{ required: true, message: '请选择项目类型' }]}>
+            <Select placeholder="请选择" options={[
+              { label: '风冷 — 风冷空调 + 风冷机柜', value: '风冷' },
+              { label: '水冷 — 水冷空调 + 风冷机柜', value: '水冷' },
+              { label: '液冷 — 水冷空调 + 液冷机柜', value: '液冷' },
+              { label: '风液混合 — 水冷空调 + 风冷&液冷机柜', value: '风液混合' },
+              { label: '阿里巴拿马3.0', value: '阿里巴拿马3.0' },
+            ]} />
           </Form.Item>
-          <Form.Item name="is_panama" label="阿里巴拿马3.0" valuePropName="checked">
-            <Switch checkedChildren="是" unCheckedChildren="否" />
+          <Form.Item name="has_gen_load" label="是否使用柴发负载" valuePropName="checked">
+            <Switch checkedChildren="是 (1台 2500KVA阻容一体)" unCheckedChildren="否" />
+          </Form.Item>
+          <Form.Item name="pdu_type" label="PDU类型（可选，默认C19）">
+            <Select allowClear placeholder="C19 (16A)" options={[
+              { label: 'C19 (16A)', value: 'C19' },
+              { label: 'C14 (10A)', value: 'C14' },
+              { label: 'GB 国标 (32A)', value: 'GB' },
+            ]} />
+          </Form.Item>
+          <Form.Item name="cert_name" label="认证证书名称（可选）">
+            <Input placeholder="如：CQC认证、消防设施检测认证" />
+          </Form.Item>
+          <Form.Item name="cert_scope" label="认证范围（可选）">
+            <Input placeholder="如：电气、暖通等链路" />
           </Form.Item>
           <Form.Item name="target_duration" label="目标工期/天（可选，不填则输出多版本）">
             <InputNumber min={5} max={365} style={{ width: '100%' }} placeholder="留空=标准+紧凑+压缩三版" />
@@ -751,6 +770,20 @@ function SingleResultView({ report, input, onExport, onBack, embedded }: {
       key: 'summary', label: '汇总表',
       children: (
         <div>
+          {report.柴发负载?.数量 ? (
+            <div style={{ marginBottom: 12, padding: '8px 12px', background: '#fff7e6', borderRadius: 6 }}>
+              <Text strong>柴发负载：</Text>
+              <Tag color="volcano">{report.柴发负载.规格}</Tag>
+              <Text>×{report.柴发负载.数量}台  {report.柴发负载.电缆}</Text>
+            </div>
+          ) : null}
+          {report.认证需求?.证书名称 && (
+            <div style={{ marginBottom: 12, padding: '8px 12px', background: '#f6f8fa', borderRadius: 6 }}>
+              <Text strong>认证需求：</Text>
+              <Tag color="orange">{report.认证需求.证书名称}</Tag>
+              {report.认证需求.认证范围 && <Text type="secondary"> 范围：{report.认证需求.认证范围}</Text>}
+            </div>
+          )}
           <Row gutter={24} style={{ marginBottom: 16 }}>
             <Col span={4}><Statistic title="总容量" value={input.total_mw} suffix="MW" /></Col>
             <Col span={4}><Statistic title="总工期" value={input.total_duration} suffix="天" /></Col>
@@ -767,17 +800,18 @@ function SingleResultView({ report, input, onExport, onBack, embedded }: {
       children: (
         <Table size="small" bordered pagination={false}
           dataSource={[
-            { key: 1, role: '测试经理', count: 1, days: dur, manDays: dur },
-            { key: 2, role: '电气主测', count: 1, days: dur, manDays: dur },
-            { key: 3, role: '电气测试员', count: report.IT链路.在场, days: report.IT链路.实际工期, manDays: report.IT链路.人天 },
-            { key: 4, role: '动力测试员', count: report.动力链路.在场, days: report.动力链路.实际工期, manDays: report.动力链路.人天 },
-            { key: 5, role: '暖通主测', count: 1, days: dur, manDays: dur },
-            { key: 6, role: '暖通测试员', count: report.暖通.峰值在场, days: dur, manDays: report.暖通.总人天 },
-            { key: 7, role: '弱电主测+记录', count: report.弱电.小计, days: dur, manDays: report.弱电.小计 * dur },
-            { key: 8, role: '消防', count: report.消防.小计, days: dur, manDays: report.消防.小计 * dur },
-            { key: 9, role: '柴发', count: report.柴发.小计, days: dur, manDays: report.柴发.小计 * dur },
-            { key: 10, role: '固定人员', count: report.固定人员.小计, days: dur, manDays: report.固定人员.小计 * dur },
-            { key: 'sum', role: <Text strong>合计</Text>, count: <Text strong>{report.汇总.峰值同时在场}</Text>, days: <Text strong>{dur}</Text>, manDays: <Text strong>{report.汇总.总人天}</Text> },
+            { key: 1, role: '测试经理', count: report.固定人员.项目经理 || 1, days: dur, manDays: (report.固定人员.项目经理 || 1) * dur },
+            { key: 2, role: '电气主测', count: report.固定人员.电气主测 || 1, days: dur, manDays: (report.固定人员.电气主测 || 1) * dur },
+            { key: 3, role: '柴发主测', count: report.柴发.主测 || 0, days: dur, manDays: (report.柴发.主测 || 0) * dur },
+            { key: 4, role: '暖通主测', count: report.固定人员.暖通主测 || 1, days: dur, manDays: (report.固定人员.暖通主测 || 1) * dur },
+            { key: 5, role: '消防主测', count: report.消防.主测 || 1, days: dur, manDays: (report.消防.主测 || 1) * dur },
+            { key: 6, role: '弱电主测', count: report.弱电.主测 || 1, days: dur, manDays: (report.弱电.主测 || 1) * dur },
+            { key: 7, role: '电气测试员', count: report.IT链路.在场 + report.动力链路.在场 + (report.混合链路?.在场 || 0), days: Math.max(report.IT链路.实际工期, report.动力链路.实际工期), manDays: report.IT链路.人天 + report.动力链路.人天 + (report.混合链路?.人天 || 0) },
+            { key: 8, role: '暖通测试员', count: report.暖通.峰值在场, days: dur, manDays: report.暖通.总人天 },
+            { key: 9, role: '弱电测试员', count: (report.弱电 as any).电气记录员 || (report.弱电 as any).记录员 || 0, days: dur, manDays: ((report.弱电 as any).电气记录员 || (report.弱电 as any).记录员 || 0) * dur },
+            { key: 10, role: '消防测试员', count: report.消防.测试员 || 0, days: dur, manDays: (report.消防.测试员 || 0) * dur },
+            { key: 11, role: '记录员', count: ((report.弱电 as any).暖通记录员 || 0) + report.柴发.记录员, days: dur, manDays: (((report.弱电 as any).暖通记录员 || 0) + report.柴发.记录员) * dur },
+            { key: 'sum', role: <Text strong>峰值</Text>, count: <Text strong>{report.汇总.峰值同时在场}</Text>, days: <Text strong>{dur}</Text>, manDays: <Text strong>{report.汇总.总人天}</Text> },
           ]}
           columns={[{ title: '岗位', dataIndex: 'role', width: 140 }, { title: '人数', dataIndex: 'count', width: 70 }, { title: '天数', dataIndex: 'days', width: 70 }, { title: '人天', dataIndex: 'manDays', width: 90 }]}
         />
@@ -791,6 +825,50 @@ function SingleResultView({ report, input, onExport, onBack, embedded }: {
           columns={[{ title: '名称', dataIndex: 'name' }, { title: '数量', dataIndex: 'count', width: 70 }, { title: '天数', dataIndex: 'days', width: 70 }, { title: '总台天', dataIndex: 'totalUnits', width: 80 }, { title: '规格', dataIndex: 'spec' }]}
         />
       ),
+    },
+    {
+      key: 'rank', label: '职级配置',
+      children: (
+        <div>
+        {report.职级配置?.公司属性 && (
+          <div style={{ marginBottom: 12, fontSize: 14 }}>
+            人员公司属性：<Tag color="blue">{report.职级配置.公司属性}</Tag>
+          </div>
+        )}
+        <Table size="small" bordered pagination={false}
+          dataSource={[
+            ...Object.entries(report.职级配置?.['TO-3'] || {}).filter(([k]) => k !== '小计').map(([k, v]) => ({ key: `t3-${k}`, role: k, rank: 'TO-3', count: v })),
+            ...Object.entries(report.职级配置?.['TO-4'] || {}).filter(([k]) => k !== '小计').map(([k, v]) => ({ key: `t4-${k}`, role: k, rank: 'TO-4', count: v })),
+            ...Object.entries(report.职级配置?.['TO-6'] || {}).filter(([k]) => k !== '小计').map(([k, v]) => ({ key: `t6-${k}`, role: k, rank: 'TO-6', count: v })),
+            { key: 'sum-t3', role: '小计', rank: 'TO-3', count: report.职级配置?.['TO-3']?.小计 || 0, isSum: true },
+            { key: 'sum-t4', role: '小计', rank: 'TO-4', count: report.职级配置?.['TO-4']?.小计 || 0, isSum: true },
+            { key: 'sum-t6', role: '小计', rank: 'TO-6', count: report.职级配置?.['TO-6']?.小计 || 0, isSum: true },
+          ]}
+          columns={[
+            { title: '岗位', dataIndex: 'role', width: 120, render: (v: string, r: any) => r.isSum ? <Text strong>{v}</Text> : v },
+            { title: '职级', dataIndex: 'rank', width: 80 },
+            { title: '人数', dataIndex: 'count', width: 60 },
+          ]}
+        />
+        </div>
+      ),
+    },
+    {
+      key: 'pdu', label: 'PDU/线缆',
+      children: report.PDU配置 ? (
+        <div>
+          <Row gutter={24} style={{ marginBottom: 16 }}>
+            <Col span={6}><Statistic title="机柜数量" value={report.PDU配置.机柜数量} suffix="柜" /></Col>
+            <Col span={6}><Statistic title="PDU数量" value={report.PDU配置.PDU数量} suffix="条" /></Col>
+            <Col span={4}><Statistic title="PDU类型" value={report.PDU配置.PDU类型} /></Col>
+            <Col span={4}><Statistic title="额定电流" value={report.PDU配置.额定电流} /></Col>
+          </Row>
+          <Descriptions size="small" bordered column={2}>
+            <Descriptions.Item label="线缆规格">{report.PDU配置.线缆规格}</Descriptions.Item>
+            <Descriptions.Item label="工业连接器">{report.PDU配置.工业连接器}</Descriptions.Item>
+          </Descriptions>
+        </div>
+      ) : <Text type="secondary">无PDU数据</Text>,
     },
     {
       key: 'tools', label: '工器具',

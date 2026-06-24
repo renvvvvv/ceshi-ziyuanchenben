@@ -20,6 +20,10 @@ export interface ResourceInput {
   project_type?: string;
   target_duration?: number;
   tight_schedule?: boolean;
+  cert_name?: string;
+  cert_scope?: string;
+  pdu_type?: string;
+  has_gen_load?: boolean;
 }
 
 export interface StaffResult {
@@ -54,6 +58,22 @@ export interface LoadResult {
   '300kW': { 总需求: number; 需租赁: number };
 }
 
+export interface RankSummary {
+  公司属性: string;
+  'TO-3': { 测试经理: number; 电气主测: number; 柴发主测: number; 暖通主测: number; 消防主测: number; 弱电主测: number; 小计: number };
+  'TO-4': { 电气测试员: number; 暖通测试员: number; 弱电测试员: number; 消防测试员: number; 小计: number };
+  'TO-6': { 记录员: number; 小计: number };
+}
+
+export interface PduConfig {
+  机柜数量: number;
+  PDU数量: number;
+  PDU类型: string;
+  额定电流: string;
+  线缆规格: string;
+  工业连接器: string;
+}
+
 export interface ToolItem {
   name: string;
   count: number;
@@ -74,6 +94,10 @@ export interface ResourceReport {
   消防: { 主测: number; 测试员: number; 小计: number };
   固定人员: { 项目经理: number; 资料员: number; 电气主测: number; 暖通主测: number; 小计: number };
   负载: LoadResult;
+  职级配置?: RankSummary;
+  PDU配置?: PduConfig;
+  柴发负载?: { 规格: string; 数量: number; 电缆: string };
+  认证需求?: { 证书名称: string; 认证范围: string };
   汇总: { 峰值同时在场: number; 总人天: number };
   工具清单: ToolItem[];
   假负载清单: { name: string; count: number; days: number; totalUnits: number; spare: number; spec: string }[];
@@ -304,6 +328,35 @@ export function calculateResource(input: ResourceInput): ResourceReport {
   // 电气实际工期（取 IT/动力 中较大者）
   const elecDur = Math.max(it.实际工期, pw.实际工期);
 
+  // 职级配置
+  const weakTesters = weak.电气记录员 || 0;
+  const ranks: RankSummary = {
+    公司属性: '测试服务部',
+    'TO-3': {
+      测试经理: fixed.项目经理 || 0,
+      电气主测: fixed.电气主测 || 0,
+      柴发主测: gen.主测 || 0,
+      暖通主测: fixed.暖通主测 || 0,
+      消防主测: fire.主测 || 0,
+      弱电主测: weak.主测 || 0,
+      小计: 0,
+    },
+    'TO-4': {
+      电气测试员: it.在场 + pw.在场,
+      暖通测试员: hvac.峰值在场,
+      弱电测试员: weakTesters,
+      消防测试员: fire.测试员 || (fire.小计 - (fire.主测 || 0)),
+      小计: 0,
+    },
+    'TO-6': {
+      记录员: (weak.暖通记录员 || 0) + (gen.记录员 || 0),
+      小计: 0,
+    },
+  };
+  ranks['TO-3'].小计 = Object.values(ranks['TO-3']).reduce((s, v) => s + (typeof v === 'number' ? v : 0), 0) - ranks['TO-3'].小计;
+  ranks['TO-4'].小计 = Object.values(ranks['TO-4']).reduce((s, v) => s + (typeof v === 'number' ? v : 0), 0) - ranks['TO-4'].小计;
+  ranks['TO-6'].小计 = Object.values(ranks['TO-6']).reduce((s, v) => s + (typeof v === 'number' ? v : 0), 0) - ranks['TO-6'].小计;
+
   // 工具清单（匹配 generate_excel.py 模板）
   const tools: ToolItem[] = [
     { name: '电能质量分析仪', count: 6, days: elecDur, totalUnits: 6 * elecDur, model: 'FLUKE 435', note: '配套6000A电流环至少6套；剩余至少2000A以上；配套数据传输线；要求435-2；配套内存卡2张' },
@@ -352,6 +405,17 @@ export function calculateResource(input: ResourceInput): ResourceReport {
     消防: fire,
     固定人员: fixed,
     负载: loads,
+    职级配置: ranks,
+    PDU配置: {
+      机柜数量: cabCount,
+      PDU数量: cabCount * 2,
+      PDU类型: input.pdu_type || 'C19',
+      额定电流: '16A',
+      线缆规格: 'C20电源线',
+      工业连接器: 'IEC C19',
+    },
+    柴发负载: input.has_gen_load ? { 规格: '2500KVA 阻容一体', 数量: 1, 电缆: '10KV高压电缆' } : undefined,
+    认证需求: input.cert_name ? { 证书名称: input.cert_name, 认证范围: input.cert_scope || '' } : undefined,
     汇总: { 峰值同时在场: peakStaff, 总人天: totalManDays },
     工具清单: tools,
     假负载清单: fakeLoads,
@@ -434,6 +498,7 @@ export function normalizeReport(raw: Record<string, unknown>, input: ResourceInp
   const l30 = (loads as unknown as Record<string, { 总需求?: number }>)?.['30kW']?.总需求 || 0;
   const l500 = loads?.['500kW']?.总需求 || 0;
   const l300 = loads?.['300kW']?.总需求 || 0;
+
   const fakeLoads: Record<string, unknown>[] = rawLoads && rawLoads.length > 0 ? rawLoads : [
     ...(l6 > 0 ? [{ name: '风冷机架式假负载', count: Math.ceil(l6 * (1 + spare) - 1e-12), days: dur, totalUnits: Math.ceil(l6 * (1 + spare) - 1e-12) * dur, spare, spec: '6KW/台' }] : []),
     ...(l8 > 0 ? [{ name: '风冷机架式假负载', count: Math.ceil(l8 * (1 + spare) - 1e-12), days: dur, totalUnits: Math.ceil(l8 * (1 + spare) - 1e-12) * dur, spare, spec: '8KW/台' }] : []),
@@ -454,6 +519,10 @@ export function normalizeReport(raw: Record<string, unknown>, input: ResourceInp
     消防: fire as ResourceReport['消防'],
     固定人员: fixed as ResourceReport['固定人员'],
     负载: loads,
+    职级配置: (raw['职级配置'] as RankSummary) || undefined,
+    PDU配置: (raw['PDU配置'] as PduConfig) || undefined,
+    柴发负载: raw['柴发负载'] as ResourceReport['柴发负载'] || undefined,
+    认证需求: raw['认证需求'] as ResourceReport['认证需求'] || undefined,
     汇总: raw['汇总'] as ResourceReport['汇总'],
     工具清单: tools,
     假负载清单: fakeLoads as ResourceReport['假负载清单'],

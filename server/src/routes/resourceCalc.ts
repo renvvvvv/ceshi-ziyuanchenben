@@ -33,8 +33,8 @@ router.post('/', async (req: Request, res: Response) => {
       res.status(400).json({ error: '缺少必填参数 total_mw / total_duration' });
       return;
     }
-    if (input.total_mw < 10 || input.total_mw > 66) {
-      res.status(400).json({ error: '总兆瓦数应在 10~66 MW 之间' });
+    if (input.total_mw < 1 || input.total_mw > 66) {
+      res.status(400).json({ error: '总兆瓦数应在 1~66 MW 之间' });
       return;
     }
 
@@ -56,6 +56,10 @@ router.post('/', async (req: Request, res: Response) => {
     if (input.target_duration) pyInput.target_duration = input.target_duration;
     if (input.hybrid_transformers?.length) pyInput.hybrid_transformers = input.hybrid_transformers;
     if (input.tight_schedule) pyInput.tight_schedule = input.tight_schedule;
+    if (input.cert_name) pyInput.cert_name = input.cert_name;
+    if (input.cert_scope) pyInput.cert_scope = input.cert_scope;
+    if (input.pdu_type) pyInput.pdu_type = input.pdu_type;
+    if (input.has_gen_load) pyInput.has_gen_load = input.has_gen_load;
 
     const stdout = await runPy(pyInput);
     const report = JSON.parse(stdout);
