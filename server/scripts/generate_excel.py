@@ -96,7 +96,7 @@ def create_template_excel(result: dict, template_path: str, output_path: str):
         ws.cell(row=row, column=5, value=f"=C{row}*D{row}")
 
     # ========== 3. 假负载清单 ==========
-    spare = 0.29
+    spare = 0.1
     l6 = loads["6kW"]["总需求"]
     l8 = loads["8kW"]["总需求"]
     l5 = loads["500kW"]["总需求"]
@@ -150,7 +150,7 @@ def create_template_excel(result: dict, template_path: str, output_path: str):
     )
 
     wb.save(output_path)
-    print(f"模板格式Excel已生成: {output_path}")
+    print(f"✅ 模板格式Excel已生成: {output_path}")
     print(f"   总人天: {result['汇总']['总人天']}, "
           f"峰值: {result['汇总']['峰值同时在场']}")
 

@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { execFile } from 'child_process';
+import { execFile, execSync } from 'child_process';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { writeFileSync, unlinkSync } from 'fs';
@@ -8,7 +8,7 @@ import db from '../database.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SCRIPTS_DIR = join(__dirname, '..', '..', '..', 'scripts');
-const PY = 'python3';
+const PY = process.platform === 'win32' ? 'python' : 'python3';
 
 const router = Router();
 
@@ -17,7 +17,7 @@ function runPy(jsonInput: Record<string, unknown>): Promise<string> {
     const tmpFile = join(tmpdir(), `rc_${Date.now()}.json`);
     writeFileSync(tmpFile, JSON.stringify(jsonInput), 'utf-8');
     const script = join(SCRIPTS_DIR, 'resource_plan.py');
-    execFile(PY, [script, '--input', tmpFile], { cwd: SCRIPTS_DIR, maxBuffer: 10 * 1024 * 1024 }, (err, stdout, stderr) => {
+    execFile(PY, [script, '--input', tmpFile], { cwd: SCRIPTS_DIR, maxBuffer: 10 * 1024 * 1024, env: { ...process.env, PATH: process.env.PATH + ';C:\\Program Files\\Python39' } }, (err, stdout, stderr) => {
       try { unlinkSync(tmpFile); } catch {}
       if (err) reject(new Error(stderr || err.message));
       else resolve(stdout);
@@ -52,9 +52,21 @@ router.post('/', async (req: Request, res: Response) => {
       ac_type: input.ac_type,
     };
     if (segs.length > 0) pyInput.cabinet_power_segments = segs;
+    if (input.project_type) pyInput.project_type = input.project_type;
+    if (input.target_duration) pyInput.target_duration = input.target_duration;
+    if (input.hybrid_transformers?.length) pyInput.hybrid_transformers = input.hybrid_transformers;
+    if (input.tight_schedule) pyInput.tight_schedule = input.tight_schedule;
 
     const stdout = await runPy(pyInput);
     const report = JSON.parse(stdout);
+
+    // 提取标准版数据存历史
+    let stdReport = report;
+    if (report.多版本对比 && report.详细结果) {
+      const keys = Object.keys(report.详细结果);
+      const stdKey = keys.find((k: string) => k.includes('标准')) || keys[0];
+      stdReport = report.详细结果[stdKey];
+    }
 
     // 存入历史
     const batchId = (req.body as { batch_id?: string }).batch_id || null;
@@ -65,7 +77,7 @@ router.post('/', async (req: Request, res: Response) => {
       batchId, input.total_mw, input.total_duration, cp,
       JSON.stringify(input.it_transformers), JSON.stringify(input.power_transformers),
       tc, input.ac_type,
-      report.汇总.峰值同时在场, report.汇总.总人天,
+      stdReport.汇总.峰值同时在场, stdReport.汇总.总人天,
       JSON.stringify(report),
     );
 

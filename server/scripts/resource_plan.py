@@ -13,6 +13,14 @@
   4. 支持用户精确指定并行组数（parallel_* 参数）
 
 版本历史：
+  V200.1 (2026-06-12)
+    - 新增项目类型自动识别：风冷新建/混合/增项，按类型自动配置人员参数
+    - 新增 detect_project_type() 和 get_type_config()
+    - calc_parallel 支持 per-type PARALLEL_MIN（增项=1）
+    - calc_hvac 支持 hvac_light 模式（混合/增项强制风冷轻路径）
+    - calc_gen/calc_fixed 按项目类型调整（增项无柴发、减固定人员）
+    - 配置新增 project_type_config 段，按类型配置 staff/parallel/hvac/gen/fixed
+
   V200 (2026-05-27)
     - 弱电逻辑重大修正：电气记录员改为按组数配置（一组电气配一个弱电），不再按人头/4
     - 更新暖通记录员为按暖通组数一对一配置
@@ -53,7 +61,7 @@ import math
 import os
 import sys
 
-__version__ = "200.0.0"
+__version__ = "200.2.0"
 
 # ============================================================================
 # 全局常量
@@ -84,34 +92,83 @@ def is_liquid(at: str) -> bool:
     return norm_ac(at) in ("液冷", "双冷源", "水冷")
 
 
+def has_frontend_cooling(at: str) -> bool:
+    """是否有前端冷源测试：水冷、液冷、双冷源均有"""
+    return norm_ac(at) in ("液冷", "水冷", "双冷源")
+
+
 # ============================================================================
 # 输入解析
 # ============================================================================
 
 
 def make_input(d: dict) -> dict:
-    """解析输入JSON，返回标准化输入字典"""
+    """解析输入JSON，返回标准化输入字典
+
+    支持三种格式:
+      cabinet_power=12                  → 单一功率，全部风冷
+      cabinet_power=[[12,2400]]         → 风冷多功率
+      cabinet_power=[["液冷",30,800],["风冷",12,1600]] → 风液混合
+    """
     raw = d["cabinet_power"]
-    if isinstance(raw, list):
+    is_hybrid = False
+    liquid_specs, air_specs = [], []
+
+    if isinstance(raw, list) and len(raw) > 0 and isinstance(raw[0], list) and len(raw[0]) == 3:
+        # 风液混合: [["液冷",30,800], ["风冷",12,1600]]
+        is_hybrid = True
+        for ac_type, p, c in raw:
+            if norm_ac(ac_type) in ("液冷", "水冷", "双冷源"):
+                liquid_specs.append((int(p), int(c)))
+            else:
+                air_specs.append((int(p), int(c)))
+        cabs = sum(c for _, c in liquid_specs + air_specs)
+        specs = liquid_specs + air_specs
+        liquid_disp = "+".join(f"{p}kW×{c}" for p, c in liquid_specs)
+        air_disp = "+".join(f"{p}kW×{c}" for p, c in air_specs)
+        disp = f"液冷:{liquid_disp} 风冷:{air_disp}"
+    elif isinstance(raw, list):
         specs = [(int(p), int(c)) for p, c in raw]
         cabs = sum(c for _, c in specs)
         disp = "+".join(f"{p}kW×{c}" for p, c in specs)
+        # 功率 >= 25kW 视为液冷机柜，< 25kW 为风冷机柜
+        for p, c in specs:
+            if int(p) >= 25:
+                liquid_specs.append((int(p), int(c)))
+            else:
+                air_specs.append((int(p), int(c)))
+        if liquid_specs and air_specs:
+            is_hybrid = True
     else:
-        specs = [(int(raw), int(d["total_cabinets"]))]
+        p = int(raw)
+        specs = [(p, int(d["total_cabinets"]))]
         cabs = int(d["total_cabinets"])
         disp = f"{int(raw)}kW"
+        # 机柜功率 >= 25kW → 液冷机柜
+        if p >= 25:
+            liquid_specs.append((p, cabs))
+        else:
+            air_specs.append((p, cabs))
 
     def _resolve_parallel(new_key, old_key, d_):
         return d_.get(new_key) or d_.get(old_key)
 
+    target_dur = d.get("target_duration")
+    proj_type_override = d.get("project_type")
+
     return {
         "mw": float(d["total_mw"]),
+        "project_type_override": proj_type_override,
         "dur": int(d["total_duration"]),
+        "target_dur": int(target_dur) if target_dur is not None else None,
         "cabs": cabs,
         "cp_spec": specs,
         "cp_disp": disp,
         "ac": norm_ac(d["ac_type"]),
         "tight": d.get("tight_schedule", False),
+        "is_hybrid": is_hybrid,
+        "liquid_specs": liquid_specs,
+        "air_specs": air_specs,
         "trans": {
             "it": [(float(c), int(n)) for c, n in d["it_transformers"]],
             "power": [(float(c), int(n)) for c, n in d["power_transformers"]],
@@ -126,15 +183,79 @@ def make_input(d: dict) -> dict:
 
 
 # ============================================================================
+# 项目类型自动识别
+# ============================================================================
+
+
+def detect_project_type(inp: dict) -> str:
+    """根据空调类型和机柜类型自动识别项目类型
+
+    支持输入JSON中显式指定: \"project_type\": \"阿里巴拿马3.0\"
+
+    风冷:   风冷空调 + 风冷机柜
+    水冷:   水冷/冷冻水空调 + 风冷机柜
+    液冷:   水冷/冷冻水空调 + 液冷机柜
+    风液混合: 水冷空调 + 风冷+液冷机柜
+    阿里巴拿马3.0: 显式指定（水冷空调+风冷机柜，精简要配置）
+    """
+    # 用户显式覆盖
+    if inp.get("project_type_override"):
+        return inp["project_type_override"]
+    ac = inp["ac"]
+    has_liquid_cabs = len(inp.get("liquid_specs", [])) > 0
+    has_air_cabs = len(inp.get("air_specs", [])) > 0
+    is_water_ac = ac in ("液冷", "水冷", "双冷源")
+
+    if is_water_ac:
+        if has_liquid_cabs and has_air_cabs:
+            return "风液混合"
+        elif has_liquid_cabs:
+            return "液冷"
+        else:
+            return "水冷"
+    else:
+        return "风冷"
+
+
+def is_small_project(inp: dict) -> bool:
+    """小型/增项项目：柜数/MW < 25 或 无配电变压器"""
+    mw = inp["mw"]
+    cabs = inp["cabs"]
+    if cabs > 0 and cabs / mw < 25:
+        return True
+    has_power = sum(n for _, n in inp["trans"]["power"]) > 0
+    has_hybrid = sum(n for _, n in inp["trans"]["hybrid"]) > 0
+    if not has_power and not has_hybrid:
+        return True
+    return False
+
+
+def get_type_config(cfg: dict, proj_type: str, is_small: bool = False) -> dict:
+    """获取项目类型的配置，小型项目自动轻量化"""
+    ptc = cfg.get("project_type_config", {})
+    base = dict(ptc.get(proj_type, {}))
+    if is_small and proj_type in ("风冷", "水冷"):
+        # 小型项目：降 staff、降并行下限、减固定人员
+        base["staff_per_transformer"] = {"it": 3, "power": 1, "hybrid": 2}
+        base["parallel_min"] = 1
+        base["skip_gen"] = True
+        base["fixed_count"] = 2
+    return base
+
+
+# ============================================================================
 # 并行数计算
 # ============================================================================
 
 
-def calc_parallel(count: int, per_days: int, total_dur: int, user_val=None) -> dict:
+def calc_parallel(count: int, per_days: int, total_dur: int, user_val=None, pmin: int = None) -> dict:
     """计算并行组数与工期
 
-    用户指定 → 精确使用；未指定 → ceil(总台×单台天/工期)，限制2~7
+    用户指定 → 精确使用；未指定 → ceil(总台×单台天/工期)，限制 pmin~5
     """
+    if pmin is None:
+        pmin = PARALLEL_MIN
+
     if count <= 0:
         return {"台数": 0, "单台天数": per_days, "并行数": 0, "实际工期": 0, "计算最小并行": 0}
 
@@ -142,7 +263,7 @@ def calc_parallel(count: int, per_days: int, total_dur: int, user_val=None) -> d
     if user_val is not None and user_val > 0:
         p = int(user_val)
     else:
-        p = max(PARALLEL_MIN, min(min_p, PARALLEL_MAX))
+        p = max(pmin, min(min_p, PARALLEL_MAX))
 
     dur = math.ceil(count / p) * per_days
     return {"台数": count, "单台天数": per_days, "并行数": p, "实际工期": dur, "计算最小并行": min_p}
@@ -153,19 +274,31 @@ def calc_parallel(count: int, per_days: int, total_dur: int, user_val=None) -> d
 # ============================================================================
 
 
-def calc_elec(trans_key: str, staff_key: str, inp: dict, cfg: dict) -> dict:
+def calc_elec(trans_key: str, staff_key: str, inp: dict, cfg: dict, type_cfg: dict = None) -> dict:
     """通用电气链路人员计算
 
-    变压器人员: IT=6人/台, 动力=4人/台, 混合=5人/台
-    标准工期6天/台，紧凑(tight)4天/台
+    变压器人员按项目类型配置；标准工期6天/台，紧凑(tight)4天/台
+    风液混合: IT每组+1人（液冷机柜测试额外人力）
     """
+    if type_cfg is None:
+        type_cfg = {}
+
     count = sum(n for _, n in inp["trans"][trans_key])
     per_days = 4 if inp["tight"] else cfg["days_per_transformer"]["total"]
     if per_days <= 0:
         per_days = 6
 
-    para = calc_parallel(count, per_days, inp["dur"], inp["parallel"].get(trans_key))
-    pp = cfg["staff_per_transformer"].get(staff_key, 4)
+    pmin = type_cfg.get("parallel_min", PARALLEL_MIN)
+    para = calc_parallel(count, per_days, inp["dur"], inp["parallel"].get(trans_key), pmin=pmin)
+
+    # Use type-specific staff if available, otherwise fall back to global config
+    type_staff = type_cfg.get("staff_per_transformer", {})
+    pp = type_staff.get(staff_key) if staff_key in type_staff else cfg["staff_per_transformer"].get(staff_key, 4)
+
+    hybrid_extra = type_cfg.get("hybrid_it_extra", cfg.get("hybrid_it_extra", 1))
+    if inp.get("is_hybrid") and trans_key == "it":
+        pp += hybrid_extra
+
     on_site = pp * para["并行数"]
     md = on_site * para["实际工期"]
 
@@ -177,32 +310,69 @@ def calc_elec(trans_key: str, staff_key: str, inp: dict, cfg: dict) -> dict:
 # ============================================================================
 
 
-def calc_loads(inp: dict, cfg: dict, it_parallel: int = 0) -> dict:
+def calc_loads(inp: dict, cfg: dict, it_parallel: int = 0, type_cfg: dict = None) -> dict:
     """计算负载需求
 
-    IT负载基于并行组数(非总台数)×1.1冗余，集中式负载按动力+混合变压器最大容量查表。
-    已修复 IEEE 754 浮点精度(200.0*1.1=220.00000000000003 → ceil 221修正为220)。
+    机架式负载：按机柜数×柜功率/假负载功率×覆盖率（>50%机柜需同时压测）
+    液冷负载：按变压器链路配置，最低2链路同时压测，冗余1.1
+    集中式负载：按动力+混合变压器最大容量查表（冷型无关）。
     """
     r = cfg["load_config"]["redundancy"]
-    it_cfg = cfg["it_load_per_mw"]
     pw_cfg = cfg["power_load_config"]
     owned = cfg["owned_loads"]
+    liquid_kw = (type_cfg or {}).get("liquid_load_kw") or cfg.get("liquid_load_config", {}).get("load_kw", 30)
+    trans_cap = max(c for c, _ in inp["trans"]["it"]) if inp["trans"]["it"] else 0
 
     total_it = sum(n for _, n in inp["trans"]["it"])
     load_base = it_parallel if it_parallel > 0 else total_it
-    total_6, total_8, details = 0, 0, []
+    details = []
+    total_6, total_8, total_liquid = 0, 0, 0
 
-    for cp, cnt in inp["cp_spec"]:
-        ck = str(cp)
-        if ck not in it_cfg:
-            return {"error": f"不支持的单机柜功率: {cp}kW"}
-        c = it_cfg[ck]
-        alloc = load_base * cnt / inp["cabs"]
-        p6 = math.ceil(alloc * c["6kw"] * r - 1e-12)
-        p8 = math.ceil(alloc * c["8kw"] * r - 1e-12)
-        total_6 += p6
-        total_8 += p8
-        details.append(f"{cp}kW×{cnt}柜→6kW:{p6} 8kW:{p8}")
+    # 判断机柜类型：液冷机柜 vs 风冷机柜（与空调类型无关！）
+    has_liquid_cabs = len(inp.get("liquid_specs", [])) > 0
+    has_air_cabs = len(inp.get("air_specs", [])) > 0 or (not inp.get("is_hybrid") and not has_liquid_cabs)
+    is_hybrid_project = inp.get("is_hybrid") or (has_liquid_cabs and has_air_cabs)
+    # 覆盖率动态计算：每并行组需测柜数越多，覆盖率越高
+    if is_hybrid_project:
+        coverage = (type_cfg or {}).get("load_coverage") or cfg.get("load_config", {}).get("coverage_hybrid", 0.85)
+    else:
+        coverage = (type_cfg or {}).get("load_coverage")
+        if coverage is None:
+            air_cabs = sum(c for _, c in (inp.get("air_specs", []) or inp.get("cp_spec", [])))
+            if air_cabs > 0 and load_base > 0:
+                cabs_per_group = air_cabs / load_base
+                coverage = max(0.47, min(cabs_per_group * 0.0008, 0.70))
+            else:
+                coverage = cfg.get("load_config", {}).get("coverage", 0.52)
+
+    # 液冷负载：按变压器链路配置，最低2链路同时压测，冗余1.1
+    # 混合项目液冷柜不能复用，需按机柜数加覆盖
+    if has_liquid_cabs:
+        per_link = math.ceil(trans_cap * 1000 / liquid_kw)
+        liquid_links = max(load_base, 2)
+        total_liquid = math.ceil(per_link * liquid_links * r - 1e-12)
+        if is_hybrid_project:
+            liquid_cabs = sum(c for _, c in inp.get("liquid_specs", []))
+            cov_liq = (type_cfg or {}).get("coverage_liquid_hybrid") or cfg.get("load_config", {}).get("coverage_liquid_hybrid", 1.0)
+            total_liquid = max(total_liquid, math.ceil(liquid_cabs * cov_liq * r - 1e-12))
+        details.append(f"液冷{trans_cap}MW变压器→每链路{per_link}台30kW, {liquid_links}链路→{total_liquid}台")
+
+    # 风冷负载：机柜数×柜功率/假负载功率×覆盖率（默认55%机柜同时压测）
+    # 柜功率<12kW→6kW假负载, ≥12kW→8kW假负载(12kW两者皆可,默认8kW)
+    air_specs = inp.get("air_specs", []) if inp.get("is_hybrid") else (inp["cp_spec"] if has_air_cabs else [])
+    if air_specs:
+        for cp, cnt in air_specs:
+            cp_kw = int(cp)
+            # type_cfg可配置6kW负载的机柜功率上限(默认12kW, 即≤12用6kW)
+            max_6kw = (type_cfg or {}).get("load_6kw_max_kw", 12)
+            if cp_kw <= max_6kw:
+                load_kw, total_6_add = 6, math.ceil(cnt * cp_kw / 6 * coverage * r - 1e-12)
+                total_6 += total_6_add
+                details.append(f"{cp}kW×{cnt}柜→6kW:{total_6_add}台")
+            else:
+                load_kw, total_8_add = 8, math.ceil(cnt * cp_kw / 8 * coverage * r - 1e-12)
+                total_8 += total_8_add
+                details.append(f"{cp}kW×{cnt}柜→8kW:{total_8_add}台")
 
     all_power_trans = inp["trans"]["power"] + inp["trans"]["hybrid"]
     if all_power_trans:
@@ -216,6 +386,7 @@ def calc_loads(inp: dict, cfg: dict, it_parallel: int = 0) -> dict:
         "IT负载配置": {"单机柜功率": inp["cp_disp"], "并行基数": f"{load_base}台(并行)", "详细分配": "; ".join(details)},
         "6kW": {"总需求": total_6, "自有": min(total_6, owned["6kw"]), "需租赁": max(0, total_6 - owned["6kw"])},
         "8kW": {"总需求": total_8, "自有": min(total_8, owned["8kw"]), "需租赁": max(0, total_8 - owned["8kw"])},
+        "30kW": {"总需求": total_liquid, "需租赁": max(0, total_liquid)},
         "500kW": {"总需求": l500, "需租赁": max(0, l500)},
         "300kW": {"总需求": l300, "需租赁": max(0, l300)},
     }
@@ -226,15 +397,19 @@ def calc_loads(inp: dict, cfg: dict, it_parallel: int = 0) -> dict:
 # ============================================================================
 
 
-def calc_hvac(inp: dict) -> dict:
+def calc_hvac(inp: dict, type_cfg: dict = None) -> dict:
     """计算暖通链路人员需求
 
     空调间数=IT台数×2, 机房数=IT台数×1
-    功能测试: ceil(空调间数×3天/工期)组, 每组1人, 人天=空调间数×1×3
-    场景压测: ceil(机房数×1天/工期)组, 每组2人, 人天=机房数×2×1
-    前端冷源: 液冷3人全程
-    安装检查: ceil(MW/10)×1人×1天
+    液冷路径: 功能ceil(空调间数×2/工期),场景ceil(机房数×1/工期);每组3/5人;前端冷源3人;安装检查ceil(MW/10)×4
+    风冷路径: 功能ceil(空调间数×3/工期),场景ceil(机房数×1/工期);每组1/2人;无前端冷源;安装检查ceil(MW/10)×1
+    hvac_light: 混合/增项项目强制走风冷轻路径（基础设施利旧）
     """
+    if type_cfg is None:
+        type_cfg = {}
+
+    hvac_light = type_cfg.get("hvac_light", False)
+
     it_cnt = sum(n for _, n in inp["trans"]["it"])
     if it_cnt <= 0:
         return {"空调间数": 0, "机房数": 0,
@@ -245,11 +420,32 @@ def calc_hvac(inp: dict) -> dict:
                 "暖通总组数": 0, "峰值在场": 0, "总人天": 0}
 
     ac_rm, idc_rm, d = it_cnt * 2, it_cnt, inp["dur"]
-    fg, sg = max(1, math.ceil(ac_rm * 3 / d)), max(1, math.ceil(idc_rm * 1 / d))
-    fp, sp = fg * 1, sg * 2
-    fm, sm = ac_rm * 1 * 3, idc_rm * 2 * 1
-    cp, cm = (3, 3 * d) if is_liquid(inp["ac"]) else (0, 0)
-    ip, im = math.ceil(inp["mw"] / 10) * 1, math.ceil(inp["mw"] / 10) * 1 * 1
+
+    # hvac_light: 强制风冷轻路径（混合项目的液冷部分通常复用现有冷源）
+    use_liquid = is_liquid(inp["ac"]) and not hvac_light
+
+    if use_liquid:
+        # 水冷/液冷/双冷源
+        fg = max(1, math.ceil(ac_rm * 2 / d))
+        sg = max(1, math.ceil(idc_rm * 1 / d))
+        # type_cfg 可覆盖每组人数和安装检查系数
+        ac_pp = type_cfg.get("hvac_ac_per_group", 3)
+        fp, sp = fg * ac_pp, sg * 5
+        fm, sm = ac_rm * ac_pp * 2, idc_rm * 5 * 1
+        cp, cm = 3, 3 * d
+        install_mult = type_cfg.get("hvac_install_per_mw", 4)
+        ip = math.ceil(inp["mw"] / 10) * install_mult
+        im = ip * 1
+    else:
+        # 风冷
+        fg = max(1, math.ceil(ac_rm * 3 / d))
+        sg = max(1, math.ceil(idc_rm * 1 / d))
+        fp, sp = fg * 1, sg * 2
+        fm, sm = ac_rm * 1 * 3, idc_rm * 2 * 1
+        cp, cm = 0, 0
+        install_mult = type_cfg.get("hvac_install_per_mw", 1)
+        ip = math.ceil(inp["mw"] / 10) * install_mult
+        im = ip * 1
     total_groups = fg + sg + (1 if cp else 0) + 1
 
     return {"空调间数": ac_rm, "机房数": idc_rm,
@@ -266,27 +462,112 @@ def calc_hvac(inp: dict) -> dict:
 # ============================================================================
 
 
-def calc_weak(elec_groups: int, hvac_groups: int) -> dict:
-    """弱电链路：V200.1校准版——电气记录员=ceil(电气总组数/4)，暖通记录员=暖通总组数"""
-    elec_rec = max(1, math.ceil(elec_groups / 4))
-    return {"主测": 1, "电气记录员": elec_rec, "暖通记录员": hvac_groups,
-            "记录员小计": elec_rec + hvac_groups, "小计": 1 + elec_rec + hvac_groups}
+def calc_weak(elec_groups: int, hvac_groups: int, skip_recorders: bool = False, type_cfg: dict = None) -> dict:
+    """弱电链路：按组数配置，一组电气/暖通配一个弱电记录员"""
+    if type_cfg is None:
+        type_cfg = {}
+    # 如果配置了 fixed weak_count，直接使用
+    wc = type_cfg.get("weak_count")
+    if wc is not None:
+        return {"主测": 1, "记录员": wc - 1, "小计": wc}
+    if skip_recorders:
+        return {"主测": 1, "电气记录员": elec_groups, "暖通记录员": 0,
+                "记录员小计": elec_groups, "小计": 1 + elec_groups}
+    return {"主测": 1, "电气记录员": elec_groups, "暖通记录员": hvac_groups,
+            "记录员小计": elec_groups + hvac_groups, "小计": 1 + elec_groups + hvac_groups}
 
 
-def calc_fire(cabs: int) -> dict:
-    """消防链路：基础2人(1主测+1测试员)，超850柜每+850+1人，上限5人"""
+def calc_fire(cabs: int, type_cfg: dict = None) -> dict:
+    """消防链路：基础2人(1主测+1测试员)，超850柜每+850+1人，上限5人。可按项目类型配置固定人数。"""
+    if type_cfg and type_cfg.get("fire_count"):
+        n = type_cfg["fire_count"]
+        return {"主测": 1, "测试员": n - 1, "小计": n}
     extra = 0 if cabs <= 850 else min(math.floor((cabs - 850) / 850), 3)
     return {"主测": 1, "测试员": 1 + extra, "小计": 2 + extra}
 
 
-def calc_fixed() -> dict:
-    """固定管理：项目经理+资料员+电气主测+暖通主测+工程师×2"""
-    return {"项目经理": 1, "资料员": 1, "电气主测": 1, "暖通主测": 1, "工程师": 2, "小计": 6}
+def calc_fixed(type_cfg: dict = None) -> dict:
+    """固定管理：根据项目类型调整人数（弱电/消防主测已在专业链路计数）"""
+    if type_cfg is None:
+        type_cfg = {}
+    n = type_cfg.get("fixed_count", 4)
+    if n <= 2:
+        return {"项目经理": 1, "电气主测": 1, "小计": 2}
+    elif n == 3:
+        return {"项目经理": 1, "资料员": 1, "电气主测": 1, "小计": 3}
+    elif n == 5:
+        return {"项目经理": 1, "电气主测": 2, "暖通主测": 2, "小计": 5}
+    else:
+        return {"项目经理": 1, "资料员": 1, "电气主测": 1, "暖通主测": 1, "小计": 4}
 
 
-def calc_gen() -> dict:
-    """柴发链路"""
+def calc_gen(type_cfg: dict = None) -> dict:
+    """柴发链路（增项项目无新建柴发，跳过）"""
+    if type_cfg is None:
+        type_cfg = {}
+    if type_cfg.get("skip_gen", False):
+        return {"主测": 0, "记录员": 0, "小计": 0}
     return {"主测": 1, "记录员": 1, "小计": 2}
+
+
+# ============================================================================
+# 工器具
+# ============================================================================
+
+
+def calc_tools(elec_groups: int, total_cabinets: int,
+               it_parallel: int = 0, pw_parallel: int = 0, hb_parallel: int = 0,
+               type_cfg: dict = None, dur: int = 28) -> dict:
+    """计算工器具需求（基于实际项目数据校准）
+
+    电气工具按IT并行组为主分配，动力/混合组共享；暖通工具按机房数分配。
+    风液混合类型通过 tool_adjust 补偿额外的工具需求。
+    天数按项目工期，即工器具按全程配置。
+    """
+    it_n = it_parallel or max(elec_groups // 2, 1)
+    pw_hb_n = max(pw_parallel + hb_parallel, 0)
+    hvac_rooms = math.ceil(total_cabinets / 300)
+
+    # 电气：以单套IT变压器链路为基准（王志强标准）
+    # 每链路: 电能435×2, 万用表×3, 钳形电流表×3(含381×1), 热成像×4, 相序仪×2, 971×2, 噪声×1
+    elec_per = {
+        "电能质量分析仪435": 2 * it_n,
+        "电能质量分析仪1775": max(it_n // 2, 1),
+        "万用表": 3 * it_n,
+        "钳形电流表": 3 * it_n,
+        "钳形电流表381": 1 * it_n,
+        "钳形电流表319": 0,
+        "热成像": 4 * it_n,
+        "相序仪": 2 * it_n,
+        "温湿度仪971": 2 * it_n,
+        "点温枪": 1,
+        "振动仪": 1,
+        "噪声仪": 1 * it_n,
+        "电池内阻仪": 1,
+    }
+    # 暖通：以单个机房为单位（~300柜/机房），王志强标准
+    # 971×4, 风速仪×2, 热成像×2（工具共用，不乘机房数）
+    hvac_per = {
+        "温湿度仪971_暖通": 4,
+        "风速仪": 2,
+        "热成像_暖通": 2,
+    }
+
+    # 应用项目类型的工具系数调整（双侧都可能存在，只调基值>0的）
+    if type_cfg:
+        adjust = type_cfg.get("tool_adjust", {})
+        for k, v in adjust.items():
+            if k in elec_per:
+                elec_per[k] = max(0, elec_per[k] + v)
+            if k in hvac_per:
+                hvac_per[k] = max(0, hvac_per[k] + v)
+
+    return {
+        "电气工器具": elec_per,
+        "暖通工器具": hvac_per,
+        "暖通基准机房数": hvac_rooms,
+        "天数": dur,
+    }
 
 
 # ============================================================================
@@ -295,31 +576,116 @@ def calc_gen() -> dict:
 
 
 def calculate(inp: dict, cfg: dict) -> dict:
-    """主计算函数"""
-    it = calc_elec("it", "it", inp, cfg)
-    pw = calc_elec("power", "power", inp, cfg)
-    hb = calc_elec("hybrid", "hybrid", inp, cfg)
+    """主计算函数：自动识别项目类型，按类型配置参数
+
+    如果 inp 中有 target_dur，则作为目标工期参与并行计算（压缩工期模式）。
+    """
+    proj_type = detect_project_type(inp)
+    small = is_small_project(inp)
+    type_cfg = get_type_config(cfg, proj_type, small)
+
+    # 工期：优先使用 target_dur（压缩工期），否则用原始工期
+    eff_dur = inp.get("target_dur") or inp["dur"]
+    # 如果压缩工期，自动启用紧凑排期（4天/台）
+    is_compressed = inp.get("target_dur") is not None and inp["target_dur"] < inp["dur"]
+
+    # 临时覆盖工期和紧凑标志
+    orig_dur = inp["dur"]
+    orig_tight = inp.get("tight", False)
+    if eff_dur != orig_dur:
+        inp["dur"] = eff_dur
+    if is_compressed:
+        inp["tight"] = True
+
+    it = calc_elec("it", "it", inp, cfg, type_cfg)
+    pw = calc_elec("power", "power", inp, cfg, type_cfg)
+    hb = calc_elec("hybrid", "hybrid", inp, cfg, type_cfg)
 
     elec_on = it["在场"] + pw["在场"] + hb["在场"]
     elec_groups = it["并行数"] + pw["并行数"] + hb["并行数"]
 
-    hvac = calc_hvac(inp)
-    gen = calc_gen()
-    weak = calc_weak(elec_groups, hvac["暖通总组数"])
-    fire = calc_fire(inp["cabs"])
-    fixed = calc_fixed()
-    loads = calc_loads(inp, cfg, it_parallel=it["并行数"])
+    hvac = calc_hvac(inp, type_cfg)
+    gen = calc_gen(type_cfg)
+    weak = calc_weak(elec_groups, hvac["暖通总组数"], type_cfg.get("skip_recorders", False), type_cfg)
+    fire = calc_fire(inp["cabs"], type_cfg)
+    fixed = calc_fixed(type_cfg)
+    loads = calc_loads(inp, cfg, it_parallel=it["并行数"], type_cfg=type_cfg)
+    tools = calc_tools(elec_groups, inp["cabs"],
+                       it["并行数"], pw["并行数"], hb["并行数"],
+                       type_cfg, eff_dur)
 
-    d = inp["dur"]
+    d = eff_dur
     peak = elec_on + hvac["峰值在场"] + gen["小计"] + weak["小计"] + fire["小计"] + fixed["小计"]
     total_md = (it["人天"] + pw["人天"] + hb["人天"] + hvac["总人天"]
                 + gen["小计"] * d + weak["小计"] * d + fire["小计"] * d + fixed["小计"] * d)
 
-    return {"项目信息": {"总容量": f"{inp['mw']}MW", "工期": f"{d}天",
-                         "机柜功率": inp["cp_disp"], "机柜数": inp["cabs"], "空调": inp["ac"]},
+    # 恢复原始值
+    inp["dur"] = orig_dur
+    inp["tight"] = orig_tight
+
+    return {"项目信息": {"总容量": f"{inp['mw']}MW",
+                         "工期": f"{eff_dur}天",
+                         "原始工期": f"{orig_dur}天",
+                         "机柜功率": inp["cp_disp"], "机柜数": inp["cabs"], "空调": inp["ac"],
+                         "项目类型": proj_type},
             "IT链路": it, "动力链路": pw, "混合链路": hb,
             "暖通": hvac, "柴发": gen, "弱电": weak, "消防": fire, "固定人员": fixed,
-            "负载": loads, "汇总": {"峰值同时在场": peak, "总人天": total_md}}
+            "负载": loads, "工器具": tools,
+            "汇总": {"峰值同时在场": peak, "总人天": total_md}}
+
+
+def calculate_scenarios(inp: dict, cfg: dict, target_dur: int = None) -> dict:
+    """多版本工期计算
+
+    如果指定 target_dur，则只计算该压缩版本。
+    否则默认输出 3 个版本：标准（6天/台，原始工期）、紧凑（6天/台，75%工期）、压缩（4天/台，50%工期）。
+
+    越压缩 → 并行组数越多 → 峰值越高，这是正确的商业逻辑。
+    """
+    base_dur = inp["dur"]
+
+    if target_dur is not None:
+        scenarios = [(f"压缩至{target_dur}天", target_dur)]
+    else:
+        tight_dur = max(int(base_dur * 0.75), 7)
+        comp_dur = max(int(base_dur * 0.5), 5)
+        scenarios = [
+            (f"标准({base_dur}天)", base_dur, False),       # 6天/台
+            (f"紧凑({tight_dur}天)", tight_dur, False),      # 6天/台, 压缩工期 → 更多并行
+            (f"压缩({comp_dur}天)", comp_dur, True),          # 4天/台, 更压缩 → 最多并行
+        ]
+
+    results = {}
+    for item in scenarios:
+        if len(item) == 3:
+            label, dur, tight = item
+        else:
+            label, dur = item
+            tight = (dur < base_dur * 0.6)
+
+        inp_copy = dict(inp)
+        if dur != base_dur:
+            inp_copy["target_dur"] = dur
+        else:
+            inp_copy["target_dur"] = None
+        if tight:
+            inp_copy["tight"] = True
+        results[label] = calculate(inp_copy, cfg)
+
+    # Build summary
+    summary = {}
+    for label, r in results.items():
+        summary[label] = {
+            "工期": r["项目信息"]["工期"],
+            "峰值同时在场": r["汇总"]["峰值同时在场"],
+            "总人天": r["汇总"]["总人天"],
+            "IT并行组数": r["IT链路"]["并行数"],
+            "动力并行组数": r["动力链路"]["并行数"],
+            "混合并行组数": r["混合链路"]["并行数"],
+            "每台IT人数": r["IT链路"]["每台人数"],
+        }
+
+    return {"多版本对比": summary, "详细结果": results}
 
 
 # ============================================================================
@@ -333,6 +699,7 @@ def main():
     ap.add_argument("--input", "-i", help="输入JSON文件路径")
     ap.add_argument("json_str", nargs="?", help="JSON字符串")
     ap.add_argument("--output", "-o", help="输出JSON文件路径")
+    ap.add_argument("--target-duration", "-t", type=int, help="指定压缩工期（天），不指定则输出标准+紧凑+压缩三个版本")
     ap.add_argument("--version", "-v", action="version", version=f"V{__version__}")
     args = ap.parse_args()
 
@@ -351,11 +718,23 @@ def main():
             d = json.load(f)
     elif args.json_str:
         d = json.loads(args.json_str)
+    elif not sys.stdin.isatty():
+        d = json.load(sys.stdin)
     else:
         print("错误：请提供 --input 或 JSON字符串"); sys.exit(1)
 
     inp = make_input(d)
-    result = calculate(inp, cfg)
+
+    # 如果命令行指定了 target-duration，覆盖输入中的值
+    if args.target_duration is not None:
+        inp["target_dur"] = args.target_duration
+        result = calculate(inp, cfg)
+    elif inp.get("target_dur") is not None:
+        # 输入 JSON 中指定了 target_duration
+        result = calculate(inp, cfg)
+    else:
+        # 默认：输出多版本
+        result = calculate_scenarios(inp, cfg)
 
     if args.output:
         with open(args.output, "w", encoding="utf-8") as f:
@@ -367,3 +746,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

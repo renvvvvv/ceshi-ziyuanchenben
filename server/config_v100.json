@@ -1,0 +1,136 @@
+{
+  "_comment": "V200配置文件 - 数据中心测试资源规划",
+  "_version": "200.0.0",
+  "_note": "IT负载按并行基数×每单元配置×1.1冗余；含动力+IT混合变压器类型",
+
+  "load_config": {
+    "unit_mw": 1.1,
+    "redundancy": 1.1,
+    "coverage": 0.52,
+    "coverage_hybrid": 0.85,
+    "coverage_liquid_hybrid": 1.15,
+    "_note": "机架式假负载覆盖率（默认55%机柜同时压测），冗余系数1.1"
+  },
+
+  "it_load_per_mw": {
+    "_note": "按单机柜功率配置负载数量（基于并行测试组数）",
+    "12": {"6kw": 90, "8kw": 90, "per_cabinet": 2, "cabinets_per_unit": 92},
+    "16": {"6kw": 140, "8kw": 70, "per_cabinet": 3, "cabinets_per_unit": 69},
+    "18": {"6kw": 125, "8kw": 65, "per_cabinet": 3, "cabinets_per_unit": 61},
+    "20": {"6kw": 110, "8kw": 110, "per_cabinet": 4, "cabinets_per_unit": 55},
+    "22": {"6kw": 100, "8kw": 100, "per_cabinet": 4, "cabinets_per_unit": 50},
+    "24": {"6kw": 90, "8kw": 90, "per_cabinet": 4, "cabinets_per_unit": 45},
+    "26": {"6kw": 90, "8kw": 90, "per_cabinet": 4, "cabinets_per_unit": 42}
+  },
+
+  "power_load_config": {
+    "_note": "动力/混合变压器集中式负载配置（按最大容量查表）",
+    "1.3": {"500kw": 2, "300kw": 0},
+    "2.3": {"500kw": 4, "300kw": 1},
+    "3.1": {"500kw": 5, "300kw": 0}
+  },
+
+  "owned_loads": {
+    "_note": "自有负载库存数量",
+    "6kw": 1000,
+    "8kw": 1000
+  },
+
+  "staff_per_transformer": {
+    "_note": "每台变压器所需测试人员数（默认值，会被 project_type_config 覆盖）",
+    "it": 6,
+    "power": 4,
+    "hybrid": 5
+  },
+
+  "hybrid_it_extra": 1,
+
+  "liquid_load_config": {
+    "_note": "液冷30kW负载配置，公式 ceil(变压器容量kW/30)×并行数×1.1冗余",
+    "load_kw": 30
+  },
+
+  "project_type_config": {
+    "_note": "项目类型按空调+机柜分类：风冷/水冷/液冷/风液混合/阿里巴拿马3.0",
+    "阿里巴拿马3.0": {
+      "_note": "阿里巴拿马3.0架构：水冷空调+风冷机柜，精简要配置，无记录员",
+      "staff_per_transformer": {"it": 2, "power": 1, "hybrid": 2},
+      "hybrid_it_extra": 0,
+      "parallel_min": 1,
+      "hvac_light": true,
+      "skip_gen": true,
+      "skip_recorders": true,
+      "fixed_count": 5,
+      "tool_adjust": {"电能质量分析仪435": 1, "万用表": -2, "热成像": -2, "温湿度仪971_暖通": 2, "风速仪": 2, "钳形电流表381": 2},
+      "load_coverage": 2.0
+    },
+    "风冷": {
+      "_note": "风冷空调+风冷机柜，轻HVAC路径，6/8kW负载。校准基准：乌兰A1(25MW/28d)",
+      "staff_per_transformer": {"it": 5, "power": 3, "hybrid": 4},
+      "hybrid_it_extra": 0,
+      "parallel_min": 1,
+      "hvac_light": false,
+      "skip_gen": false,
+      "skip_recorders": true,
+      "fixed_count": 4,
+      "fire_count": 6,
+      "tool_adjust": {"电能质量分析仪435": 2, "万用表": 1, "钳形电流表": -1, "钳形电流表381": -1, "热成像": -2, "相序仪": -5, "噪声仪": -1}
+    },
+    "水冷": {
+      "_note": "水冷/冷冻水空调+风冷机柜，重HVAC路径（含前端冷源），6/8kW负载。校准基准：安次D1(30MW/20d)",
+      "staff_per_transformer": {"it": 7, "power": 4, "hybrid": 4},
+      "hybrid_it_extra": 0,
+      "parallel_min": 1,
+      "hvac_light": false,
+      "skip_gen": false,
+      "skip_recorders": true,
+      "weak_count": 4,
+      "load_6kw_max_kw": 11,
+      "load_coverage": 0.46,
+      "fixed_count": 4,
+      "fire_count": 4,
+      "hvac_ac_per_group": 2,
+      "hvac_install_per_mw": 2,
+      "tool_adjust": {"电能质量分析仪435": 1, "电能质量分析仪1775": -1, "万用表": -8, "钳形电流表": -8, "钳形电流表381": -3, "热成像": -5, "温湿度仪971_暖通": -2, "噪声仪": -2, "相序仪": -6}
+    },
+    "液冷": {
+      "_note": "水冷空调+液冷机柜，重HVAC路径（含前端冷源、安装检查），30kW负载。校准基准：30MW液冷(28d)",
+      "staff_per_transformer": {"it": 4, "power": 2, "hybrid": 3},
+      "hybrid_it_extra": 0,
+      "parallel_min": 1,
+      "hvac_light": false,
+      "skip_gen": false,
+      "skip_recorders": true,
+      "weak_count": 7,
+      "fixed_count": 4,
+      "fire_count": 1,
+      "tool_adjust": {"电能质量分析仪435": 1, "热成像": 1}
+    },
+    "风液混合": {
+      "_note": "水冷空调+风冷&液冷机柜，完整HVAC路径（含前端冷源），6/8kW+30kW负载。校准基准：太仓17#(40MW/21d)",
+      "staff_per_transformer": {"it": 4, "power": 2, "hybrid": 3},
+      "hybrid_it_extra": 0,
+      "parallel_min": 1,
+      "hvac_light": false,
+      "skip_gen": false,
+      "skip_recorders": true,
+      "weak_count": 5,
+      "fixed_count": 4,
+      "fire_count": 6,
+      "load_6kw_max_kw": 11,
+      "load_coverage": 0.60,
+      "coverage_liquid_hybrid": 0.91,
+      "liquid_load_kw": 35,
+      "hvac_install_per_mw": 2,
+      "hvac_ac_per_group": 2,
+      "tool_adjust": {"电能质量分析仪435": -2, "电能质量分析仪1775": -1, "热成像": -12, "热成像_暖通": -2, "万用表": -11, "钳形电流表": -11, "钳形电流表381": -4, "温湿度仪971": -6, "相序仪": -8}
+    }
+  },
+
+  "days_per_transformer": {
+    "_note": "每台变压器标准测试天数，紧凑排期(tight_schedule)为4天",
+    "functional_test": 4,
+    "install_check": 2,
+    "total": 6
+  }
+}

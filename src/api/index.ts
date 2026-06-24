@@ -74,8 +74,12 @@ export interface CalcInput {
   cabinet_power_segments?: { power: number; count: number }[];
   it_transformers: [number, number][];
   power_transformers: [number, number][];
+  hybrid_transformers?: [number, number][];
   total_cabinets?: number;
   ac_type: string;
+  project_type?: string;
+  target_duration?: number;
+  tight_schedule?: boolean;
 }
 
 export interface CalcResponse {
