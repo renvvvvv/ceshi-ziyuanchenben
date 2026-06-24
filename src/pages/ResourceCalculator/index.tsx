@@ -205,7 +205,7 @@ function ResourceCalculator() {
       if (!input) { setCalcLoading(false); return; }
       try {
         const res = await apiCalcResource(input);
-        const data = res.data as Record<string, unknown>;
+        const data = (res?.data ?? res) as unknown as Record<string, unknown>;
         if (data['多版本对比'] && data['详细结果']) {
           const detailResults = data['详细结果'] as Record<string, Record<string, unknown>>;
           const normalized: Record<string, ResourceReport> = {};
