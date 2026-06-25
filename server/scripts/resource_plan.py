@@ -793,7 +793,7 @@ def main():
     args = ap.parse_args()
 
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    for candidate in ["config_v100.json", "config_v7.json", "../config_v7.json"]:
+    for candidate in ["config_v100.json", "../config_v100.json", "config_v7.json", "../config_v7.json"]:
         fp = os.path.join(script_dir, candidate)
         if os.path.exists(fp):
             with open(fp, encoding="utf-8") as f:

@@ -36,12 +36,9 @@ function ResourceCalculator() {
 
   // 单算
   const [report, setReport] = useState<ResourceReport | null>(null);
-  const [multiReports, setMultiReports] = useState<Record<string, ResourceReport> | null>(null);
-  const [multiSummary, setMultiSummary] = useState<Record<string, Record<string, unknown>> | null>(null);
   const [currentInput, setCurrentInput] = useState<ResourceInput | null>(null);
   const [calcLoading, setCalcLoading] = useState(false);
   const [singleModalOpen, setSingleModalOpen] = useState(false);
-  const [activeVersion, setActiveVersion] = useState<string>('');
 
   // 群算
   const [batchResults, setBatchResults] = useState<BatchReportRow[]>([]);
@@ -73,8 +70,10 @@ function ResourceCalculator() {
     try {
       const res = await apiGetHistory(page, size, filterType, filterDate);
       if (res.success && res.data) {
-        setHistoryData(res.data.items || []);
-        setHistoryTotal(res.data.total || 0);
+        const items = Array.isArray(res.data) ? res.data : ((res.data as unknown as { items: HistoryGroupItem[] }).items || []);
+        const total = Array.isArray(res.data) ? ((res as unknown as { total: number }).total || 0) : ((res.data as unknown as { total: number }).total || 0);
+        setHistoryData(items);
+        setHistoryTotal(total);
       } else {
         setHistoryData([]);
         setHistoryTotal(0);
@@ -105,17 +104,12 @@ function ResourceCalculator() {
         total_cabinets: item.total_cabinets || 1150, ac_type: item.ac_type || '风冷',
       };
       setCurrentInput(input);
-      setMultiReports(null); setMultiSummary(null); setReport(null);
+      setReport(null);
       if (r['多版本对比'] && r['详细结果']) {
         const detailResults = r['详细结果'] as Record<string, Record<string, unknown>>;
-        const normalized: Record<string, ResourceReport> = {};
-        for (const [key, val] of Object.entries(detailResults)) {
-          normalized[key] = normalizeReport(val, input);
-        }
-        setMultiReports(normalized);
-        setMultiSummary(r['多版本对比'] as Record<string, Record<string, unknown>>);
-        const keys = Object.keys(normalized);
-        setActiveVersion(keys.find(k => k.includes('标准')) || keys[0]);
+        const keys = Object.keys(detailResults);
+        const stdKey = keys.find(k => k.includes('标准')) || keys[0];
+        setReport(normalizeReport(detailResults[stdKey], input));
       } else {
         setReport(normalizeReport(r as Record<string, unknown>, input));
       }
@@ -135,7 +129,6 @@ function ResourceCalculator() {
         power_transformers: parseItTrans(item.power_transformers || '[[1.25,6]]'),
         total_cabinets: item.total_cabinets || 1150, ac_type: item.ac_type || '风冷',
       };
-      // 检测多版本，取标准版导出
       let report: ResourceReport;
       if (r['多版本对比'] && r['详细结果']) {
         const detailResults = r['详细结果'] as Record<string, Record<string, unknown>>;
@@ -191,7 +184,6 @@ function ResourceCalculator() {
       total_cabinets: totalCabs,
       project_type: values.project_type,
       ac_type: values.project_type === '风冷' ? '风冷' : '水冷',
-      target_duration: values.target_duration || undefined,
       cert_name: values.cert_name || undefined,
       cert_scope: values.cert_scope || undefined,
       pdu_type: values.pdu_type || undefined,
@@ -207,26 +199,18 @@ function ResourceCalculator() {
       try {
         const res = await apiCalcResource(input);
         const data = (res?.data ?? res) as unknown as Record<string, unknown>;
+        let result: Record<string, unknown>;
         if (data['多版本对比'] && data['详细结果']) {
           const detailResults = data['详细结果'] as Record<string, Record<string, unknown>>;
-          const normalized: Record<string, ResourceReport> = {};
-          for (const [key, r] of Object.entries(detailResults)) {
-            normalized[key] = normalizeReport(r, input);
-          }
-          setMultiReports(normalized);
-          setMultiSummary(data['多版本对比'] as Record<string, Record<string, unknown>>);
-          const keys = Object.keys(normalized);
+          const keys = Object.keys(detailResults);
           const stdKey = keys.find(k => k.includes('标准')) || keys[0];
-          setActiveVersion(stdKey);
-          setReport(null);
+          result = detailResults[stdKey];
         } else {
-          setMultiReports(null); setMultiSummary(null);
-          const normalized = normalizeReport(data, input);
-          setReport(normalized);
+          result = data;
         }
+        setReport(normalizeReport(result, input));
       } catch (e) {
         console.error('[normalizeReport] 失败，回退到本地计算:', e);
-        setMultiReports(null); setMultiSummary(null);
         setReport(calculateResource(input));
       }
       setCurrentInput(input);
@@ -322,18 +306,7 @@ function ResourceCalculator() {
     );
   }
 
-  // ============ 单算结果页（多版本） ============
-  if (mode === 'single' && multiReports && multiSummary && currentInput) {
-    return <MultiVersionResultView
-      multiReports={multiReports} multiSummary={multiSummary}
-      activeVersion={activeVersion} setActiveVersion={setActiveVersion}
-      input={currentInput}
-      onExport={(report) => exportReportToExcel(currentInput!, report)}
-      onBack={goHome}
-    />;
-  }
-
-  // ============ 单算结果页（单版本） ============
+  // ============ 单算结果页 ============
   if (mode === 'single' && report && currentInput) {
     return <SingleResultView
       report={report} input={currentInput}
@@ -569,9 +542,6 @@ function ResourceCalculator() {
           <Form.Item name="cert_scope" label="认证范围（可选）">
             <Input placeholder="如：电气、暖通等链路" />
           </Form.Item>
-          <Form.Item name="target_duration" label="目标工期/天（可选，不填则输出多版本）">
-            <InputNumber min={5} max={365} style={{ width: '100%' }} placeholder="留空=标准+紧凑+压缩三版" />
-          </Form.Item>
         </Form>
       </Modal>
 
@@ -623,88 +593,6 @@ function ResourceCalculator() {
           />
         )}
       </Modal>
-    </div>
-  );
-}
-
-// ============ 多版本结果页 ============
-
-function MultiVersionResultView({ multiReports, multiSummary, activeVersion, setActiveVersion, input, onExport, onBack }: {
-  multiReports: Record<string, ResourceReport>;
-  multiSummary: Record<string, Record<string, unknown>>;
-  activeVersion: string; setActiveVersion: (v: string) => void;
-  input: ResourceInput; onExport: (report: ResourceReport) => void; onBack: () => void;
-}) {
-  const versions = Object.keys(multiReports);
-  const curVersion = versions.includes(activeVersion) ? activeVersion : (versions[0] || '');
-  const report = multiReports[curVersion];
-
-  // 多版本对比表
-  const compColumns = [
-    { title: '版本', dataIndex: 'version', key: 'version', width: 140, render: (v: string) => <Text strong>{v}</Text> },
-    { title: '工期', dataIndex: 'dur', key: 'dur', width: 80 },
-    { title: '峰值在场', dataIndex: 'peak', key: 'peak', width: 90 },
-    { title: '总人天', dataIndex: 'md', key: 'md', width: 90 },
-    { title: 'IT并行', dataIndex: 'itP', key: 'itP', width: 70 },
-    { title: '动力并行', dataIndex: 'pwP', key: 'pwP', width: 75 },
-    { title: '混合并行', dataIndex: 'hbP', key: 'hbP', width: 75 },
-    { title: '每台IT人数', dataIndex: 'itPer', key: 'itPer', width: 90 },
-    { title: '平均人数', dataIndex: 'avg', key: 'avg', width: 80 },
-  ];
-  const compData = versions.map((v, i) => {
-    const s = multiSummary[v] || {};
-    return {
-      key: i, version: v,
-      dur: s['工期'] || '-',
-      peak: String(s['峰值同时在场'] ?? '-'),
-      md: String(s['总人天'] ?? '-'),
-      itP: String(s['IT并行组数'] ?? '-'),
-      pwP: String(s['动力并行组数'] ?? '-'),
-      hbP: String(s['混合并行组数'] ?? '-'),
-      itPer: String(s['每台IT人数'] ?? '-'),
-      avg: s['总人天'] ? Math.round(Number(s['总人天']) / Number(String(s['工期']).replace('天', '')) * 10) / 10 : '-',
-    };
-  });
-
-  if (!report) {
-    return (
-      <div style={{ padding: 40, textAlign: 'center' }}>
-        <Title level={4}>计算结果加载失败</Title>
-        <Button onClick={onBack}>返回首页</Button>
-      </div>
-    );
-  }
-
-  // 用 Tabs 展示不同版本，每个 tab 是独立版本详情
-  const versionTabs = versions.map((v) => ({
-    key: v,
-    label: v,
-    children: <SingleResultView report={multiReports[v]} input={input} onExport={() => onExport(multiReports[v])} onBack={() => {}} embedded />,
-  }));
-
-  return (
-    <div>
-      <div className="page-header">
-        <div>
-          <Title level={3} style={{ margin: 0 }}><CalculatorOutlined style={{ marginRight: 8 }} />计算结果 — 多版本对比</Title>
-          <Text type="secondary">{input.total_mw}MW / {input.total_duration}天 / {input.ac_type}</Text>
-        </div>
-        <Space>
-          <Button icon={<ExportOutlined />} type="primary" onClick={() => onExport(report)}>导出当前版本Excel</Button>
-          <Button onClick={onBack}>← 返回首页</Button>
-        </Space>
-      </div>
-
-      <Card title="版本对比" size="small" style={{ marginBottom: 16 }}>
-        <Table columns={compColumns} dataSource={compData} pagination={false} size="small" bordered
-          onRow={(r) => ({
-            onClick: () => setActiveVersion(r.version),
-            style: { cursor: 'pointer', fontWeight: r.version === activeVersion ? 'bold' : 'normal', background: r.version === activeVersion ? '#e6f4ff' : undefined },
-          })}
-        />
-      </Card>
-
-      <Tabs activeKey={curVersion} onChange={setActiveVersion} items={versionTabs} size="large" />
     </div>
   );
 }

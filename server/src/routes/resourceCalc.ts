@@ -7,7 +7,7 @@ import { tmpdir } from 'os';
 import db from '../database.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const SCRIPTS_DIR = join(__dirname, '..', '..', '..', 'scripts');
+const SCRIPTS_DIR = join(__dirname, '..', '..', 'scripts');
 const PY = process.platform === 'win32' ? 'python' : 'python3';
 
 const router = Router();
@@ -17,7 +17,7 @@ function runPy(jsonInput: Record<string, unknown>): Promise<string> {
     const tmpFile = join(tmpdir(), `rc_${Date.now()}.json`);
     writeFileSync(tmpFile, JSON.stringify(jsonInput), 'utf-8');
     const script = join(SCRIPTS_DIR, 'resource_plan.py');
-    execFile(PY, [script, '--input', tmpFile], { cwd: SCRIPTS_DIR, maxBuffer: 10 * 1024 * 1024, env: { ...process.env, PATH: process.env.PATH + ';C:\\Program Files\\Python39' } }, (err, stdout, stderr) => {
+    execFile(PY, [script, '--input', tmpFile], { cwd: SCRIPTS_DIR, maxBuffer: 10 * 1024 * 1024, env: { ...process.env, PYTHONIOENCODING: 'utf-8', PATH: process.env.PATH + ';C:\\Program Files\\Python39' } }, (err, stdout, stderr) => {
       try { unlinkSync(tmpFile); } catch {}
       if (err) reject(new Error(stderr || err.message));
       else resolve(stdout);
@@ -53,7 +53,6 @@ router.post('/', async (req: Request, res: Response) => {
     };
     if (segs.length > 0) pyInput.cabinet_power_segments = segs;
     if (input.project_type) pyInput.project_type = input.project_type;
-    if (input.target_duration) pyInput.target_duration = input.target_duration;
     if (input.hybrid_transformers?.length) pyInput.hybrid_transformers = input.hybrid_transformers;
     if (input.tight_schedule) pyInput.tight_schedule = input.tight_schedule;
     if (input.cert_name) pyInput.cert_name = input.cert_name;

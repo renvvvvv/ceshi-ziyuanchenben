@@ -125,8 +125,14 @@ const dbWrapper = new DbWrapper();
 
 export async function initDatabase(): Promise<DbWrapper> {
   await dbWrapper.ready();
-  const initSqlPath = join(__dirname, '..', '..', 'note', 'init.sql');
-  if (existsSync(initSqlPath)) {
+  const possiblePaths = [
+    join(__dirname, '..', '..', 'scripts', 'init.sql'),
+    join(__dirname, '..', '..', '..', 'scripts', 'init.sql'),
+    join(__dirname, '..', '..', 'note', 'init.sql'),
+    join(__dirname, '..', '..', '..', 'note', 'init.sql'),
+  ];
+  const initSqlPath = possiblePaths.find(p => existsSync(p));
+  if (initSqlPath) {
     const initSql = readFileSync(initSqlPath, 'utf-8');
     dbWrapper.exec(initSql);
     console.log('[DB] Schema initialized (sql.js)');

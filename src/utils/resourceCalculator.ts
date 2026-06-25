@@ -18,7 +18,6 @@ export interface ResourceInput {
   total_cabinets?: number;
   ac_type: string;
   project_type?: string;
-  target_duration?: number;
   tight_schedule?: boolean;
   cert_name?: string;
   cert_scope?: string;

@@ -78,7 +78,6 @@ export interface CalcInput {
   total_cabinets?: number;
   ac_type: string;
   project_type?: string;
-  target_duration?: number;
   tight_schedule?: boolean;
 }
 
