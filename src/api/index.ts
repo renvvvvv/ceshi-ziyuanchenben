@@ -186,12 +186,10 @@ export interface ProjectDTO {
   name: string;
   customer: string;
   status: string;
-  priority: string;
   manager: string;
   start_date: string;
   end_date?: string;
   it_output: number;
-  contract_amount?: number;
   business_type?: string;
   description?: string;
 }

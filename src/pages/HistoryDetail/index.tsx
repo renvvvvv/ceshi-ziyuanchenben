@@ -1,26 +1,26 @@
 import { useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Descriptions, Timeline, Button, Breadcrumb, Card, Avatar, Empty, Tag, Upload, message, Modal } from 'antd';
-import { EditOutlined, ArrowLeftOutlined, HomeOutlined, ProjectOutlined, DeleteOutlined, UploadOutlined, FileOutlined } from '@ant-design/icons';
+import { ArrowLeftOutlined, HomeOutlined, ProjectOutlined, FileOutlined, HistoryOutlined, LinkOutlined, DownloadOutlined, DeleteOutlined, UploadOutlined } from '@ant-design/icons';
 import type { UploadFile } from 'antd/es/upload/interface';
 import StatusTag from '../../components/StatusTag';
-import ProjectModal from '../../components/ProjectModal';
-import { mockProjects, mockProjectPhases } from '../../data/mock';
-import type { Project, ProjectPhase, ProjectPhaseFile } from '../../types';
+import { mockHistoryProjects, mockHistoryPhases, mockHistoryPhasesPartial } from '../../data/mock';
+import type { ProjectPhase, ProjectPhaseFile } from '../../types';
 
-const PHASE_STATUS_CONFIG: Record<string, { color: string; dotColor: string; label: string }> = {
-  pending:    { color: '#8c8c8c', dotColor: '#8c8c8c', label: '待开始' },
-  in_progress: { color: '#4d9fff', dotColor: '#1677ff', label: '进行中' },
-  completed:  { color: '#52c41a', dotColor: '#52c41a', label: '已完成' },
+const PHASE_STATUS_CONFIG: Record<string, { color: string; label: string }> = {
+  pending: { color: '#8c8c8c', label: '待开始' },
+  in_progress: { color: '#4d9fff', label: '进行中' },
+  completed: { color: '#52c41a', label: '已完成' },
 };
 
-/** 模拟文件类型图标 */
+/** 文件类型颜色 */
 function getFileIcon(fileType?: string) {
   const map: Record<string, string> = {
     pdf: '#ff4d4f',
     xlsx: '#52c41a',
     docx: '#1890ff',
     pptx: '#faad14',
+    zip: '#b37feb',
     default: '#8c8c8c',
   };
   return map[fileType || ''] || map['default'];
@@ -33,7 +33,6 @@ function formatFileSize(bytes: number): string {
   return (bytes / (1024 * 1024)).toFixed(2) + 'MB';
 }
 
-/** 所有7个阶段的默认模板（全部支持上传） */
 const ALL_PHASE_TEMPLATES = [
   { key: 'bid', name: '🏆 项目中标', description: '签订合同、确认项目范围与交付要求' },
   { key: 'planning', name: '📋 前期资源及计划排布', description: '人员分配、设备准备、测试计划制定、环境确认' },
@@ -44,23 +43,32 @@ const ALL_PHASE_TEMPLATES = [
   { key: 'report', name: '📝 测试报告编写', description: '编制正式测试报告，归档所有交付文档' },
 ];
 
-function ProjectDetail() {
+function HistoryDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [projects, setProjects] = useState<Project[]>(mockProjects);
-  const [phasesMap, setPhasesMap] = useState<Record<string, ProjectPhase[]>>(mockProjectPhases);
-  const [modalOpen, setModalOpen] = useState(false);
 
-  const project = projects.find((p) => p.id === id);
+  const project = useMemo(() => mockHistoryProjects.find((p) => p.id === id), [id]);
+
+  /** 状态管理：归档阶段数据，初始化时合并 mockHistoryPhases / mockHistoryPhasesPartial */
+  const [phasesMap, setPhasesMap] = useState<Record<string, ProjectPhase[]>>(() => {
+    const merged: Record<string, ProjectPhase[]> = {};
+    // 合并全部历史阶段数据，并统一开启上传权限
+    const mergeSource = (source: Record<string, ProjectPhase[]>) => {
+      Object.keys(source).forEach((pid) => {
+        merged[pid] = source[pid].map((p) => ({ ...p, allowUpload: true }));
+      });
+    };
+    mergeSource(mockHistoryPhases);
+    mergeSource(mockHistoryPhasesPartial);
+    return merged;
+  });
 
   /** 获取项目的阶段数据，无数据则返回空模板（全部阶段均支持上传） */
   const phases: ProjectPhase[] = useMemo(() => {
     if (!project) return [];
     if (phasesMap[project.id]) {
-      // 已有数据：确保「项目中标」也允许上传
-      return phasesMap[project.id].map((p) =>
-        p.key === 'bid' ? { ...p, allowUpload: true } : p
-      );
+      // 确保所有阶段（含已完成阶段）都允许上传
+      return phasesMap[project.id].map((p) => ({ ...p, allowUpload: true }));
     }
     // 空模板：全部支持上传
     return ALL_PHASE_TEMPLATES.map((t) => ({
@@ -74,19 +82,29 @@ function ProjectDetail() {
   if (!project) {
     return (
       <div style={{ textAlign: 'center', padding: 80 }}>
-        <Empty description="项目不存在">
-          <Button type="primary" onClick={() => navigate('/projects')}>
-            返回项目列表
+        <Empty description="历史项目不存在">
+          <Button type="primary" onClick={() => navigate('/history')}>
+            返回历史项目
           </Button>
         </Empty>
       </div>
     );
   }
 
-  const handleEdit = (values: Project) => {
-    setProjects(projects.map((p) => (p.id === project.id ? { ...values, id: project.id, updatedAt: new Date().toISOString().slice(0, 10) } : p)));
-    setModalOpen(false);
-  };
+  /** 计算项目总周期 */
+  const totalDays = useMemo(() => {
+    if (!project.startDate || !project.endDate) return null;
+    const start = new Date(project.startDate);
+    const end = new Date(project.endDate);
+    return Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+  }, [project]);
+
+  /** 统计文件总数 */
+  const fileStats = useMemo(() => {
+    const total = phases.reduce((s, p) => s + p.files.length, 0);
+    const completedPhases = phases.filter((p) => p.status === 'completed').length;
+    return { total, completedPhases, totalPhases: phases.length };
+  }, [phases]);
 
   /** 文件上传处理 */
   const handleUpload = (phaseKey: string, fileList: UploadFile[]) => {
@@ -106,7 +124,7 @@ function ProjectDetail() {
       ...phasesMap,
       [project.id]: phases.map((phase) =>
         phase.key === phaseKey
-          ? { ...phase, files: [...phase.files, newFile], status: phase.status === 'pending' ? 'in_progress' : phase.status }
+          ? { ...phase, files: [...phase.files, newFile] }
           : phase
       ),
     });
@@ -135,12 +153,12 @@ function ProjectDetail() {
     });
   };
 
-  /** 渲染单个阶段内容 */
-  const renderPhaseContent = (phase: ProjectPhase, index: number) => {
+  /** 渲染单个阶段内容（支持上传与删除） */
+  const renderPhaseContent = (phase: ProjectPhase) => {
     const config = PHASE_STATUS_CONFIG[phase.status];
     return (
       <div style={{ width: '100%', minHeight: phase.files.length > 0 ? 'auto' : 40 }}>
-        {/* 阶段头部：名称 + 说明 + 状态标签 */}
+        {/* 阶段头部 */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 6 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontWeight: 600, fontSize: 13.5, color: 'rgba(255,255,255,0.9)', lineHeight: 1.3 }}>
@@ -174,7 +192,7 @@ function ProjectDetail() {
           </div>
         )}
 
-        {/* 文件上传区 */}
+        {/* 文件上传区（支持上传与删除） */}
         {phase.allowUpload && (
           <div
             style={{
@@ -195,17 +213,18 @@ function ProjectDetail() {
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'space-between',
-                      padding: '5px 10px',
+                      padding: '6px 10px',
                       borderRadius: 6,
                       background: 'rgba(13,31,60,0.7)',
                       border: '1px solid rgba(255,255,255,0.06)',
+                      transition: 'all 0.2s',
                     }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
                       <FileOutlined style={{ color: getFileIcon(file.fileType), fontSize: 14, flexShrink: 0 }} />
                       <span
                         style={{
-                          color: 'rgba(255,255,255,0.72)',
+                          color: 'rgba(255,255,255,0.78)',
                           fontSize: 12,
                           overflow: 'hidden',
                           textOverflow: 'ellipsis',
@@ -219,14 +238,23 @@ function ProjectDetail() {
                         ({file.fileSize})
                       </span>
                     </div>
-                    <Button
-                      type="text"
-                      size="small"
-                      icon={<DeleteOutlined />}
-                      onClick={() => handleDeleteFile(phase.key, file.id)}
-                      danger
-                      style={{ color: 'rgba(255,77,79,0.45)', fontSize: 11, flexShrink: 0, padding: '0 4px' }}
-                    />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                      <span style={{ color: 'rgba(255,255,255,0.25)', fontSize: 10 }}>
+                        {file.uploadedAt}
+                      </span>
+                      <DownloadOutlined
+                        style={{ color: 'rgba(124,184,255,0.5)', fontSize: 12, cursor: 'pointer' }}
+                        title={`下载：${file.fileName}`}
+                      />
+                      <Button
+                        type="text"
+                        size="small"
+                        icon={<DeleteOutlined />}
+                        onClick={() => handleDeleteFile(phase.key, file.id)}
+                        danger
+                        style={{ color: 'rgba(255,77,79,0.45)', fontSize: 11, padding: '0 4px' }}
+                      />
+                    </div>
                   </div>
                 ))}
               </div>
@@ -255,23 +283,30 @@ function ProjectDetail() {
             </Upload>
           </div>
         )}
+
+        {/* 不允许上传且无文件时显示占位 */}
+        {!phase.allowUpload && phase.files.length === 0 && (
+          <div style={{
+            marginTop: 8, padding: '10px 12px', borderRadius: 8,
+            border: '1px dashed rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.02)',
+            color: 'rgba(255,255,255,0.25)', fontSize: 11.5, textAlign: 'center',
+          }}>
+            暂无归档文件
+          </div>
+        )}
       </div>
     );
   };
 
-  const timelineItems = useMemo(() =>
-    phases.map((phase, index) => ({
-      color:
-        index === phases.length - 1 && phase.status === 'completed'
+  const timelineItems = phases.map((phase) => ({
+    color:
+      phase.status === 'in_progress'
+        ? '#1677ff'
+        : phase.status === 'completed'
           ? '#52c41a'
-          : phase.status === 'in_progress'
-            ? '#1677ff'
-            : phase.status === 'completed'
-              ? '#52c41a'
-              : 'gray',
-      children: renderPhaseContent(phase, index),
-    }))
-  , [phases]);
+          : 'gray',
+    children: renderPhaseContent(phase),
+  }));
 
   return (
     <div style={{ minHeight: 'calc(100vh - 120px)' }}>
@@ -279,12 +314,39 @@ function ProjectDetail() {
         style={{ marginBottom: 16 }}
         items={[
           { title: <><HomeOutlined /> 仪表盘</>, onClick: () => navigate('/dashboard') },
-          { title: <><ProjectOutlined /> 项目管理</>, onClick: () => navigate('/projects') },
+          { title: <><HistoryOutlined /> 历史项目</>, onClick: () => navigate('/history') },
           { title: project.name },
         ]}
       />
 
-      {/* 左右两栏布局：左侧信息卡片固定高度，右侧时间线自适应铺满 */}
+      {/* 顶部归档提示条 */}
+      {project.status === '已完成' && (
+        <div style={{
+          marginBottom: 14, padding: '10px 16px',
+          background: 'linear-gradient(135deg, rgba(82,196,26,0.08), rgba(82,196,26,0.03))',
+          border: '1px solid rgba(82,196,26,0.2)',
+          borderRadius: 10,
+          display: 'flex', alignItems: 'center', gap: 10,
+        }}>
+          <span style={{ fontSize: 16 }}>📦</span>
+          <span style={{ color: '#52c41a', fontSize: 13, fontWeight: 500 }}>该项目已交付归档</span>
+          <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12 }}>
+            · 共 {fileStats.total} 份归档文件，{fileStats.completedPhases}/{fileStats.totalPhases} 个阶段已完成
+          </span>
+          {project.docLink && (
+            <a
+              href={project.docLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ marginLeft: 'auto', color: '#4d9fff', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}
+            >
+              <LinkOutlined /> 测试管理文档
+            </a>
+          )}
+        </div>
+      )}
+
+      {/* 左右两栏布局 */}
       <div className="detail-layout">
         {/* 左侧：项目信息 + 项目详情 */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -305,6 +367,13 @@ function ProjectDetail() {
               </Descriptions.Item>
               <Descriptions.Item label="开始日期">{project.startDate}</Descriptions.Item>
               <Descriptions.Item label="结束日期">{project.endDate || '-'}</Descriptions.Item>
+              {totalDays !== null && (
+                <Descriptions.Item label="项目周期">
+                  <Tag color="blue">{totalDays} 天</Tag>
+                </Descriptions.Item>
+              )}
+              <Descriptions.Item label="计划交付">{project.plannedDeliveryDate || '-'}</Descriptions.Item>
+              <Descriptions.Item label="实际交付">{project.actualDeliveryDate || '-'}</Descriptions.Item>
               <Descriptions.Item label="IT产出">{project.itOutput} MW</Descriptions.Item>
               <Descriptions.Item label="业务类型">{project.businessType || '-'}</Descriptions.Item>
               <Descriptions.Item label="项目描述">{project.description || '-'}</Descriptions.Item>
@@ -312,9 +381,16 @@ function ProjectDetail() {
           </Card>
         </div>
 
-        {/* 右侧：时间线 — 高度撑满，无滚动条 */}
+        {/* 右侧：时间线 */}
         <Card
-          title="项目时间线"
+          title={
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span>项目阶段时间线</span>
+              <Tag style={{ background: 'rgba(77,159,255,0.12)', color: '#4d9fff', border: '1px solid rgba(77,159,255,0.2)', fontSize: 11 }}>
+                支持上传
+              </Tag>
+            </div>
+          }
           style={{ flex: 1, display: 'flex', flexDirection: 'column' }}
           bodyStyle={{ flex: 1, overflow: 'auto', padding: '20px 24px' }}
           styles={{ header: { borderBottom: 'none' } }}
@@ -324,22 +400,12 @@ function ProjectDetail() {
       </div>
 
       <div className="detail-footer">
-        <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/projects')}>
-          返回
-        </Button>
-        <Button type="primary" icon={<EditOutlined />} onClick={() => setModalOpen(true)}>
-          编辑
+        <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/history')}>
+          返回历史项目
         </Button>
       </div>
-
-      <ProjectModal
-        open={modalOpen}
-        project={project}
-        onCancel={() => setModalOpen(false)}
-        onSubmit={handleEdit}
-      />
     </div>
   );
 }
 
-export default ProjectDetail;
+export default HistoryDetail;

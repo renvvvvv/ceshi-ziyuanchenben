@@ -1,17 +1,43 @@
 version: '3.8'
 
 services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: test_platform
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres123}
+      TZ: Asia/Shanghai
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d test_platform"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   backend:
     build:
       context: .
       dockerfile: Dockerfile.backend
     ports:
       - "3001:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
     volumes:
-      - sqlite_data:/app/data
+      - ./scripts:/app/scripts:ro
     environment:
       - PORT=3001
       - NODE_ENV=production
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=test_platform
+      - DB_USER=postgres
+      - DB_PASSWORD=${DB_PASSWORD:-postgres123}
       - MINIMAX_API_KEY=${MINIMAX_API_KEY:-}
       - TZ=Asia/Shanghai
     restart: unless-stopped
@@ -32,5 +58,5 @@ services:
     restart: unless-stopped
 
 volumes:
-  sqlite_data:
+  pg_data:
     driver: local

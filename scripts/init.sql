@@ -1,14 +1,12 @@
 -- =============================================
--- 数据中心测试验证平台 - SQLite 数据库初始化
+-- 数据中心测试验证平台 - PostgreSQL 数据库初始化
 -- =============================================
 
 -- 资源计算历史记录
--- 兼容旧表：补加 batch_id 列（已存在则忽略错误）
--- 注意：若已部署并报错 column exists，删库重建即可，不影响已有功能
 CREATE TABLE IF NOT EXISTS resource_calc_history (
-    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    id              SERIAL PRIMARY KEY,
     batch_id        TEXT,                        -- 群算批次ID（NULL=单算）
-    total_mw        REAL    NOT NULL,
+    total_mw        DOUBLE PRECISION NOT NULL,
     total_duration  INTEGER NOT NULL,
     cabinet_power   INTEGER NOT NULL,
     it_transformers TEXT    NOT NULL,
@@ -18,7 +16,7 @@ CREATE TABLE IF NOT EXISTS resource_calc_history (
     peak_staff      INTEGER NOT NULL,
     total_man_days  INTEGER NOT NULL,
     result_json     TEXT    NOT NULL,
-    created_at      TEXT    NOT NULL DEFAULT (datetime('now','localtime'))
+    created_at      TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_rc_batch ON resource_calc_history(batch_id);
@@ -27,20 +25,18 @@ CREATE INDEX IF NOT EXISTS idx_rc_mw ON resource_calc_history(total_mw);
 
 -- 测试项目表
 CREATE TABLE IF NOT EXISTS test_projects (
-    id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    name            TEXT    NOT NULL,            -- 项目名称
-    customer        TEXT    NOT NULL,            -- 客户
-    status          TEXT    NOT NULL DEFAULT '未开始',  -- 未开始/测试中/已完成/阻塞
-    priority        TEXT    NOT NULL DEFAULT '中',      -- 高/中/低
-    manager         TEXT    NOT NULL,            -- 项目经理
-    start_date      TEXT    NOT NULL,            -- 开始日期
-    end_date        TEXT,                        -- 结束日期
-    it_output       REAL    NOT NULL DEFAULT 0,  -- IT产出(MW)
-    contract_amount REAL,                        -- 合同金额
-    business_type   TEXT,                        -- 业务类型
-    description     TEXT,                        -- 项目描述
-    created_at      TEXT    NOT NULL DEFAULT (datetime('now','localtime')),
-    updated_at      TEXT    NOT NULL DEFAULT (datetime('now','localtime'))
+    id              SERIAL PRIMARY KEY,
+    name            TEXT    NOT NULL,
+    customer        TEXT    NOT NULL,
+    status          TEXT    NOT NULL DEFAULT '未开始',
+    manager         TEXT    NOT NULL,
+    start_date      TEXT    NOT NULL,
+    end_date        TEXT,
+    it_output       DOUBLE PRECISION NOT NULL DEFAULT 0,
+    business_type   TEXT,
+    description     TEXT,
+    created_at      TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_tp_status ON test_projects(status);
@@ -48,36 +44,34 @@ CREATE INDEX IF NOT EXISTS idx_tp_updated ON test_projects(updated_at DESC);
 
 -- 历史项目表
 CREATE TABLE IF NOT EXISTS historical_projects (
-    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    id              SERIAL PRIMARY KEY,
     name            TEXT    NOT NULL,
-    it_output       REAL    NOT NULL,            -- IT产出(MW)
+    it_output       DOUBLE PRECISION NOT NULL,
     start_date      TEXT    NOT NULL,
     end_date        TEXT    NOT NULL,
     customer        TEXT    NOT NULL,
-    doc_link        TEXT,                        -- 测试管理链接
-    created_at      TEXT    NOT NULL DEFAULT (datetime('now','localtime'))
+    doc_link        TEXT,
+    created_at      TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
 -- 团队成员表
 CREATE TABLE IF NOT EXISTS team_members (
-    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    id              SERIAL PRIMARY KEY,
     name            TEXT    NOT NULL,
     employee_id     TEXT    NOT NULL UNIQUE,
-    status          TEXT    NOT NULL DEFAULT '在线',  -- 在线/忙碌/离线
-    skills          TEXT    NOT NULL DEFAULT '[]',    -- JSON数组
-    current_projects TEXT   NOT NULL DEFAULT '[]',    -- JSON数组
+    status          TEXT    NOT NULL DEFAULT '在线',
+    skills          TEXT    NOT NULL DEFAULT '[]',
+    current_projects TEXT   NOT NULL DEFAULT '[]',
     email           TEXT,
     phone           TEXT,
-    created_at      TEXT    NOT NULL DEFAULT (datetime('now','localtime'))
+    created_at      TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
--- 插入默认数据
-INSERT OR IGNORE INTO team_members (name, employee_id, status, skills, current_projects, email, phone) VALUES
-('张家晟', 'EMP001', '在线', '["电力系统","项目管理","UPS测试"]', '["乌兰D5数据中心测试验证"]', 'zhangjs@example.com', '13800001001'),
-('李铭',   'EMP002', '忙碌', '["暖通系统","节能测试","BA系统"]',   '["乌兰D3扩容测试","广州天河数据中心测试"]', 'liming@example.com', '13800001002'),
-('王磊',   'EMP003', '在线', '["弱电系统","网络测试","安防系统"]', '["安次D1-1/2测试验证","廊坊数据中心年度复测"]', 'wanglei@example.com', '13800001003'),
-('赵明',   'EMP004', '离线', '["电力系统","高压测试","变压器测试"]', '[]', 'zhaoming@example.com', '13800001004'),
-('陈静',   'EMP005', '在线', '["文档管理","质量控制","数据分析"]', '["上海浦东数据中心测试"]', 'chenjing@example.com', '13800001005'),
-('刘洋',   'EMP006', '忙碌', '["暖通系统","给排水","消防测试"]', '["廊坊数据中心扩容测试"]', 'liuyang@example.com', '13800001006'),
-('孙伟',   'EMP007', '在线', '["弱电系统","综合布线","光纤测试"]', '["安次D2-1测试验证"]', 'sunwei@example.com', '13800001007'),
-('周晓',   'EMP008', '离线', '["电力系统","发电机测试","ATS测试"]', '[]', 'zhouxiao@example.com', '13800001008');
+-- 插入默认数据（仅首次初始化）
+INSERT INTO team_members (name, employee_id, status, skills, current_projects, email, phone)
+SELECT '张家晟', 'EMP001', '在线', '["电力系统","项目管理","UPS测试"]', '["乌兰D5数据中心测试验证"]', 'zhangjs@example.com', '13800001001'
+WHERE NOT EXISTS (SELECT 1 FROM team_members WHERE employee_id = 'EMP001');
+
+INSERT INTO team_members (name, employee_id, status, skills, current_projects, email, phone)
+SELECT '李铭', 'EMP002', '忙碌', '["暖通系统","节能测试","BA系统"]', '["乌兰D3扩容测试","广州天河数据中心测试"]', 'liming@example.com', '13800001002'
+WHERE NOT EXISTS (SELECT 1 FROM team_members WHERE employee_id = 'EMP002');

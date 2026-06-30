@@ -55,6 +55,7 @@ function fmtShort(dateStr: string): string {
 function TeamPool() {
   const [members, setMembers] = useState<TeamMember[]>(mockTeamMembers);
   const [statusFilter, setStatusFilter] = useState<string>('全部');
+  const [projectFilter, setProjectFilter] = useState<string>('全部');
   const [searchText, setSearchText] = useState('');
   const [loading] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
@@ -84,16 +85,33 @@ function TeamPool() {
     return () => clearInterval(timer);
   }, []);
 
+  // 从所有成员中提取唯一项目列表
+  const allProjects = useMemo(() => {
+    const set = new Set<string>();
+    members.forEach((m) => {
+      (m.currentProjects || []).forEach((p) => set.add(p));
+      (m.projects || []).forEach((p) => set.add(p.projectName));
+    });
+    return Array.from(set).sort();
+  }, [members]);
+
   const filteredMembers = useMemo(() => {
     return members.filter((m) => {
       if (statusFilter !== '全部' && m.status !== statusFilter) return false;
+      if (projectFilter !== '全部') {
+        const allMemberProjects = [
+          ...(m.currentProjects || []),
+          ...(m.projects || []).map((p) => p.projectName),
+        ];
+        if (!allMemberProjects.includes(projectFilter)) return false;
+      }
       if (searchText) {
         const kw = searchText.toLowerCase();
         if (!m.name.toLowerCase().includes(kw) && !m.employeeId.toLowerCase().includes(kw)) return false;
       }
       return true;
     });
-  }, [members, statusFilter, searchText]);
+  }, [members, statusFilter, projectFilter, searchText]);
 
   const statusFilters = ['全部', '空闲', '测试中'];
 
@@ -258,6 +276,18 @@ function TeamPool() {
             </Tag.CheckableTag>
           ))}
         </div>
+        <Select
+          value={projectFilter}
+          onChange={setProjectFilter}
+          style={{ width: 200, fontFamily: 'var(--font-primary)' }}
+          popupMatchSelectWidth={false}
+          placeholder="按项目筛选人员"
+        >
+          <Select.Option value="全部">📋 全部项目</Select.Option>
+          {allProjects.map((p) => (
+            <Select.Option key={p} value={p}>{p}</Select.Option>
+          ))}
+        </Select>
         <Input
           placeholder="搜索姓名或工号"
           prefix={<SearchOutlined />}

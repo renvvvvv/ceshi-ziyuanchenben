@@ -4,7 +4,6 @@
 
 // -------------------- 枚举类型 --------------------
 export type ProjectStatus = '未开始' | '测试中' | '已完成' | '阻塞';
-export type Priority = '高' | '中' | '低';
 export type MemberStatus = '空闲' | '测试中' | '休假' | '出差';
 
 export type BusinessType = '新建测试' | '扩容测试' | '年度复测' | '改造测试' | '验收测试';
@@ -18,14 +17,12 @@ export interface Project {
   city?: string;              // 所在城市
   customer: string;           // 客户名称
   status: ProjectStatus;
-  priority: Priority;
   manager: string;
   startDate: string;
   endDate: string;
   plannedDeliveryDate?: string;
   actualDeliveryDate?: string;
   itOutput: number; // MW
-  contractAmount?: number; // 万元
   businessType?: BusinessType;
   description?: string;
   updatedAt: string;

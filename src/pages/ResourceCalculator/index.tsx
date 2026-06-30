@@ -281,7 +281,7 @@ function ResourceCalculator() {
 
   // ============ 回到首页 ============
   const goHome = () => {
-    setMode('home'); setReport(null); setMultiReports(null); setMultiSummary(null);
+    setMode('home'); setReport(null);
     setCurrentInput(null);
     setBatchResults([]); setSingleModalOpen(false);
     loadHistory(1, historyPageSize);

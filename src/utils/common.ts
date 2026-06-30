@@ -2,7 +2,7 @@
 // 智航万恒测试验证管理平台 - 公共工具函数
 // ============================================================
 
-import type { ProjectStatus, Priority, MemberStatus } from '../types';
+import type { ProjectStatus, MemberStatus } from '../types';
 
 // -------------------- 状态颜色映射 --------------------
 export const PROJECT_STATUS_COLORS: Record<ProjectStatus, string> = {
@@ -10,12 +10,6 @@ export const PROJECT_STATUS_COLORS: Record<ProjectStatus, string> = {
   '测试中': '#eb2f96',  // 粉色
   '已完成': '#52c41a',  // 绿色
   '阻塞': '#ff4d4f',    // 红色
-};
-
-export const PRIORITY_COLORS: Record<Priority, string> = {
-  '高': '#ff4d4f',      // 红色
-  '中': '#faad14',      // 黄色
-  '低': '#8c8c8c',      // 灰色
 };
 
 export const MEMBER_STATUS_COLORS: Record<MemberStatus, string> = {
@@ -33,12 +27,6 @@ export const PROJECT_STATUS_TEXT: Record<ProjectStatus, string> = {
   '阻塞': '阻塞',
 };
 
-export const PRIORITY_TEXT: Record<Priority, string> = {
-  '高': '高',
-  '中': '中',
-  '低': '低',
-};
-
 // -------------------- 工具函数 --------------------
 
 /**
@@ -52,13 +40,6 @@ export function getStatusColor(status: ProjectStatus | MemberStatus): string {
     return MEMBER_STATUS_COLORS[status as MemberStatus];
   }
   return '#8c8c8c';
-}
-
-/**
- * 获取优先级对应的颜色
- */
-export function getPriorityColor(priority: Priority): string {
-  return PRIORITY_COLORS[priority] || '#8c8c8c';
 }
 
 /**

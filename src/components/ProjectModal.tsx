@@ -89,13 +89,6 @@ function ProjectModal({ open, project, onCancel, onSubmit }: ProjectModalProps) 
               <Select.Option value="阻塞">阻塞</Select.Option>
             </Select>
           </Form.Item>
-          <Form.Item name="priority" label="优先级" rules={[{ required: true, message: '请选择优先级' }]}>
-            <Select placeholder="请选择优先级">
-              <Select.Option value="高">高</Select.Option>
-              <Select.Option value="中">中</Select.Option>
-              <Select.Option value="低">低</Select.Option>
-            </Select>
-          </Form.Item>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
           <Form.Item name="startDate" label="开始日期" rules={[{ required: true, message: '请选择开始日期' }]}>
@@ -113,16 +106,17 @@ function ProjectModal({ open, project, onCancel, onSubmit }: ProjectModalProps) 
             <DatePicker style={{ width: '100%' }} placeholder="请选择实际交付日期" />
           </Form.Item>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-          <Form.Item name="itOutput" label="IT产出（MW）" rules={[{ required: true, message: '请输入IT产出' }]}>
-            <InputNumber style={{ width: '100%' }} min={0} step={0.1} placeholder="请输入IT产出" />
-          </Form.Item>
-          <Form.Item name="contractAmount" label="合同金额（万元）">
-            <InputNumber style={{ width: '100%' }} min={0} step={0.01} placeholder="请输入合同金额" />
-          </Form.Item>
-        </div>
+        <Form.Item name="itOutput" label="IT产出（MW）" rules={[{ required: true, message: '请输入IT产出' }]}>
+          <InputNumber style={{ width: '100%' }} min={0} step={0.1} placeholder="请输入IT产出" />
+        </Form.Item>
         <Form.Item name="businessType" label="业务类型">
-          <Input placeholder="请输入业务类型（如：新建测试、扩容测试）" />
+          <Select placeholder="请选择业务类型" allowClear>
+            <Select.Option value="新建测试">新建测试</Select.Option>
+            <Select.Option value="扩容测试">扩容测试</Select.Option>
+            <Select.Option value="年度复测">年度复测</Select.Option>
+            <Select.Option value="改造测试">改造测试</Select.Option>
+            <Select.Option value="验收测试">验收测试</Select.Option>
+          </Select>
         </Form.Item>
         <Form.Item name="description" label="项目描述">
           <Input.TextArea rows={3} placeholder="请输入项目描述" />

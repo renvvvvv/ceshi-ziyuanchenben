@@ -1,19 +1,14 @@
 import { memo } from 'react';
 import { Tag } from 'antd';
-import { PROJECT_STATUS_COLORS, PRIORITY_COLORS } from '../utils/common';
-import type { ProjectStatus, Priority } from '../types';
+import { PROJECT_STATUS_COLORS } from '../utils/common';
+import type { ProjectStatus } from '../types';
 
 interface StatusTagProps {
   status: string;
-  type?: 'status' | 'priority';
 }
 
-function StatusTag({ status, type = 'status' }: StatusTagProps) {
-  const colors = type === 'status'
-    ? PROJECT_STATUS_COLORS[status as ProjectStatus]
-    : PRIORITY_COLORS[status as Priority];
-
-  const color = colors || '#8c8c8c';
+function StatusTag({ status }: StatusTagProps) {
+  const color = PROJECT_STATUS_COLORS[status as ProjectStatus] || '#8c8c8c';
   const bg = `${color}20`;
   const border = `${color}40`;
 

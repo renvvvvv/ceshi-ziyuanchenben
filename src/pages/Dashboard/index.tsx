@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Table, Button, Spin } from 'antd';
+import { Button, Spin } from 'antd';
 import { ReloadOutlined, ProjectOutlined, CheckCircleOutlined, ThunderboltOutlined, ClockCircleOutlined } from '@ant-design/icons';
 import ReactEChartsCore from 'echarts-for-react/lib/core';
 import * as echarts from 'echarts/core';
@@ -8,7 +8,7 @@ import { PieChart, BarChart } from 'echarts/charts';
 import { TitleComponent, TooltipComponent, LegendComponent, GridComponent } from 'echarts/components';
 import { CanvasRenderer } from 'echarts/renderers';
 import KpiCard from '../../components/KpiCard';
-import StatusTag from '../../components/StatusTag';
+import GanttChart from '../../components/GanttChart';
 import {
   mockKpiData,
   mockStatusDistribution,
@@ -84,98 +84,75 @@ function Dashboard() {
     ],
   }), [mockStatusDistribution]);
 
-  const regionMwBarOption = useMemo(() => ({
-    backgroundColor: 'transparent',
-    tooltip: {
-      trigger: 'axis' as const,
-      formatter: '{b}: {c} MW',
-      backgroundColor: 'rgba(13, 31, 60, 0.92)',
-      borderColor: 'rgba(77, 159, 255, 0.3)',
-      borderWidth: 1,
-      textStyle: { color: 'rgba(255,255,255,0.85)', fontFamily: 'Outfit, Noto Sans SC, sans-serif', fontSize: 12 },
-    },
-    grid: {
-      left: '3%',
-      right: '4%',
-      bottom: '3%',
-      containLabel: true,
-    },
-    xAxis: {
-      type: 'category' as const,
-      data: mockRegionMwOutput.map((item) => item.name),
-      axisLabel: { color: 'rgba(255,255,255,0.5)', fontFamily: 'Outfit, Noto Sans SC, sans-serif', fontSize: 11 },
-      axisLine: { lineStyle: { color: 'rgba(255,255,255,0.1)' } },
-      axisTick: { show: false },
-    },
-    yAxis: {
-      type: 'value' as const,
-      name: 'MW',
-      nameTextStyle: { color: 'rgba(255,255,255,0.4)', fontFamily: 'Outfit, Noto Sans SC, sans-serif', fontSize: 11 },
-      axisLabel: { color: 'rgba(255,255,255,0.5)', fontFamily: 'Outfit, Noto Sans SC, sans-serif', fontSize: 11 },
-      axisLine: { show: false },
-      axisTick: { show: false },
-      splitLine: { lineStyle: { color: 'rgba(255,255,255,0.06)' } },
-    },
-    series: [
-      {
-        name: '兆瓦产出',
-        type: 'bar',
-        data: mockRegionMwOutput.map((item) => item.mwOutput),
-        itemStyle: {
-          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: '#faad14' },
-            { offset: 1, color: '#d48806' },
-          ]),
-          borderRadius: [6, 6, 0, 0],
-        },
-        barWidth: '50%',
-        label: {
-          show: true,
-          position: 'top' as const,
-          color: 'rgba(250,173,20,0.85)',
-          fontSize: 11,
-          fontFamily: 'Outfit, Noto Sans SC, sans-serif',
-          formatter: '{c} MW',
-        },
+  const regionMwBarOption = useMemo(() => {
+    // 按兆瓦数降序排列：左高右低
+    const sorted = [...mockRegionMwOutput].sort((a, b) => b.mwOutput - a.mwOutput);
+    return {
+      backgroundColor: 'transparent',
+      tooltip: {
+        trigger: 'axis' as const,
+        formatter: '{b}: {c} MW',
+        backgroundColor: 'rgba(13, 31, 60, 0.92)',
+        borderColor: 'rgba(77, 159, 255, 0.3)',
+        borderWidth: 1,
+        textStyle: { color: 'rgba(255,255,255,0.85)', fontFamily: 'Outfit, Noto Sans SC, sans-serif', fontSize: 12 },
       },
-    ],
-  }), [mockRegionMwOutput]);
+      grid: {
+        left: '3%',
+        right: '4%',
+        bottom: '3%',
+        containLabel: true,
+      },
+      xAxis: {
+        type: 'category' as const,
+        data: sorted.map((item) => item.name),
+        axisLabel: { color: 'rgba(255,255,255,0.5)', fontFamily: 'Outfit, Noto Sans SC, sans-serif', fontSize: 11 },
+        axisLine: { lineStyle: { color: 'rgba(255,255,255,0.1)' } },
+        axisTick: { show: false },
+      },
+      yAxis: {
+        type: 'value' as const,
+        name: 'MW',
+        nameTextStyle: { color: 'rgba(255,255,255,0.4)', fontFamily: 'Outfit, Noto Sans SC, sans-serif', fontSize: 11 },
+        axisLabel: { color: 'rgba(255,255,255,0.5)', fontFamily: 'Outfit, Noto Sans SC, sans-serif', fontSize: 11 },
+        axisLine: { show: false },
+        axisTick: { show: false },
+        splitLine: { lineStyle: { color: 'rgba(255,255,255,0.06)' } },
+      },
+      series: [
+        {
+          name: '兆瓦产出',
+          type: 'bar',
+          data: sorted.map((item) => item.mwOutput),
+          itemStyle: {
+            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+              { offset: 0, color: '#faad14' },
+              { offset: 1, color: '#d48806' },
+            ]),
+            borderRadius: [6, 6, 0, 0],
+          },
+          barWidth: '50%',
+          label: {
+            show: true,
+            position: 'top' as const,
+            color: 'rgba(250,173,20,0.85)',
+            fontSize: 11,
+            fontFamily: 'Outfit, Noto Sans SC, sans-serif',
+            formatter: '{c} MW',
+          },
+        },
+      ],
+    };
+  }, [mockRegionMwOutput]);
 
-  const watchProjects = useMemo(() => mockProjects
+  const ganttProjects = useMemo(() => mockProjects
     .filter((p) => p.status === '测试中' || p.status === '未开始')
-    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+    .sort((a, b) => a.startDate.localeCompare(b.startDate))
   , [mockProjects]);
 
-  const columns = useMemo(() => [
-    {
-      title: '项目名称',
-      dataIndex: 'name',
-      key: 'name',
-      render: (text: string, record: (typeof watchProjects)[0]) => (
-        <a onClick={() => navigate(`/projects/${record.id}`)} style={{ color: '#7cb8ff' }}>{text}</a>
-      ),
-    },
-    { title: '客户', dataIndex: 'customer', key: 'customer' },
-    { title: '城市', dataIndex: 'city', key: 'city' },
-    {
-      title: '状态',
-      dataIndex: 'status',
-      key: 'status',
-      render: (status: string) => <StatusTag status={status} />,
-    },
-    { title: '开始日期', dataIndex: 'startDate', key: 'startDate' },
-    { title: '结束日期', dataIndex: 'endDate', key: 'endDate' },
-    { title: 'IT产出（MW）', dataIndex: 'itOutput', key: 'itOutput' },
-    {
-      title: '操作',
-      key: 'action',
-      render: (_: unknown, record: (typeof watchProjects)[0]) => (
-        <Button type="link" size="small" onClick={() => navigate(`/projects/${record.id}`)} style={{ color: '#4d9fff', fontFamily: 'var(--font-primary)' }}>
-          查看
-        </Button>
-      ),
-    },
-  ], [navigate]);
+  const completedProjects = useMemo(() => mockProjects
+    .filter((p) => p.status === '已完成')
+  , [mockProjects]);
 
   if (loading) {
     return (
@@ -244,14 +221,19 @@ function Dashboard() {
       </div>
 
       <div className="chart-container" style={{ marginBottom: 20 }}>
-        <h4 style={{ marginBottom: 16 }}>项目关注列表</h4>
-        <Table
-          columns={columns}
-          dataSource={watchProjects}
-          rowKey="id"
-          pagination={{ pageSize: 10, showTotal: (total: number) => `共 ${total} 个项目`, size: 'small' as const }}
-          scroll={{ x: 900 }}
-        />
+        <h4 style={{ marginBottom: 16 }}>项目进度甘特图</h4>
+        <GanttChart projects={ganttProjects} />
+        <div style={{ marginTop: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: 'rgba(255,255,255,0.35)', fontSize: 12 }}>
+          <span>进行中/未开始：{ganttProjects.length} 个项目</span>
+          <Button
+            type="link"
+            size="small"
+            onClick={() => navigate('/history')}
+            style={{ color: '#4d9fff', fontFamily: 'var(--font-primary)' }}
+          >
+            已完成项目（{completedProjects.length}个）→ 历史项目
+          </Button>
+        </div>
       </div>
     </div>
   );

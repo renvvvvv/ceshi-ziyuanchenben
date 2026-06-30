@@ -9,6 +9,7 @@ const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Projects = lazy(() => import('./pages/Projects'));
 const ProjectDetail = lazy(() => import('./pages/ProjectDetail'));
 const History = lazy(() => import('./pages/History'));
+const HistoryDetail = lazy(() => import('./pages/HistoryDetail'));
 const TeamPool = lazy(() => import('./pages/TeamPool'));
 const TestGuide = lazy(() => import('./pages/TestGuide'));
 const ResourceCalculator = lazy(() => import('./pages/ResourceCalculator'));
@@ -44,6 +45,7 @@ function App() {
             <Route path="projects" element={<Projects />} />
             <Route path="projects/:id" element={<ProjectDetail />} />
             <Route path="history" element={<History />} />
+            <Route path="history/:id" element={<HistoryDetail />} />
             <Route path="team-pool" element={<TeamPool />} />
             <Route path="test-guide" element={<TestGuide />} />
             <Route path="resource-calculator" element={<ResourceCalculator />} />
