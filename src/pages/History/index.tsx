@@ -7,21 +7,35 @@ import type { ColumnsType } from 'antd/es/table';
 import { PlusOutlined, LinkOutlined, SearchOutlined, EditOutlined, DeleteOutlined, EyeOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import StatusTag from '../../components/StatusTag';
-import { mockHistoryProjects as INITIAL_HISTORY_DATA } from '../../data/mock';
+import { useData } from '../../store/DataContext';
 import type { HistoricalProject } from '../../types';
 
 function History() {
   const navigate = useNavigate();
-  const [data, setData] = useState<HistoricalProject[]>(INITIAL_HISTORY_DATA);
-  const [statusFilter, setStatusFilter] = useState<string>('全部');
+  const { historyProjects, setHistoryProjects } = useData();
+  const [yearFilter, setYearFilter] = useState<string>('全部');
   const [searchText, setSearchText] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<HistoricalProject | null>(null);
   const [form] = Form.useForm();
 
+  // 从数据中动态提取年份列表（按 startDate）
+  const yearOptions = useMemo(() => {
+    const years = new Set<number>();
+    historyProjects.forEach((p) => {
+      if (p.startDate) {
+        years.add(dayjs(p.startDate).year());
+      }
+    });
+    return Array.from(years).sort((a, b) => b - a); // 降序：最新年份在前
+  }, [historyProjects]);
+
   const filteredData = useMemo(() => {
-    return data.filter((p) => {
-      if (statusFilter !== '全部' && p.status !== statusFilter) return false;
+    return historyProjects.filter((p) => {
+      if (yearFilter !== '全部') {
+        const year = p.startDate ? dayjs(p.startDate).year() : null;
+        if (year?.toString() !== yearFilter) return false;
+      }
       if (searchText) {
         const kw = searchText.toLowerCase();
         if (
@@ -33,7 +47,7 @@ function History() {
       }
       return true;
     });
-  }, [data, statusFilter, searchText]);
+  }, [historyProjects, yearFilter, searchText]);
 
   const handleAdd = () => {
     setEditingProject(null);
@@ -56,7 +70,7 @@ function History() {
   };
 
   const handleDelete = (id: string) => {
-    setData((prev) => prev.filter((p) => p.id !== id));
+    setHistoryProjects((prev) => prev.filter((p) => p.id !== id));
     message.success('历史项目已删除');
   };
 
@@ -76,12 +90,13 @@ function History() {
           plannedDeliveryDate: values.plannedDeliveryDate ? values.plannedDeliveryDate.format('YYYY-MM-DD') : '',
           actualDeliveryDate: values.actualDeliveryDate ? values.actualDeliveryDate.format('YYYY-MM-DD') : undefined,
           itOutput: values.itOutput,
+          plannedManpower: values.plannedManpower,
           businessType: values.businessType || '',
           description: values.description || '',
           docLink: values.docLink || '',
           updatedAt: dayjs().format('YYYY-MM-DD HH:mm:ss'),
         };
-        setData((prev) => prev.map((p) => (p.id === editingProject.id ? updated : p)));
+        setHistoryProjects((prev) => prev.map((p) => (p.id === editingProject.id ? updated : p)));
         message.success('历史项目已更新');
       } else {
         const newProject: HistoricalProject = {
@@ -96,12 +111,13 @@ function History() {
           plannedDeliveryDate: values.plannedDeliveryDate ? values.plannedDeliveryDate.format('YYYY-MM-DD') : '',
           actualDeliveryDate: values.actualDeliveryDate ? values.actualDeliveryDate.format('YYYY-MM-DD') : undefined,
           itOutput: values.itOutput,
+          plannedManpower: values.plannedManpower,
           businessType: values.businessType || '',
           description: values.description || '',
           docLink: values.docLink || '',
           updatedAt: dayjs().format('YYYY-MM-DD HH:mm:ss'),
         };
-        setData((prev) => [newProject, ...prev]);
+        setHistoryProjects((prev) => [newProject, ...prev]);
         message.success('历史项目记录添加成功');
       }
       setModalOpen(false);
@@ -224,6 +240,14 @@ function History() {
         render: (val: number) => <span style={{ color: '#7cb8ff' }}>{val} MW</span>,
       },
       {
+        title: '投入人力',
+        dataIndex: 'plannedManpower',
+        key: 'plannedManpower',
+        width: 90,
+        sorter: (a, b) => (a.plannedManpower || 0) - (b.plannedManpower || 0),
+        render: (val?: number) => <span style={{ color: 'rgba(255,255,255,0.6)' }}>{val != null ? `${val} 人` : '-'}</span>,
+      },
+      {
         title: '业务类型',
         dataIndex: 'businessType',
         key: 'businessType',
@@ -310,16 +334,17 @@ function History() {
       {/* 筛选与搜索 */}
       <div style={{ display: 'flex', gap: 12, marginBottom: 18, flexWrap: 'wrap' as const }}>
         <Select
-          value={statusFilter}
-          onChange={setStatusFilter}
+          value={yearFilter}
+          onChange={setYearFilter}
           style={{ width: 130, fontFamily: 'var(--font-primary)' }}
           popupMatchSelectWidth={false}
         >
-          <Select.Option value="全部">全部状态</Select.Option>
-          <Select.Option value="未开始">未开始</Select.Option>
-          <Select.Option value="测试中">测试中</Select.Option>
-          <Select.Option value="已完成">已完成</Select.Option>
-          <Select.Option value="阻塞">阻塞</Select.Option>
+          <Select.Option value="全部">全部年份</Select.Option>
+          {yearOptions.map((year) => (
+            <Select.Option key={year} value={year.toString()}>
+              {year}年
+            </Select.Option>
+          ))}
         </Select>
         <Input
           placeholder="搜索项目名称、客户或城市"
@@ -419,6 +444,9 @@ function History() {
           </div>
           <Form.Item name="itOutput" label="IT产出（MW）" rules={[{ required: true, message: '请输入IT产出' }]}>
             <InputNumber style={{ width: '100%' }} min={0} step={0.1} placeholder="请输入IT产出" />
+          </Form.Item>
+          <Form.Item name="plannedManpower" label="投入人力（人）">
+            <InputNumber style={{ width: '100%' }} min={0} step={1} placeholder="请输入投入人力" />
           </Form.Item>
           <Form.Item name="businessType" label="业务类型">
             <Select placeholder="请选择业务类型" allowClear>

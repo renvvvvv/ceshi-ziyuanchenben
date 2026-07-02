@@ -23,15 +23,15 @@ export interface Project {
   plannedDeliveryDate?: string;
   actualDeliveryDate?: string;
   itOutput: number; // MW
+  plannedManpower?: number;    // 计划投入人力（人）
   businessType?: BusinessType;
   description?: string;
+  docLink?: string;            // 测试管理文档链接
   updatedAt: string;
 }
 
-// 历史项目 - 继承 Project 并扩展
-export interface HistoricalProject extends Omit<Project, 'docLink'> {
-  docLink?: string; // 测试管理文档链接
-}
+// 历史项目 - 继承 Project（保留 docLink 等字段）
+export interface HistoricalProject extends Project {}
 
 // -------------------- KPI 与统计 --------------------
 export interface KpiData {

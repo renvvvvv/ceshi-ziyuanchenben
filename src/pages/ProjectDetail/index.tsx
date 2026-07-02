@@ -1,11 +1,11 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Descriptions, Timeline, Button, Breadcrumb, Card, Avatar, Empty, Tag, Upload, message, Modal } from 'antd';
-import { EditOutlined, ArrowLeftOutlined, HomeOutlined, ProjectOutlined, DeleteOutlined, UploadOutlined, FileOutlined } from '@ant-design/icons';
+import { Descriptions, Timeline, Button, Breadcrumb, Card, Avatar, Empty, Tag, Upload, message, Modal, Input } from 'antd';
+import { EditOutlined, ArrowLeftOutlined, HomeOutlined, ProjectOutlined, DeleteOutlined, UploadOutlined, FileOutlined, LinkOutlined, SaveOutlined } from '@ant-design/icons';
 import type { UploadFile } from 'antd/es/upload/interface';
 import StatusTag from '../../components/StatusTag';
 import ProjectModal from '../../components/ProjectModal';
-import { mockProjects, mockProjectPhases } from '../../data/mock';
+import { useData } from '../../store/DataContext';
 import type { Project, ProjectPhase, ProjectPhaseFile } from '../../types';
 
 const PHASE_STATUS_CONFIG: Record<string, { color: string; dotColor: string; label: string }> = {
@@ -33,10 +33,11 @@ function formatFileSize(bytes: number): string {
   return (bytes / (1024 * 1024)).toFixed(2) + 'MB';
 }
 
-/** 所有7个阶段的默认模板（全部支持上传） */
+/** 所有8个阶段的默认模板（全部支持上传） */
 const ALL_PHASE_TEMPLATES = [
   { key: 'bid', name: '🏆 项目中标', description: '签订合同、确认项目范围与交付要求' },
   { key: 'planning', name: '📋 前期资源及计划排布', description: '人员分配、设备准备、测试计划制定、环境确认' },
+  { key: 'survey', name: '🔍 现场踏勘', description: '现场勘察、确认测试环境和设备状态' },
   { key: 'kickoff', name: '🚀 测试启动会', description: '召开项目启动会议，明确各方职责和测试范围' },
   { key: 'testing', name: '⚙️ 测试中', description: '按计划执行各项测试任务，记录过程数据与问题' },
   { key: 'finished', name: '✅ 测试结束', description: '所有测试项执行完毕，整理现场并移交' },
@@ -47,29 +48,32 @@ const ALL_PHASE_TEMPLATES = [
 function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [projects, setProjects] = useState<Project[]>(mockProjects);
-  const [phasesMap, setPhasesMap] = useState<Record<string, ProjectPhase[]>>(mockProjectPhases);
+  const { projects, setProjects, projectPhases, setProjectPhases } = useData();
   const [modalOpen, setModalOpen] = useState(false);
+  const [docLinkInput, setDocLinkInput] = useState('');
 
   const project = projects.find((p) => p.id === id);
+
+  // 当项目切换时同步测试管理链接输入框
+  useEffect(() => {
+    setDocLinkInput(project?.docLink || '');
+  }, [project?.id, project?.docLink]);
 
   /** 获取项目的阶段数据，无数据则返回空模板（全部阶段均支持上传） */
   const phases: ProjectPhase[] = useMemo(() => {
     if (!project) return [];
-    if (phasesMap[project.id]) {
-      // 已有数据：确保「项目中标」也允许上传
-      return phasesMap[project.id].map((p) =>
+    if (projectPhases[project.id]) {
+      return projectPhases[project.id].map((p) =>
         p.key === 'bid' ? { ...p, allowUpload: true } : p
       );
     }
-    // 空模板：全部支持上传
     return ALL_PHASE_TEMPLATES.map((t) => ({
       ...t,
       status: 'pending' as const,
       files: [],
       allowUpload: true,
     }));
-  }, [project, phasesMap]);
+  }, [project, projectPhases]);
 
   if (!project) {
     return (
@@ -88,6 +92,16 @@ function ProjectDetail() {
     setModalOpen(false);
   };
 
+  /** 更新测试管理链接 */
+  const handleUpdateDocLink = () => {
+    setProjects(projects.map((p) =>
+      p.id === project.id
+        ? { ...p, docLink: docLinkInput.trim(), updatedAt: new Date().toISOString().slice(0, 10) }
+        : p
+    ));
+    message.success('测试管理链接已更新');
+  };
+
   /** 文件上传处理 */
   const handleUpload = (phaseKey: string, fileList: UploadFile[]) => {
     if (!project) return;
@@ -102,8 +116,8 @@ function ProjectDetail() {
       uploadedAt: new Date().toLocaleString('zh-CN'),
     };
 
-    setPhasesMap({
-      ...phasesMap,
+    setProjectPhases({
+      ...projectPhases,
       [project.id]: phases.map((phase) =>
         phase.key === phaseKey
           ? { ...phase, files: [...phase.files, newFile], status: phase.status === 'pending' ? 'in_progress' : phase.status }
@@ -122,8 +136,8 @@ function ProjectDetail() {
       okText: '删除',
       cancelText: '取消',
       onOk: () => {
-        setPhasesMap({
-          ...phasesMap,
+        setProjectPhases({
+          ...projectPhases,
           [project.id]: phases.map((phase) =>
             phase.key === phaseKey
               ? { ...phase, files: phase.files.filter((f) => f.id !== fileId) }
@@ -284,7 +298,7 @@ function ProjectDetail() {
         ]}
       />
 
-      {/* 左右两栏布局：左侧信息卡片固定高度，右侧时间线自适应铺满 */}
+      {/* 左右两栏布局 */}
       <div className="detail-layout">
         {/* 左侧：项目信息 + 项目详情 */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -306,21 +320,63 @@ function ProjectDetail() {
               <Descriptions.Item label="开始日期">{project.startDate}</Descriptions.Item>
               <Descriptions.Item label="结束日期">{project.endDate || '-'}</Descriptions.Item>
               <Descriptions.Item label="IT产出">{project.itOutput} MW</Descriptions.Item>
+              <Descriptions.Item label="计划投入人力">{project.plannedManpower != null ? `${project.plannedManpower} 人` : '-'}</Descriptions.Item>
               <Descriptions.Item label="业务类型">{project.businessType || '-'}</Descriptions.Item>
               <Descriptions.Item label="项目描述">{project.description || '-'}</Descriptions.Item>
             </Descriptions>
           </Card>
         </div>
 
-        {/* 右侧：时间线 — 高度撑满，无滚动条 */}
-        <Card
-          title="项目时间线"
-          style={{ flex: 1, display: 'flex', flexDirection: 'column' }}
-          bodyStyle={{ flex: 1, overflow: 'auto', padding: '20px 24px' }}
-          styles={{ header: { borderBottom: 'none' } }}
-        >
-          <Timeline items={timelineItems} />
-        </Card>
+        {/* 右侧：时间线 + 测试管理链接 */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <Card
+            title="项目时间线"
+            styles={{ header: { borderBottom: 'none' } }}
+          >
+            <Timeline items={timelineItems} />
+          </Card>
+
+          <Card
+            title="测试管理链接"
+            styles={{ header: { borderBottom: '1px solid rgba(255,255,255,0.06)' } }}
+          >
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <Input
+                value={docLinkInput}
+                onChange={(e) => setDocLinkInput(e.target.value)}
+                placeholder="请输入测试管理文档链接（如飞书/钉钉/Confluence 链接）"
+                prefix={<LinkOutlined style={{ color: 'rgba(255,255,255,0.3)' }} />}
+                style={{
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  color: '#fff',
+                }}
+              />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                {project.docLink ? (
+                  <a
+                    href={project.docLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ color: '#4d9fff', fontSize: 13 }}
+                  >
+                    <LinkOutlined /> 打开当前链接
+                  </a>
+                ) : (
+                  <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: 13 }}>暂无测试管理链接</span>
+                )}
+                <Button
+                  type="primary"
+                  icon={<SaveOutlined />}
+                  onClick={handleUpdateDocLink}
+                  style={{ background: 'linear-gradient(135deg, #4d9fff, #69b1ff)', border: 'none' }}
+                >
+                  保存链接
+                </Button>
+              </div>
+            </div>
+          </Card>
+        </div>
       </div>
 
       <div className="detail-footer">

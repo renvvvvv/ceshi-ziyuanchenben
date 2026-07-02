@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import {
   Input, Tag, Avatar, Skeleton, Empty, message,
   Button, Modal, Form, Select, Transfer, DatePicker,
@@ -14,7 +14,7 @@ import {
   ClockCircleOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import { mockTeamMembers } from '../../data/mock';
+import { useData } from '../../store/DataContext';
 import type { TeamMember, MemberStatus, MemberProject } from '../../types';
 
 const statusConfig: Record<MemberStatus, { bg: string; color: string; dot: string }> = {
@@ -38,22 +38,13 @@ function getAvatarText(name: string): string {
   return name.slice(-2);
 }
 
-/** 根据项目时间自动计算当前应有状态 */
-function computeStatusFromProjects(projects: MemberProject[]): MemberStatus {
-  const now = dayjs();
-  const hasActive = projects.some(
-    (p) => !dayjs(p.startDate).isAfter(now, 'day') && !dayjs(p.endDate).isBefore(now, 'day')
-  );
-  return hasActive ? '测试中' : '空闲';
-}
-
 /** 格式化为 MM-DD */
 function fmtShort(dateStr: string): string {
   return dayjs(dateStr).format('MM-DD');
 }
 
 function TeamPool() {
-  const [members, setMembers] = useState<TeamMember[]>(mockTeamMembers);
+  const { teamMembers: members, setTeamMembers: setMembers } = useData();
   const [statusFilter, setStatusFilter] = useState<string>('全部');
   const [projectFilter, setProjectFilter] = useState<string>('全部');
   const [searchText, setSearchText] = useState('');
@@ -66,24 +57,6 @@ function TeamPool() {
   const [batchModalOpen, setBatchModalOpen] = useState(false);
   const [batchTargetKeys, setBatchTargetKeys] = useState<string[]>([]);
   const [batchForm] = Form.useForm();
-
-  // 自动状态切换定时器（每 30 秒检查一次）
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setMembers((prev) =>
-        prev.map((m) => {
-          const projects = m.projects || [];
-          if (projects.length === 0) return m;
-          const computed = computeStatusFromProjects(projects);
-          if (computed !== m.status) {
-            return { ...m, status: computed };
-          }
-          return m;
-        })
-      );
-    }, 30000);
-    return () => clearInterval(timer);
-  }, []);
 
   // 从所有成员中提取唯一项目列表
   const allProjects = useMemo(() => {

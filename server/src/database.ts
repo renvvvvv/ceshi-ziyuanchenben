@@ -31,9 +31,9 @@ class PgDbWrapper {
   private pool: Pool;
 
   constructor() {
-    this.pool = new Pool(DB_CONFIG);
+    this.pool = new pg.Pool(DB_CONFIG);
     // 测试连接
-    this.pool.on('error', (err) => {
+    this.pool.on('error', (err: Error) => {
       console.error('[DB] Unexpected error on idle client', err);
     });
   }

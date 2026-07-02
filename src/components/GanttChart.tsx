@@ -312,12 +312,13 @@ function GanttChart({ projects }: GanttChartProps) {
                     className="gantt-label-col gantt-sticky-label"
                     style={{ width: LABEL_WIDTH, minWidth: LABEL_WIDTH, height: '100%' }}
                   >
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2, overflow: 'hidden' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 2, overflow: 'hidden' }}>
                       <span style={{ color: '#fff', fontSize: 13, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {project.name}
                       </span>
                       <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {project.customer} · {project.city}
+                        {project.plannedManpower ? ` · ${project.plannedManpower}人` : ''}
                       </span>
                     </div>
                     <Tag
@@ -384,6 +385,7 @@ function GanttChart({ projects }: GanttChartProps) {
                           <div>开始：{dayjs(project.startDate).format('YYYY-MM-DD')}</div>
                           <div>结束：{project.endDate ? dayjs(project.endDate).format('YYYY-MM-DD') : '未定'}</div>
                           <div>IT产出：{project.itOutput} MW</div>
+                          <div>计划人力：{project.plannedManpower ?? '-'} 人</div>
                           <div>周期：{Math.max(dayjs(project.endDate || dayjs().add(1, 'month')).diff(project.startDate, 'day'), 1)} 天</div>
                         </div>
                       }
@@ -399,6 +401,7 @@ function GanttChart({ projects }: GanttChartProps) {
                       >
                         <span className="gantt-bar-label">
                           {dayjs(project.startDate).format('MM/DD')} — {project.endDate ? dayjs(project.endDate).format('MM/DD') : '至今'}
+                          {project.plannedManpower ? ` · ${project.plannedManpower}人` : ''}
                         </span>
                       </div>
                     </Tooltip>

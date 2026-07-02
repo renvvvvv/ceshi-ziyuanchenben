@@ -1,16 +1,16 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Table, Button, Select, Input, Space, Popconfirm, message, Tag, Tooltip } from 'antd';
-import { PlusOutlined, SearchOutlined, DeleteOutlined, EditOutlined, EyeOutlined, SwapOutlined } from '@ant-design/icons';
+import { PlusOutlined, SearchOutlined, DeleteOutlined, EditOutlined, EyeOutlined, SwapOutlined, LinkOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import StatusTag from '../../components/StatusTag';
 import ProjectModal from '../../components/ProjectModal';
 import ComparisonReportModal from '../../components/ComparisonReportModal';
-import { mockProjects, mockHistoryProjects as HISTORY_DATA } from '../../data/mock';
-import type { Project } from '../../types';
+import { useData } from '../../store/DataContext';
+import type { Project, HistoricalProject } from '../../types';
 
 function Projects() {
-  const [projects, setProjects] = useState<Project[]>(mockProjects);
+  const { projects, setProjects, historyProjects, setHistoryProjects } = useData();
   const [statusFilter, setStatusFilter] = useState<string>('全部');
   const [searchText, setSearchText] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
@@ -36,8 +36,6 @@ function Projects() {
   const stats = useMemo(() => ({
     active: projects.filter((p) => p.status === '测试中').length,
     pending: projects.filter((p) => p.status === '未开始').length,
-    archived: projects.filter((p) => p.status === '已完成').length,
-    blocked: projects.filter((p) => p.status === '阻塞').length,
   }), [projects]);
 
   const handleCreate = () => {
@@ -58,15 +56,25 @@ function Projects() {
   // 提交（新建或编辑）
   const handleSubmit = useCallback((values: Project) => {
     if (editingProject) {
-      // 编辑模式：检测是否改为"已完成"状态
+      // 编辑模式：检测是否改为"已完成"状态 → 自动归档到历史项目
       if (values.status === '已完成') {
-        message.info('项目状态已标记为「已完成」，将自动归档至历史项目板块');
+        // 从项目管理移除
+        setProjects(projects.filter((p) => p.id !== editingProject.id));
+        // 添加到历史项目
+        const archived: HistoricalProject = {
+          ...values,
+          id: editingProject.id,
+          updatedAt: new Date().toISOString().slice(0, 10),
+        };
+        setHistoryProjects([archived, ...historyProjects]);
+        message.info('项目状态已标记为「已完成」，已自动归档至历史项目板块');
+      } else {
+        setProjects(projects.map((p) =>
+          (p.id === editingProject.id
+            ? { ...values, id: editingProject.id, updatedAt: new Date().toISOString().slice(0, 10) }
+            : p)
+        ));
       }
-      setProjects(projects.map((p) =>
-        (p.id === editingProject.id
-          ? { ...values, id: editingProject.id, updatedAt: new Date().toISOString().slice(0, 10) }
-          : p)
-      ));
       setModalOpen(false);
       setEditingProject(null);
     } else {
@@ -79,7 +87,7 @@ function Projects() {
       setModalOpen(false);
       message.success('项目创建成功');
     }
-  }, [editingProject, projects]);
+  }, [editingProject, projects, historyProjects, setProjects, setHistoryProjects]);
 
   const columns: ColumnsType<Project> = useMemo(() => [
     {
@@ -125,6 +133,14 @@ function Projects() {
         return <span style={{ color: 'rgba(255,255,255,0.6)' }}>{text}</span>;
       },
     },
+    {
+      title: '计划投入人力',
+      dataIndex: 'plannedManpower',
+      key: 'plannedManpower',
+      width: 110,
+      sorter: (a, b) => (a.plannedManpower || 0) - (b.plannedManpower || 0),
+      render: (val?: number) => <span style={{ color: 'rgba(255,255,255,0.6)' }}>{val != null ? `${val} 人` : '-'}</span>,
+    },
     { title: 'IT产出（MW）', dataIndex: 'itOutput', key: 'itOutput', width: 110, sorter: (a, b) => a.itOutput - b.itOutput },
     {
       title: '业务类型',
@@ -132,6 +148,20 @@ function Projects() {
       key: 'businessType',
       width: 110,
       render: (text?: string) => <span style={{ color: 'rgba(255,255,255,0.6)' }}>{text || '-'}</span>,
+    },
+    {
+      title: '测试管理链接',
+      dataIndex: 'docLink',
+      key: 'docLink',
+      width: 120,
+      render: (link: string) =>
+        link ? (
+          <a href={link} target="_blank" rel="noopener noreferrer" style={{ color: '#4d9fff' }}>
+            <LinkOutlined /> 查看
+          </a>
+        ) : (
+          <span style={{ color: 'rgba(255,255,255,0.3)' }}>-</span>
+        ),
     },
     {
       title: '操作',
@@ -179,16 +209,6 @@ function Projects() {
               padding: '2px 10px', background: 'rgba(250,173,20,0.1)', border: '1px solid rgba(250,173,20,0.2)',
               borderRadius: 20, fontSize: 12, color: '#faad14',
             }}>未开始 {stats.pending}</span>
-            <span style={{
-              display: 'inline-flex', alignItems: 'center', gap: 4,
-              padding: '2px 10px', background: 'rgba(255,77,79,0.08)', border: '1px solid rgba(255,77,79,0.15)',
-              borderRadius: 20, fontSize: 12, color: '#ff7875',
-            }}>阻塞 {stats.blocked}</span>
-            <span style={{
-              display: 'inline-flex', alignItems: 'center', gap: 4,
-              padding: '2px 10px', background: 'rgba(82,196,26,0.1)', border: '1px solid rgba(82,196,26,0.2)',
-              borderRadius: 20, fontSize: 12, color: '#52c41a',
-            }}>已归档 {stats.archived}</span>
           </div>
         </div>
         <Button
@@ -212,7 +232,6 @@ function Projects() {
           <Select.Option value="全部">全部状态</Select.Option>
           <Select.Option value="未开始">未开始</Select.Option>
           <Select.Option value="测试中">测试中</Select.Option>
-          <Select.Option value="已完成">已完成</Select.Option>
           <Select.Option value="阻塞">阻塞</Select.Option>
         </Select>
         <Input
@@ -274,7 +293,7 @@ function Projects() {
       <ComparisonReportModal
         open={reportOpen}
         currentProjects={projects.filter((p) => p.status !== '已完成')}
-        historyProjects={HISTORY_DATA}
+        historyProjects={historyProjects}
         onClose={() => setReportOpen(false)}
       />
     </div>

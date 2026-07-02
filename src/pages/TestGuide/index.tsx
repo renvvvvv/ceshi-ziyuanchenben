@@ -26,7 +26,7 @@ import {
   FileOutlined,
   CloudUploadOutlined,
 } from '@ant-design/icons';
-import { mockTestDocs, docCategories } from '../../data/mock';
+import { useData } from '../../store/DataContext';
 import type { TestDoc } from '../../types';
 
 const { Option } = Select;
@@ -52,9 +52,9 @@ const formatFileSize = (bytes: number) => {
 };
 
 function TestGuide() {
+  const { testDocs: docs, setTestDocs: setDocs, docCategoriesList: docCategories } = useData();
   const [selectedCategory, setSelectedCategory] = useState('全部');
   const [searchText, setSearchText] = useState('');
-  const [docs, setDocs] = useState<TestDoc[]>(mockTestDocs);
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [uploadForm] = Form.useForm();
   const [fileList, setFileList] = useState<UploadFile[]>([]);
@@ -122,7 +122,7 @@ function TestGuide() {
       a.download = doc.fileName || doc.title;
       a.click();
     } else {
-      message.info('演示数据，暂无实际文件下载');
+      message.info('该文件无下载链接');
     }
   };
 

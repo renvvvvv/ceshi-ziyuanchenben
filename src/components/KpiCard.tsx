@@ -6,7 +6,7 @@ import type { ReactNode } from 'react';
 interface KpiCardProps {
   title: string;
   value: number | string;
-  trend: number;
+  trend?: number;
   icon: ReactNode;
   suffix?: string;
   tooltip?: string;
@@ -46,7 +46,7 @@ function useCountUp(target: number, duration = 800) {
 }
 
 function KpiCard({ title, value, trend, icon, suffix, tooltip }: KpiCardProps) {
-  const isUp = trend >= 0;
+  const isUp = (trend ?? 0) >= 0;
   const isNumberValue = typeof value === 'number';
   const animatedValue = useCountUp(isNumberValue ? (value as number) : 0);
 
@@ -67,10 +67,12 @@ function KpiCard({ title, value, trend, icon, suffix, tooltip }: KpiCardProps) {
           {displayValue}
           {suffix && <span className="suffix">{suffix}</span>}
         </div>
-        <div className={`kpi-trend ${isUp ? 'up' : 'down'}`}>
-          {isUp ? <ArrowUpOutlined /> : <ArrowDownOutlined />}
-          <span>环比 {isUp ? '+' : ''}{trend}%</span>
-        </div>
+        {trend !== undefined && (
+          <div className={`kpi-trend ${isUp ? 'up' : 'down'}`}>
+            {isUp ? <ArrowUpOutlined /> : <ArrowDownOutlined />}
+            <span>环比 {isUp ? '+' : ''}{trend}%</span>
+          </div>
+        )}
       </div>
     </Tooltip>
   );

@@ -1,10 +1,10 @@
-import { useState, useMemo } from 'react';
+import { useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Descriptions, Timeline, Button, Breadcrumb, Card, Avatar, Empty, Tag, Upload, message, Modal } from 'antd';
 import { ArrowLeftOutlined, HomeOutlined, ProjectOutlined, FileOutlined, HistoryOutlined, LinkOutlined, DownloadOutlined, DeleteOutlined, UploadOutlined } from '@ant-design/icons';
 import type { UploadFile } from 'antd/es/upload/interface';
 import StatusTag from '../../components/StatusTag';
-import { mockHistoryProjects, mockHistoryPhases, mockHistoryPhasesPartial } from '../../data/mock';
+import { useData } from '../../store/DataContext';
 import type { ProjectPhase, ProjectPhaseFile } from '../../types';
 
 const PHASE_STATUS_CONFIG: Record<string, { color: string; label: string }> = {
@@ -36,6 +36,7 @@ function formatFileSize(bytes: number): string {
 const ALL_PHASE_TEMPLATES = [
   { key: 'bid', name: '🏆 项目中标', description: '签订合同、确认项目范围与交付要求' },
   { key: 'planning', name: '📋 前期资源及计划排布', description: '人员分配、设备准备、测试计划制定、环境确认' },
+  { key: 'survey', name: '🔍 现场踏勘', description: '现场勘察、确认测试环境和设备状态' },
   { key: 'kickoff', name: '🚀 测试启动会', description: '召开项目启动会议，明确各方职责和测试范围' },
   { key: 'testing', name: '⚙️ 测试中', description: '按计划执行各项测试任务，记录过程数据与问题' },
   { key: 'finished', name: '✅ 测试结束', description: '所有测试项执行完毕，整理现场并移交' },
@@ -46,38 +47,23 @@ const ALL_PHASE_TEMPLATES = [
 function HistoryDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { historyProjects, historyPhases, setHistoryPhases } = useData();
 
-  const project = useMemo(() => mockHistoryProjects.find((p) => p.id === id), [id]);
-
-  /** 状态管理：归档阶段数据，初始化时合并 mockHistoryPhases / mockHistoryPhasesPartial */
-  const [phasesMap, setPhasesMap] = useState<Record<string, ProjectPhase[]>>(() => {
-    const merged: Record<string, ProjectPhase[]> = {};
-    // 合并全部历史阶段数据，并统一开启上传权限
-    const mergeSource = (source: Record<string, ProjectPhase[]>) => {
-      Object.keys(source).forEach((pid) => {
-        merged[pid] = source[pid].map((p) => ({ ...p, allowUpload: true }));
-      });
-    };
-    mergeSource(mockHistoryPhases);
-    mergeSource(mockHistoryPhasesPartial);
-    return merged;
-  });
+  const project = useMemo(() => historyProjects.find((p) => p.id === id), [historyProjects, id]);
 
   /** 获取项目的阶段数据，无数据则返回空模板（全部阶段均支持上传） */
   const phases: ProjectPhase[] = useMemo(() => {
     if (!project) return [];
-    if (phasesMap[project.id]) {
-      // 确保所有阶段（含已完成阶段）都允许上传
-      return phasesMap[project.id].map((p) => ({ ...p, allowUpload: true }));
+    if (historyPhases[project.id]) {
+      return historyPhases[project.id].map((p) => ({ ...p, allowUpload: true }));
     }
-    // 空模板：全部支持上传
     return ALL_PHASE_TEMPLATES.map((t) => ({
       ...t,
       status: 'pending' as const,
       files: [],
       allowUpload: true,
     }));
-  }, [project, phasesMap]);
+  }, [project, historyPhases]);
 
   if (!project) {
     return (
@@ -120,8 +106,8 @@ function HistoryDetail() {
       uploadedAt: new Date().toLocaleString('zh-CN'),
     };
 
-    setPhasesMap({
-      ...phasesMap,
+    setHistoryPhases({
+      ...historyPhases,
       [project.id]: phases.map((phase) =>
         phase.key === phaseKey
           ? { ...phase, files: [...phase.files, newFile] }
@@ -140,8 +126,8 @@ function HistoryDetail() {
       okText: '删除',
       cancelText: '取消',
       onOk: () => {
-        setPhasesMap({
-          ...phasesMap,
+        setHistoryPhases({
+          ...historyPhases,
           [project.id]: phases.map((phase) =>
             phase.key === phaseKey
               ? { ...phase, files: phase.files.filter((f) => f.id !== fileId) }
@@ -346,8 +332,8 @@ function HistoryDetail() {
         </div>
       )}
 
-      {/* 左右两栏布局 */}
-      <div className="detail-layout">
+      {/* 左右两栏布局：超出区域时整体竖向滚动 */}
+      <div className="detail-layout" style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
         {/* 左侧：项目信息 + 项目详情 */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <Card title="项目信息" className="detail-info-card">
@@ -375,6 +361,7 @@ function HistoryDetail() {
               <Descriptions.Item label="计划交付">{project.plannedDeliveryDate || '-'}</Descriptions.Item>
               <Descriptions.Item label="实际交付">{project.actualDeliveryDate || '-'}</Descriptions.Item>
               <Descriptions.Item label="IT产出">{project.itOutput} MW</Descriptions.Item>
+              <Descriptions.Item label="投入人力">{project.plannedManpower != null ? `${project.plannedManpower} 人` : '-'}</Descriptions.Item>
               <Descriptions.Item label="业务类型">{project.businessType || '-'}</Descriptions.Item>
               <Descriptions.Item label="项目描述">{project.description || '-'}</Descriptions.Item>
             </Descriptions>
@@ -391,8 +378,6 @@ function HistoryDetail() {
               </Tag>
             </div>
           }
-          style={{ flex: 1, display: 'flex', flexDirection: 'column' }}
-          bodyStyle={{ flex: 1, overflow: 'auto', padding: '20px 24px' }}
           styles={{ header: { borderBottom: 'none' } }}
         >
           <Timeline items={timelineItems} />

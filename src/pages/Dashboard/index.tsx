@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button, Spin } from 'antd';
 import { ReloadOutlined, ProjectOutlined, CheckCircleOutlined, ThunderboltOutlined, ClockCircleOutlined } from '@ant-design/icons';
@@ -9,29 +9,50 @@ import { TitleComponent, TooltipComponent, LegendComponent, GridComponent } from
 import { CanvasRenderer } from 'echarts/renderers';
 import KpiCard from '../../components/KpiCard';
 import GanttChart from '../../components/GanttChart';
-import {
-  mockKpiData,
-  mockStatusDistribution,
-  mockRegionMwOutput,
-  mockProjects,
-} from '../../data/mock';
+import { useData } from '../../store/DataContext';
 
 echarts.use([PieChart, BarChart, TitleComponent, TooltipComponent, LegendComponent, GridComponent, CanvasRenderer]);
 
 function Dashboard() {
-  const [loading, setLoading] = useState(true);
-  const [kpiData] = useState(mockKpiData);
+  const [loading, setLoading] = useState(false);
+  const { projects, historyProjects, regionMwOutput } = useData();
   const navigate = useNavigate();
-
-  useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 500);
-    return () => clearTimeout(timer);
-  }, []);
 
   const handleRefresh = () => {
     setLoading(true);
-    setTimeout(() => setLoading(false), 500);
+    setTimeout(() => setLoading(false), 300);
   };
+
+  // 动态计算 KPI 数据
+  const kpiData = useMemo(() => {
+    const activeProjects = projects.filter((p) => p.status === '测试中').length;
+    const completedProjects = historyProjects.length;
+    const totalItOutput = historyProjects.reduce((sum, p) => sum + (p.itOutput || 0), 0);
+
+    // 平均项目周期：从历史项目的 startDate 和 endDate 计算
+    const cycles = historyProjects
+      .filter((p) => p.startDate && p.endDate)
+      .map((p) => {
+        const start = new Date(p.startDate);
+        const end = new Date(p.endDate);
+        return Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+      })
+      .filter((d) => d > 0);
+    const avgProjectCycle = cycles.length > 0 ? Math.round(cycles.reduce((a, b) => a + b, 0) / cycles.length) : 0;
+
+    return { activeProjects, completedProjects, totalItOutput, avgProjectCycle };
+  }, [projects, historyProjects]);
+
+  // 动态计算状态分布
+  const statusDistribution = useMemo(() => {
+    const allProjects = [...projects, ...historyProjects];
+    return [
+      { name: '未开始', value: allProjects.filter((p) => p.status === '未开始').length },
+      { name: '测试中', value: allProjects.filter((p) => p.status === '测试中').length },
+      { name: '已完成', value: allProjects.filter((p) => p.status === '已完成').length },
+      { name: '阻塞', value: allProjects.filter((p) => p.status === '阻塞').length },
+    ];
+  }, [projects, historyProjects]);
 
   const statusPieOption = useMemo(() => ({
     backgroundColor: 'transparent',
@@ -66,7 +87,7 @@ function Dashboard() {
           fontSize: 12,
           formatter: '{b}\n{d}%',
         },
-        data: mockStatusDistribution.map((item) => ({
+        data: statusDistribution.map((item) => ({
           name: item.name,
           value: item.value,
           itemStyle: {
@@ -82,11 +103,11 @@ function Dashboard() {
         })),
       },
     ],
-  }), [mockStatusDistribution]);
+  }), [statusDistribution]);
 
   const regionMwBarOption = useMemo(() => {
     // 按兆瓦数降序排列：左高右低
-    const sorted = [...mockRegionMwOutput].sort((a, b) => b.mwOutput - a.mwOutput);
+    const sorted = [...regionMwOutput].sort((a, b) => b.mwOutput - a.mwOutput);
     return {
       backgroundColor: 'transparent',
       tooltip: {
@@ -143,16 +164,16 @@ function Dashboard() {
         },
       ],
     };
-  }, [mockRegionMwOutput]);
+  }, [regionMwOutput]);
 
-  const ganttProjects = useMemo(() => mockProjects
+  const ganttProjects = useMemo(() => projects
     .filter((p) => p.status === '测试中' || p.status === '未开始')
     .sort((a, b) => a.startDate.localeCompare(b.startDate))
-  , [mockProjects]);
+  , [projects]);
 
-  const completedProjects = useMemo(() => mockProjects
+  const completedProjects = useMemo(() => historyProjects
     .filter((p) => p.status === '已完成')
-  , [mockProjects]);
+  , [historyProjects]);
 
   if (loading) {
     return (
@@ -180,21 +201,18 @@ function Dashboard() {
         <KpiCard
           title="进行中项目数"
           value={kpiData.activeProjects}
-          trend={kpiData.activeProjectsTrend}
           icon={<ProjectOutlined style={{ color: '#4d9fff' }} />}
           tooltip="当前正在进行中的测试项目总数"
         />
         <KpiCard
           title="已完成项目数"
           value={kpiData.completedProjects}
-          trend={kpiData.completedProjectsTrend}
           icon={<CheckCircleOutlined style={{ color: '#52c41a' }} />}
           tooltip="已完成测试的项目总数"
         />
         <KpiCard
           title="总IT产出"
           value={kpiData.totalItOutput}
-          trend={kpiData.totalItOutputTrend}
           suffix="MW"
           icon={<ThunderboltOutlined style={{ color: '#faad14' }} />}
           tooltip="累计IT产出量（MW）"
@@ -202,7 +220,6 @@ function Dashboard() {
         <KpiCard
           title="平均项目周期"
           value={kpiData.avgProjectCycle}
-          trend={kpiData.avgProjectCycleTrend}
           suffix="天"
           icon={<ClockCircleOutlined style={{ color: '#00d4aa' }} />}
           tooltip="所有已完成项目的平均执行周期"

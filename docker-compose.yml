@@ -9,8 +9,9 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres123}
       TZ: Asia/Shanghai
+    # 仅绑定本机，不暴露到公网
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - pg_data:/var/lib/postgresql/data
     healthcheck:
@@ -23,8 +24,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.backend
+    # 仅绑定本机，前端 Nginx 通过 Docker 内部网络代理 /api/
     ports:
-      - "3001:3001"
+      - "127.0.0.1:3001:3001"
     depends_on:
       postgres:
         condition: service_healthy

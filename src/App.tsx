@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { Spin } from 'antd';
 import MainLayout from './layouts/MainLayout';
 import ErrorBoundary from './components/ErrorBoundary';
+import { DataProvider } from './store/DataContext';
 
 // 懒加载页面组件（代码分割）
 const Dashboard = lazy(() => import('./pages/Dashboard'));
@@ -37,21 +38,23 @@ function PageLoading() {
 function App() {
   return (
     <ErrorBoundary>
-      <Suspense fallback={<PageLoading />}>
-        <Routes>
-          <Route path="/" element={<MainLayout />}>
-            <Route index element={<Navigate to="/dashboard" replace />} />
-            <Route path="dashboard" element={<Dashboard />} />
-            <Route path="projects" element={<Projects />} />
-            <Route path="projects/:id" element={<ProjectDetail />} />
-            <Route path="history" element={<History />} />
-            <Route path="history/:id" element={<HistoryDetail />} />
-            <Route path="team-pool" element={<TeamPool />} />
-            <Route path="test-guide" element={<TestGuide />} />
-            <Route path="resource-calculator" element={<ResourceCalculator />} />
-          </Route>
-        </Routes>
-      </Suspense>
+      <DataProvider>
+        <Suspense fallback={<PageLoading />}>
+          <Routes>
+            <Route path="/" element={<MainLayout />}>
+              <Route index element={<Navigate to="/dashboard" replace />} />
+              <Route path="dashboard" element={<Dashboard />} />
+              <Route path="projects" element={<Projects />} />
+              <Route path="projects/:id" element={<ProjectDetail />} />
+              <Route path="history" element={<History />} />
+              <Route path="history/:id" element={<HistoryDetail />} />
+              <Route path="team-pool" element={<TeamPool />} />
+              <Route path="test-guide" element={<TestGuide />} />
+              <Route path="resource-calculator" element={<ResourceCalculator />} />
+            </Route>
+          </Routes>
+        </Suspense>
+      </DataProvider>
     </ErrorBoundary>
   );
 }

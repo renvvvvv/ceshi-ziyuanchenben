@@ -109,6 +109,9 @@ function ProjectModal({ open, project, onCancel, onSubmit }: ProjectModalProps) 
         <Form.Item name="itOutput" label="IT产出（MW）" rules={[{ required: true, message: '请输入IT产出' }]}>
           <InputNumber style={{ width: '100%' }} min={0} step={0.1} placeholder="请输入IT产出" />
         </Form.Item>
+        <Form.Item name="plannedManpower" label="计划投入人力（人）">
+          <InputNumber style={{ width: '100%' }} min={0} step={1} placeholder="请输入计划投入人力" />
+        </Form.Item>
         <Form.Item name="businessType" label="业务类型">
           <Select placeholder="请选择业务类型" allowClear>
             <Select.Option value="新建测试">新建测试</Select.Option>
@@ -117,6 +120,9 @@ function ProjectModal({ open, project, onCancel, onSubmit }: ProjectModalProps) 
             <Select.Option value="改造测试">改造测试</Select.Option>
             <Select.Option value="验收测试">验收测试</Select.Option>
           </Select>
+        </Form.Item>
+        <Form.Item name="docLink" label="测试管理链接">
+          <Input placeholder="请输入测试管理文档链接" />
         </Form.Item>
         <Form.Item name="description" label="项目描述">
           <Input.TextArea rows={3} placeholder="请输入项目描述" />
