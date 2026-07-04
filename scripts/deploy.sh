@@ -8,7 +8,7 @@
 #
 # 环境变量（可在运行前 export 覆盖）：
 #   REMOTE_USER   — SSH 用户名（默认 root）
-#   REMOTE_HOST   — 服务器 IP（默认 154.8.213.134）
+#   REMOTE_HOST   — 服务器 IP（默认 49.232.147.149）
 #   REMOTE_DIR    — 服务器项目路径（默认 /root/test-platform）
 #   DB_PASSWORD   — 数据库密码（默认随机生成）
 #   MINIMAX_API_KEY — AI API Key（可选）
@@ -16,7 +16,7 @@ set -euo pipefail
 
 # ======== 配置（可通过环境变量覆盖）========
 REMOTE_USER="${REMOTE_USER:-root}"
-REMOTE_HOST="${REMOTE_HOST:-154.8.213.134}"
+REMOTE_HOST="${REMOTE_HOST:-49.232.147.149}"
 REMOTE_DIR="${REMOTE_DIR:-/root/test-platform}"
 DB_PASSWORD="${DB_PASSWORD:-$(openssl rand -hex 12 2>/dev/null || echo 'ChangeMe2024')}"
 MINIMAX_API_KEY="${MINIMAX_API_KEY:-}"

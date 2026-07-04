@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { Layout, Menu, Button, Avatar, Dropdown } from 'antd';
+import { Layout, Menu, Button, Avatar, Dropdown, Tag } from 'antd';
 import {
   DashboardOutlined,
   ProjectOutlined,
@@ -12,34 +12,64 @@ import {
   UserOutlined,
   LogoutOutlined,
   CalculatorOutlined,
+  SafetyOutlined,
 } from '@ant-design/icons';
+import { useAuth } from '../store/AuthContext';
+import type { AppModule } from '../types';
 
 const { Sider, Content } = Layout;
 
-const menuItems = [
-  { key: '/dashboard', icon: <DashboardOutlined />, label: '仪表盘' },
-  { key: '/projects', icon: <ProjectOutlined />, label: '项目管理' },
-  { key: '/history', icon: <HistoryOutlined />, label: '历史项目' },
-  { key: '/team-pool', icon: <TeamOutlined />, label: '测试人员池' },
-  { key: '/test-guide', icon: <FileTextOutlined />, label: '测试管理制度' },
-  { key: '/resource-calculator', icon: <CalculatorOutlined />, label: '资源计算器' },
+interface MenuItemDef {
+  key: string;
+  icon: React.ReactNode;
+  label: string;
+  module: AppModule;
+}
+
+const ALL_MENU_ITEMS: MenuItemDef[] = [
+  { key: '/dashboard', icon: <DashboardOutlined />, label: '仪表盘', module: 'dashboard' },
+  { key: '/projects', icon: <ProjectOutlined />, label: '项目管理', module: 'projects' },
+  { key: '/history', icon: <HistoryOutlined />, label: '历史项目', module: 'history' },
+  { key: '/team-pool', icon: <TeamOutlined />, label: '测试人员池', module: 'teamPool' },
+  { key: '/test-guide', icon: <FileTextOutlined />, label: '测试管理制度', module: 'testGuide' },
+  { key: '/resource-calculator', icon: <CalculatorOutlined />, label: '资源计算器', module: 'resourceCalc' },
+  { key: '/permission-config', icon: <SafetyOutlined />, label: '权限配置', module: 'permissionConfig' },
 ];
+
+const ROLE_COLORS: Record<string, string> = {
+  '管理者': '#ff4d4f',
+  '编辑者': '#faad14',
+  '阅读者': '#4d9fff',
+};
 
 function MainLayout() {
   const [collapsed, setCollapsed] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
+  const { user, logout, canView } = useAuth();
 
   const selectedKey = '/' + location.pathname.split('/')[1];
+
+  // 根据权限过滤菜单项
+  const visibleMenuItems = ALL_MENU_ITEMS.filter((item) => canView(item.module));
 
   const onMenuClick = ({ key }: { key: string }) => {
     navigate(key);
   };
 
+  const handleUserAction = ({ key }: { key: string }) => {
+    if (key === 'logout') {
+      logout();
+      navigate('/login');
+    } else if (key === 'profile') {
+      navigate('/permission-config');
+    }
+  };
+
   const userMenuItems = [
-    { key: 'profile', icon: <UserOutlined />, label: '个人信息' },
+    ...(canView('permissionConfig') ? [{ key: 'profile', icon: <UserOutlined />, label: '权限配置' }] : []),
     { type: 'divider' as const },
-    { key: 'logout', icon: <LogoutOutlined />, label: '退出登录' },
+    { key: 'logout', icon: <LogoutOutlined />, label: '退出登录', danger: true },
   ];
 
   const pageTitles: Record<string, string> = {
@@ -49,6 +79,7 @@ function MainLayout() {
     '/team-pool': '测试人员池',
     '/test-guide': '测试管理制度',
     '/resource-calculator': '资源计算器',
+    '/permission-config': '权限配置',
   };
 
   const currentTitle = pageTitles[selectedKey] || '';
@@ -105,7 +136,11 @@ function MainLayout() {
           theme="dark"
           mode="inline"
           selectedKeys={[selectedKey]}
-          items={menuItems}
+          items={visibleMenuItems.map((item) => ({
+            key: item.key,
+            icon: item.icon,
+            label: item.label,
+          }))}
           onClick={onMenuClick}
         />
       </Sider>
@@ -121,8 +156,8 @@ function MainLayout() {
             <h3 style={{ transition: 'color 0.3s ease' }}>{currentTitle}</h3>
           </div>
           <div className="header-right">
-            <Dropdown menu={{ items: userMenuItems }} placement="bottomRight">
-              <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, transition: 'opacity 0.2s ease' }}>
+            <Dropdown menu={{ items: userMenuItems, onClick: handleUserAction }} placement="bottomRight">
+              <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, transition: 'opacity 0.2s ease' }}>
                 <Avatar
                   icon={<UserOutlined />}
                   style={{
@@ -133,13 +168,22 @@ function MainLayout() {
                     transition: 'transform 0.3s ease, box-shadow 0.3s ease',
                   }}
                 />
-                <span style={{ color: 'rgba(255,255,255,0.6)', fontFamily: 'var(--font-primary)', fontSize: 13 }}>管理员</span>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                  <span style={{ color: 'rgba(255,255,255,0.85)', fontFamily: 'var(--font-primary)', fontSize: 13, lineHeight: 1.4 }}>
+                    {user?.name || '管理员'}
+                  </span>
+                  <Tag
+                    color={ROLE_COLORS[user?.role || '管理者']}
+                    style={{ fontSize: 10, padding: '0 4px', lineHeight: '16px', height: 18, margin: 0, border: 'none' }}
+                  >
+                    {user?.role || '管理者'}
+                  </Tag>
+                </div>
               </div>
             </Dropdown>
           </div>
         </div>
         <Content>
-          {/* key 触发路由切换时的淡入动画 */}
           <div className="app-content" key={location.pathname}>
             <Outlet />
           </div>

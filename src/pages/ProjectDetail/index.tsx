@@ -48,7 +48,7 @@ const ALL_PHASE_TEMPLATES = [
 function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { projects, setProjects, projectPhases, setProjectPhases } = useData();
+  const { projects, setProjects, projectPhases, setProjectPhases, teamMembers } = useData();
   const [modalOpen, setModalOpen] = useState(false);
   const [docLinkInput, setDocLinkInput] = useState('');
 
@@ -88,13 +88,13 @@ function ProjectDetail() {
   }
 
   const handleEdit = (values: Project) => {
-    setProjects(projects.map((p) => (p.id === project.id ? { ...values, id: project.id, updatedAt: new Date().toISOString().slice(0, 10) } : p)));
+    setProjects((prev) => prev.map((p) => (p.id === project.id ? { ...values, id: project.id, updatedAt: new Date().toISOString().slice(0, 10) } : p)));
     setModalOpen(false);
   };
 
   /** 更新测试管理链接 */
   const handleUpdateDocLink = () => {
-    setProjects(projects.map((p) =>
+    setProjects((prev) => prev.map((p) =>
       p.id === project.id
         ? { ...p, docLink: docLinkInput.trim(), updatedAt: new Date().toISOString().slice(0, 10) }
         : p
@@ -116,14 +116,14 @@ function ProjectDetail() {
       uploadedAt: new Date().toLocaleString('zh-CN'),
     };
 
-    setProjectPhases({
-      ...projectPhases,
+    setProjectPhases((prev) => ({
+      ...prev,
       [project.id]: phases.map((phase) =>
         phase.key === phaseKey
           ? { ...phase, files: [...phase.files, newFile], status: phase.status === 'pending' ? 'in_progress' : phase.status }
           : phase
       ),
-    });
+    }));
     message.success(`文件「${lastFile.name}」上传成功`);
   };
 
@@ -136,14 +136,14 @@ function ProjectDetail() {
       okText: '删除',
       cancelText: '取消',
       onOk: () => {
-        setProjectPhases({
-          ...projectPhases,
+        setProjectPhases((prev) => ({
+          ...prev,
           [project.id]: phases.map((phase) =>
             phase.key === phaseKey
               ? { ...phase, files: phase.files.filter((f) => f.id !== fileId) }
               : phase
           ),
-        });
+        }));
         message.success('文件已删除');
       },
     });
@@ -273,8 +273,7 @@ function ProjectDetail() {
     );
   };
 
-  const timelineItems = useMemo(() =>
-    phases.map((phase, index) => ({
+  const timelineItems = phases.map((phase, index) => ({
       color:
         index === phases.length - 1 && phase.status === 'completed'
           ? '#52c41a'
@@ -284,8 +283,7 @@ function ProjectDetail() {
               ? '#52c41a'
               : 'gray',
       children: renderPhaseContent(phase, index),
-    }))
-  , [phases]);
+    }));
 
   return (
     <div style={{ minHeight: 'calc(100vh - 120px)' }}>
@@ -391,6 +389,7 @@ function ProjectDetail() {
       <ProjectModal
         open={modalOpen}
         project={project}
+        teamMembers={teamMembers}
         onCancel={() => setModalOpen(false)}
         onSubmit={handleEdit}
       />

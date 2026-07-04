@@ -16,7 +16,6 @@ export const MEMBER_STATUS_COLORS: Record<MemberStatus, string> = {
   '空闲': '#52c41a',    // 绿色
   '测试中': '#eb2f96',  // 粉色
   '休假': '#1890ff',    // 蓝色
-  '出差': '#722ed1',    // 紫色
 };
 
 // -------------------- 状态显示文本 --------------------

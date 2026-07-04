@@ -4,7 +4,7 @@
 
 // -------------------- 枚举类型 --------------------
 export type ProjectStatus = '未开始' | '测试中' | '已完成' | '阻塞';
-export type MemberStatus = '空闲' | '测试中' | '休假' | '出差';
+export type MemberStatus = '空闲' | '测试中' | '休假';
 
 export type BusinessType = '新建测试' | '扩容测试' | '年度复测' | '改造测试' | '验收测试';
 
@@ -28,6 +28,7 @@ export interface Project {
   description?: string;
   docLink?: string;            // 测试管理文档链接
   updatedAt: string;
+  assignedMemberIds?: string[]; // 指派人员ID列表
 }
 
 // 历史项目 - 继承 Project（保留 docLink 等字段）
@@ -101,6 +102,9 @@ export interface TeamMember {
   email?: string;
   phone?: string;
   projects?: MemberProject[]; // 进行中的项目详情
+  upcomingProjects?: MemberProject[]; // 未来指派的项目
+  leaveStartDate?: string;    // 休假开始日期
+  leaveEndDate?: string;      // 休假结束日期
 }
 
 // -------------------- 测试文档 --------------------
@@ -178,4 +182,42 @@ export interface PaginatedResponse<T> {
   total: number;
   page: number;
   pageSize: number;
+}
+
+// -------------------- 权限系统 --------------------
+export type UserRole = '管理者' | '编辑者' | '阅读者';
+
+export type AppModule =
+  | 'dashboard'
+  | 'projects'
+  | 'history'
+  | 'teamPool'
+  | 'testGuide'
+  | 'resourceCalc'
+  | 'permissionConfig';
+
+export interface ModulePermission {
+  module: AppModule;
+  view: boolean;
+  edit: boolean;
+  delete: boolean;
+}
+
+export interface User {
+  id: string;
+  username: string;
+  name: string;
+  role: UserRole;
+  avatar?: string;
+}
+
+export interface PermissionConfig {
+  role: UserRole;
+  permissions: ModulePermission[];
+}
+
+export interface AuthState {
+  isAuthenticated: boolean;
+  user: User | null;
+  permissionMap: Record<AppModule, ModulePermission>;
 }

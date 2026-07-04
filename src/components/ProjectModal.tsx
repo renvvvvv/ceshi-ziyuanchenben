@@ -1,17 +1,20 @@
-import { useEffect } from 'react';
-import { Modal, Form, Input, Select, DatePicker, InputNumber, message } from 'antd';
+import { useEffect, useState } from 'react';
+import { Modal, Form, Input, Select, DatePicker, InputNumber, Transfer, message } from 'antd';
+import type { TransferProps } from 'antd';
 import dayjs from 'dayjs';
-import type { Project } from '../types';
+import type { Project, TeamMember } from '../types';
 
 interface ProjectModalProps {
   open: boolean;
   project?: Project | null;
+  teamMembers: TeamMember[];
   onCancel: () => void;
   onSubmit: (values: Project) => void;
 }
 
-function ProjectModal({ open, project, onCancel, onSubmit }: ProjectModalProps) {
+function ProjectModal({ open, project, teamMembers, onCancel, onSubmit }: ProjectModalProps) {
   const [form] = Form.useForm();
+  const [targetKeys, setTargetKeys] = useState<string[]>([]);
   const isEdit = !!project;
 
   useEffect(() => {
@@ -24,8 +27,10 @@ function ProjectModal({ open, project, onCancel, onSubmit }: ProjectModalProps) 
           plannedDeliveryDate: project.plannedDeliveryDate ? dayjs(project.plannedDeliveryDate) : undefined,
           actualDeliveryDate: project.actualDeliveryDate ? dayjs(project.actualDeliveryDate) : undefined,
         });
+        setTargetKeys(project.assignedMemberIds || []);
       } else {
         form.resetFields();
+        setTargetKeys([]);
       }
     }
   }, [open, project, form]);
@@ -39,14 +44,25 @@ function ProjectModal({ open, project, onCancel, onSubmit }: ProjectModalProps) 
         endDate: values.endDate ? values.endDate.format('YYYY-MM-DD') : '',
         plannedDeliveryDate: values.plannedDeliveryDate ? values.plannedDeliveryDate.format('YYYY-MM-DD') : '',
         actualDeliveryDate: values.actualDeliveryDate ? values.actualDeliveryDate.format('YYYY-MM-DD') : '',
+        assignedMemberIds: targetKeys,
       };
       onSubmit(data);
-      message.success(isEdit ? '项目更新成功' : '项目创建成功');
       form.resetFields();
+      setTargetKeys([]);
     } catch {
       // validation failed
     }
   };
+
+  const transferData = teamMembers.map((m) => ({
+    key: m.id,
+    title: `${m.name} (${m.employeeId})`,
+    description: m.status,
+  }));
+
+  const transferRender: TransferProps<{ key: string; title: string; description: string }>['render'] = (item) => (
+    <span style={{ color: '#fff', fontSize: 13 }}>{item.title}</span>
+  );
 
   return (
     <Modal
@@ -55,9 +71,10 @@ function ProjectModal({ open, project, onCancel, onSubmit }: ProjectModalProps) 
       onOk={handleOk}
       onCancel={() => {
         form.resetFields();
+        setTargetKeys([]);
         onCancel();
       }}
-      width={640}
+      width={720}
       destroyOnClose
       styles={{
         header: { background: 'transparent', borderBottom: '1px solid rgba(255,255,255,0.1)' },
@@ -124,6 +141,32 @@ function ProjectModal({ open, project, onCancel, onSubmit }: ProjectModalProps) 
         <Form.Item name="docLink" label="测试管理链接">
           <Input placeholder="请输入测试管理文档链接" />
         </Form.Item>
+
+        {/* 人员指派 */}
+        <div style={{ marginTop: 16, marginBottom: 16 }}>
+          <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 14, marginBottom: 8, fontFamily: 'var(--font-primary)' }}>
+            人员指派
+          </div>
+          <Transfer
+            dataSource={transferData}
+            titles={['可选人员', '已指派']}
+            targetKeys={targetKeys}
+            onChange={(nextTargetKeys) => setTargetKeys(nextTargetKeys as string[])}
+            render={transferRender}
+            listStyle={{
+              width: 280,
+              height: 280,
+              background: 'rgba(255,255,255,0.04)',
+              border: '1px solid rgba(255,255,255,0.08)',
+              borderRadius: 8,
+            }}
+            selectAllLabels={['全选', '全选']}
+          />
+          <div style={{ marginTop: 8, color: 'rgba(255,255,255,0.35)', fontSize: 12 }}>
+            已指派 {targetKeys.length} 人，项目开始后自动转为「测试中」状态
+          </div>
+        </div>
+
         <Form.Item name="description" label="项目描述">
           <Input.TextArea rows={3} placeholder="请输入项目描述" />
         </Form.Item>

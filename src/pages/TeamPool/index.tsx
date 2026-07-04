@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
   Input, Tag, Avatar, Skeleton, Empty, message,
   Button, Modal, Form, Select, Transfer, DatePicker,
@@ -21,16 +21,7 @@ const statusConfig: Record<MemberStatus, { bg: string; color: string; dot: strin
   '空闲': { bg: 'rgba(82, 196, 26, 0.12)', color: '#52c41a', dot: '#52c41a' },
   '测试中': { bg: 'rgba(235, 87, 108, 0.12)', color: '#eb576c', dot: '#eb576c' },
   '休假': { bg: 'rgba(24, 144, 255, 0.12)', color: '#1890ff', dot: '#1890ff' },
-  '出差': { bg: 'rgba(114, 46, 209, 0.12)', color: '#722ed1', dot: '#722ed1' },
 };
-
-const PROJECTS = [
-  '江苏太仓 D17A 段',
-  '乌兰三期XM A1',
-  '廊坊三河铭泰改造',
-  '广州苹果',
-  '乌兰三期字节A2',
-];
 
 /** 取名字后 1~2 个字作为头像文字 */
 function getAvatarText(name: string): string {
@@ -44,7 +35,13 @@ function fmtShort(dateStr: string): string {
 }
 
 function TeamPool() {
-  const { teamMembers: members, setTeamMembers: setMembers } = useData();
+  const { teamMembers: members, setTeamMembers: setMembers, projects, autoProcessProjects, autoProcessMembers } = useData();
+
+  // ===== 自动化流程：进入人员池时自动处理项目/人员状态 =====
+  useEffect(() => {
+    autoProcessProjects();
+    autoProcessMembers();
+  }, [autoProcessProjects, autoProcessMembers]);
   const [statusFilter, setStatusFilter] = useState<string>('全部');
   const [projectFilter, setProjectFilter] = useState<string>('全部');
   const [searchText, setSearchText] = useState('');
@@ -58,15 +55,13 @@ function TeamPool() {
   const [batchTargetKeys, setBatchTargetKeys] = useState<string[]>([]);
   const [batchForm] = Form.useForm();
 
-  // 从所有成员中提取唯一项目列表
+  // 从项目管理中提取未开始/测试中的项目列表
   const allProjects = useMemo(() => {
-    const set = new Set<string>();
-    members.forEach((m) => {
-      (m.currentProjects || []).forEach((p) => set.add(p));
-      (m.projects || []).forEach((p) => set.add(p.projectName));
-    });
-    return Array.from(set).sort();
-  }, [members]);
+    return projects
+      .filter((p) => p.status === '未开始' || p.status === '测试中')
+      .map((p) => p.name)
+      .sort();
+  }, [projects]);
 
   const filteredMembers = useMemo(() => {
     return members.filter((m) => {
@@ -75,6 +70,7 @@ function TeamPool() {
         const allMemberProjects = [
           ...(m.currentProjects || []),
           ...(m.projects || []).map((p) => p.projectName),
+          ...(m.upcomingProjects || []).map((p) => p.projectName),
         ];
         if (!allMemberProjects.includes(projectFilter)) return false;
       }
@@ -86,7 +82,7 @@ function TeamPool() {
     });
   }, [members, statusFilter, projectFilter, searchText]);
 
-  const statusFilters = ['全部', '空闲', '测试中'];
+  const statusFilters = ['全部', '空闲', '测试中', '休假'];
 
   const openAdd = () => {
     setEditingMember(null);
@@ -103,12 +99,17 @@ function TeamPool() {
       skills: member.skills,
       email: member.email || '',
       phone: member.phone || '',
+      leaveStartDate: member.leaveStartDate ? dayjs(member.leaveStartDate) : null,
+      leaveEndDate: member.leaveEndDate ? dayjs(member.leaveEndDate) : null,
     });
     setModalOpen(true);
   };
 
   const handleSave = () => {
     form.validateFields().then((values) => {
+      const leaveStartDate = values.leaveStartDate ? dayjs(values.leaveStartDate).format('YYYY-MM-DD') : undefined;
+      const leaveEndDate = values.leaveEndDate ? dayjs(values.leaveEndDate).format('YYYY-MM-DD') : undefined;
+
       if (editingMember) {
         const becameIdle = editingMember.status === '测试中' && values.status === '空闲';
         setMembers((prev) =>
@@ -122,15 +123,19 @@ function TeamPool() {
                   skills: values.skills || [],
                   email: values.email || '',
                   phone: values.phone || '',
-                  ...(becameIdle ? { projects: [], currentProjects: [] } : {}),
+                  leaveStartDate,
+                  leaveEndDate,
+                  // 转为空闲时清除所有项目关联（包括 upcomingProjects）
+                  ...(becameIdle ? { projects: [], currentProjects: [], upcomingProjects: [] } : {}),
                 }
               : m
           )
         );
         message.success(`成员「${values.name}」更新成功`);
       } else {
+        // 使用时间戳生成唯一 ID，避免删除后添加导致 ID 冲突
         const newMember: TeamMember = {
-          id: `m${members.length + 1}`,
+          id: `m${Date.now()}`,
           name: values.name,
           employeeId: values.employeeId,
           status: values.status,
@@ -138,8 +143,10 @@ function TeamPool() {
           currentProjects: [],
           email: values.email || '',
           phone: values.phone || '',
+          leaveStartDate,
+          leaveEndDate,
         };
-        setMembers([...members, newMember]);
+        setMembers((prev) => [...prev, newMember]);
         message.success(`成员「${values.name}」添加成功`);
       }
       setModalOpen(false);
@@ -160,43 +167,92 @@ function TeamPool() {
     [members]
   );
 
+  // 人员统计
+  const stats = useMemo(() => {
+    const testingCount = members.filter((m) => m.status === '测试中').length;
+    const idleCount = members.filter((m) => m.status === '空闲').length;
+    const onLeaveCount = members.filter((m) => m.status === '休假').length;
+    return { testingCount, idleCount, onLeaveCount };
+  }, [members]);
+
   const handleBatchAssign = () => {
     batchForm.validateFields().then((values) => {
       const project = values.project as string;
-      const startDate = values.startDate ? dayjs(values.startDate).format('YYYY-MM-DD') : '';
-      const endDate = values.endDate ? dayjs(values.endDate).format('YYYY-MM-DD') : '';
       const ids = batchTargetKeys;
       if (ids.length === 0) {
         message.warning('请至少选择一名人员');
         return;
       }
+      // 从项目管理中自动同步项目时间，无需手动选择
+      const projectInfo = projects.find((p) => p.name === project);
+      if (!projectInfo) {
+        message.error('未找到对应项目信息，请重试');
+        return;
+      }
+      const startDate = projectInfo.startDate;
+      const endDate = projectInfo.endDate;
       const now = dayjs();
-      const shouldBeTesting = startDate && endDate && !dayjs(startDate).isAfter(now, 'day') && !dayjs(endDate).isBefore(now, 'day');
+      const isStarted = !dayjs(startDate).isAfter(now, 'day'); // startDate <= today
+      const isEnded = dayjs(endDate).isBefore(now, 'day'); // endDate < today
+      const isActive = isStarted && !isEnded; // 进行中
+      const isUpcoming = !isStarted; // 未开始
 
       setMembers((prev) =>
         prev.map((m) => {
           if (!ids.includes(m.id)) return m;
           const newProject: MemberProject = { projectName: project, startDate, endDate };
-          const existingProjects = m.projects || [];
-          // 如果项目已存在则更新时间，否则追加
-          const projectExists = existingProjects.find((p) => p.projectName === project);
-          const updatedProjects = projectExists
-            ? existingProjects.map((p) => (p.projectName === project ? newProject : p))
-            : [...existingProjects, newProject];
 
-          const newCurrentProjects = m.currentProjects.includes(project)
-            ? m.currentProjects
-            : [...m.currentProjects, project];
+          if (isActive) {
+            // 项目进行中 → 状态转为「测试中」，写入 projects + currentProjects
+            const existingProjects = m.projects || [];
+            const projectExists = existingProjects.find((p) => p.projectName === project);
+            const updatedProjects = projectExists
+              ? existingProjects.map((p) => (p.projectName === project ? newProject : p))
+              : [...existingProjects, newProject];
+            const newCurrentProjects = m.currentProjects.includes(project)
+              ? m.currentProjects
+              : [...m.currentProjects, project];
+            // 同步移除 upcomingProjects 中的同名项目（避免重复）
+            const cleanedUpcoming = (m.upcomingProjects || []).filter(
+              (p) => p.projectName !== project
+            );
+            return {
+              ...m,
+              status: '测试中',
+              currentProjects: newCurrentProjects,
+              projects: updatedProjects,
+              upcomingProjects: cleanedUpcoming,
+            };
+          }
 
-          return {
-            ...m,
-            status: shouldBeTesting ? '测试中' : m.status,
-            currentProjects: newCurrentProjects,
-            projects: updatedProjects,
-          };
+          if (isUpcoming) {
+            // 项目未开始 → 写入 upcomingProjects，状态保持不变
+            const existingUpcoming = m.upcomingProjects || [];
+            const upcomingExists = existingUpcoming.find((p) => p.projectName === project);
+            const updatedUpcoming = upcomingExists
+              ? existingUpcoming.map((p) => (p.projectName === project ? newProject : p))
+              : [...existingUpcoming, newProject];
+            return {
+              ...m,
+              upcomingProjects: updatedUpcoming,
+            };
+          }
+
+          // 兜底（项目已结束）：allProjects 理论上不会包含已结束项目，但保险起见处理
+          return m;
         })
       );
-      message.success(`已成功指派 ${ids.length} 人到项目「${project}」`);
+
+      // 项目已结束的情况（isActive=false 且 isUpcoming=false）
+      if (!isActive && !isUpcoming) {
+        message.error('该项目已结束，无法指派人员');
+        return;
+      }
+
+      const statusHint = isActive
+        ? '，项目进行中已自动转为测试中'
+        : '，项目未开始已加入即将参与';
+      message.success(`已成功指派 ${ids.length} 人到项目「${project}」${statusHint}`);
       setBatchModalOpen(false);
       batchForm.resetFields();
       setBatchTargetKeys([]);
@@ -226,6 +282,76 @@ function TeamPool() {
     <div>
       <div className="page-header">
         <h3>测试人员池</h3>
+      </div>
+
+      {/* 人员统计卡片 */}
+      <div style={{ display: 'flex', gap: 16, marginBottom: 20, flexWrap: 'wrap' }}>
+        <div style={{
+          flex: 1, minWidth: 140, maxWidth: 200,
+          background: 'rgba(235, 87, 108, 0.08)',
+          border: '1px solid rgba(235, 87, 108, 0.2)',
+          borderRadius: 10,
+          padding: '16px 20px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+        }}>
+          <div style={{
+            width: 40, height: 40, borderRadius: '50%',
+            background: 'rgba(235, 87, 108, 0.15)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <TeamOutlined style={{ color: '#eb576c', fontSize: 20 }} />
+          </div>
+          <div>
+            <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12, marginBottom: 2 }}>测试中</div>
+            <div style={{ color: '#eb576c', fontSize: 24, fontWeight: 700, lineHeight: 1 }}>{stats.testingCount}</div>
+          </div>
+        </div>
+        <div style={{
+          flex: 1, minWidth: 140, maxWidth: 200,
+          background: 'rgba(82, 196, 26, 0.08)',
+          border: '1px solid rgba(82, 196, 26, 0.2)',
+          borderRadius: 10,
+          padding: '16px 20px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+        }}>
+          <div style={{
+            width: 40, height: 40, borderRadius: '50%',
+            background: 'rgba(82, 196, 26, 0.15)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <TeamOutlined style={{ color: '#52c41a', fontSize: 20 }} />
+          </div>
+          <div>
+            <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12, marginBottom: 2 }}>空闲</div>
+            <div style={{ color: '#52c41a', fontSize: 24, fontWeight: 700, lineHeight: 1 }}>{stats.idleCount}</div>
+          </div>
+        </div>
+        <div style={{
+          flex: 1, minWidth: 140, maxWidth: 200,
+          background: 'rgba(24, 144, 255, 0.08)',
+          border: '1px solid rgba(24, 144, 255, 0.2)',
+          borderRadius: 10,
+          padding: '16px 20px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+        }}>
+          <div style={{
+            width: 40, height: 40, borderRadius: '50%',
+            background: 'rgba(24, 144, 255, 0.15)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <TeamOutlined style={{ color: '#1890ff', fontSize: 20 }} />
+          </div>
+          <div>
+            <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12, marginBottom: 2 }}>休假</div>
+            <div style={{ color: '#1890ff', fontSize: 24, fontWeight: 700, lineHeight: 1 }}>{stats.onLeaveCount}</div>
+          </div>
+        </div>
       </div>
 
       <div style={{ marginBottom: 24, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -418,6 +544,57 @@ function TeamPool() {
                   )}
                 </div>
 
+                {/* 休假信息 */}
+                {member.status === '休假' && member.leaveStartDate && (
+                  <div
+                    style={{
+                      fontSize: 12,
+                      color: 'rgba(255,255,255,0.5)',
+                      marginBottom: 8,
+                      fontFamily: 'var(--font-primary)',
+                      background: 'rgba(24,144,255,0.08)',
+                      borderRadius: 6,
+                      padding: '6px 8px',
+                      border: '1px solid rgba(24,144,255,0.15)',
+                      textAlign: 'center',
+                    }}
+                  >
+                    <ClockCircleOutlined style={{ marginRight: 4, color: '#1890ff' }} />
+                    <span style={{ color: '#1890ff' }}>休假中</span>
+                    <span style={{ color: 'rgba(255,255,255,0.35)', marginLeft: 6 }}>
+                      {fmtShort(member.leaveStartDate)} ~ {member.leaveEndDate ? fmtShort(member.leaveEndDate) : '未定'}
+                    </span>
+                  </div>
+                )}
+
+                {/* 未来项目 */}
+                {member.upcomingProjects && member.upcomingProjects.length > 0 && (
+                  <div
+                    style={{
+                      fontSize: 12,
+                      color: 'rgba(255,255,255,0.5)',
+                      marginBottom: 8,
+                      fontFamily: 'var(--font-primary)',
+                      background: 'rgba(250,173,20,0.08)',
+                      borderRadius: 6,
+                      padding: '6px 8px',
+                      border: '1px solid rgba(250,173,20,0.15)',
+                      textAlign: 'center',
+                    }}
+                  >
+                    <ClockCircleOutlined style={{ marginRight: 4, color: '#faad14' }} />
+                    <span style={{ color: '#faad14' }}>即将参与</span>
+                    {member.upcomingProjects.map((p) => (
+                      <div key={p.projectName} style={{ marginBottom: 2 }}>
+                        <span style={{ color: 'rgba(255,255,255,0.6)' }}>{p.projectName}</span>
+                        <span style={{ color: 'rgba(255,255,255,0.35)', marginLeft: 6 }}>
+                          {fmtShort(p.startDate)} ~ {fmtShort(p.endDate)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 {/* 当前进行中的项目及时间 */}
                 <div
                   style={{
@@ -450,7 +627,7 @@ function TeamPool() {
                 </div>
 
                 <div className="skill-tags" style={{ justifyContent: 'center' }}>
-                  {member.skills.map((skill) => (
+                  {(member.skills || []).map((skill) => (
                     <Tag
                       key={skill}
                       style={{
@@ -505,7 +682,24 @@ function TeamPool() {
             <Select placeholder="请选择状态">
               <Select.Option value="空闲">空闲</Select.Option>
               <Select.Option value="测试中">测试中</Select.Option>
+              <Select.Option value="休假">休假</Select.Option>
             </Select>
+          </Form.Item>
+
+          {/* 休假日期（仅在状态为休假时显示，使用 shouldUpdate 监听 status 变化） */}
+          <Form.Item noStyle shouldUpdate={(prev, curr) => prev.status !== curr.status}>
+            {({ getFieldValue }) =>
+              getFieldValue('status') === '休假' ? (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+                  <Form.Item name="leaveStartDate" label="休假开始日期" rules={[{ required: true, message: '请选择休假开始日期' }]}>
+                    <DatePicker style={{ width: '100%' }} placeholder="选择开始日期" />
+                  </Form.Item>
+                  <Form.Item name="leaveEndDate" label="休假结束日期" rules={[{ required: true, message: '请选择休假结束日期' }]}>
+                    <DatePicker style={{ width: '100%' }} placeholder="选择结束日期" />
+                  </Form.Item>
+                </div>
+              ) : null
+            }
           </Form.Item>
           <Form.Item name="skills" label="技能标签">
             <Select mode="tags" placeholder="输入技能标签，按回车确认" allowClear />
@@ -566,7 +760,7 @@ function TeamPool() {
                   setMembers((prev) =>
                     prev.map((m) =>
                       m.id === editingMember.id
-                        ? { ...m, status: '空闲', projects: [], currentProjects: [] }
+                        ? { ...m, status: '空闲', projects: [], currentProjects: [], upcomingProjects: [] }
                         : m
                     )
                   );
@@ -613,29 +807,84 @@ function TeamPool() {
         <Form form={batchForm} layout="vertical" style={{ marginTop: 12 }}>
           <Form.Item name="project" label="选择测试项目" rules={[{ required: true, message: '请选择一个项目' }]}>
             <Select placeholder="请选择要指派的测试项目">
-              {PROJECTS.map((p) => (
+              {allProjects.map((p) => (
                 <Select.Option key={p} value={p}>
                   {p}
                 </Select.Option>
               ))}
             </Select>
           </Form.Item>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-            <Form.Item
-              name="startDate"
-              label="项目开始时间"
-              rules={[{ required: true, message: '请选择开始时间' }]}
-            >
-              <DatePicker style={{ width: '100%' }} placeholder="选择开始日期" />
-            </Form.Item>
-            <Form.Item
-              name="endDate"
-              label="项目结束时间"
-              rules={[{ required: true, message: '请选择结束时间' }]}
-            >
-              <DatePicker style={{ width: '100%' }} placeholder="选择结束日期" />
-            </Form.Item>
-          </div>
+          {/* 选择项目后自动同步显示项目时间（无需手动选择） */}
+          <Form.Item noStyle shouldUpdate={(prev, curr) => prev.project !== curr.project}>
+            {({ getFieldValue }) => {
+              const selectedProjectName = getFieldValue('project') as string | undefined;
+              const selectedProject = selectedProjectName
+                ? projects.find((p) => p.name === selectedProjectName)
+                : undefined;
+              if (!selectedProject) return null;
+              const now = dayjs();
+              const isStarted = !dayjs(selectedProject.startDate).isAfter(now, 'day');
+              const isEnded = dayjs(selectedProject.endDate).isBefore(now, 'day');
+              const phase = !isStarted
+                ? { label: '未开始', color: '#7cb8ff' }
+                : !isEnded
+                ? { label: '进行中', color: '#faad14' }
+                : { label: '已结束', color: 'rgba(255,255,255,0.5)' };
+              return (
+                <div
+                  style={{
+                    marginBottom: 16,
+                    padding: '12px 14px',
+                    background: 'rgba(77,159,255,0.08)',
+                    border: '1px solid rgba(77,159,255,0.2)',
+                    borderRadius: 8,
+                    fontSize: 12,
+                    fontFamily: 'var(--font-primary)',
+                    color: 'rgba(255,255,255,0.65)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 6,
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <ClockCircleOutlined style={{ color: '#4d9fff' }} />
+                    <span style={{ color: 'rgba(255,255,255,0.4)' }}>项目时间（自动同步）</span>
+                  </div>
+                  <div style={{ display: 'flex', gap: 24, paddingLeft: 22 }}>
+                    <span>
+                      <span style={{ color: 'rgba(255,255,255,0.4)' }}>开始：</span>
+                      <span style={{ color: '#fff' }}>{selectedProject.startDate}</span>
+                    </span>
+                    <span>
+                      <span style={{ color: 'rgba(255,255,255,0.4)' }}>结束：</span>
+                      <span style={{ color: '#fff' }}>{selectedProject.endDate}</span>
+                    </span>
+                    <Tag
+                      style={{
+                        color: phase.color,
+                        background: `${phase.color}1a`,
+                        border: `1px solid ${phase.color}40`,
+                        borderRadius: 4,
+                        fontSize: 11,
+                        lineHeight: '16px',
+                        padding: '0 6px',
+                        margin: 0,
+                      }}
+                    >
+                      {phase.label}
+                    </Tag>
+                  </div>
+                  <div style={{ paddingLeft: 22, color: 'rgba(255,255,255,0.4)', fontSize: 11 }}>
+                    {phase.label === '进行中'
+                      ? '指派后人员状态将自动转为「测试中」'
+                      : phase.label === '未开始'
+                      ? '指派后将加入「即将参与」列表，到达开始日期后自动转为测试中'
+                      : '该项目已结束，无法指派'}
+                  </div>
+                </div>
+              );
+            }}
+          </Form.Item>
         </Form>
         <div
           style={{

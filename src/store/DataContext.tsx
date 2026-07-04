@@ -104,6 +104,12 @@ interface DataContextValue {
 
   // 数据管理
   resetToDefaults: () => void;
+
+  // 自动化流程：根据日期自动转换项目状态
+  autoProcessProjects: () => void;
+
+  // 自动化流程：人员状态管理
+  autoProcessMembers: () => void;
 }
 
 const DataContext = createContext<DataContextValue | null>(null);
@@ -127,6 +133,20 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [projectPhases, setProjectPhases] = usePersistentState<Record<string, ProjectPhase[]>>('projectPhases', mockProjectPhases);
   const [historyPhases, setHistoryPhases] = usePersistentState<Record<string, ProjectPhase[]>>('historyPhases', mergedHistoryPhases);
 
+  // ====== 初始化：自动去重 historyProjects（修复历史数据污染） ======
+  useEffect(() => {
+    const seen = new Set<string>();
+    const uniqueHistory = historyProjects.filter((p) => {
+      if (seen.has(p.id)) return false;
+      seen.add(p.id);
+      return true;
+    });
+    if (uniqueHistory.length < historyProjects.length) {
+      setHistoryProjects(uniqueHistory);
+      console.log('[DataContext] 历史项目去重：移除', historyProjects.length - uniqueHistory.length, '个重复项');
+    }
+  }, []); // 只在挂载时执行一次
+
   // ====== 项目 CRUD ======
   const addProject = useCallback((project: Project) => {
     setProjects((prev) => [project, ...prev]);
@@ -144,7 +164,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   // ====== 历史项目 CRUD ======
   const addHistoryProject = useCallback((project: HistoricalProject) => {
-    setHistoryProjects((prev) => [project, ...prev]);
+    setHistoryProjects((prev) => {
+      if (prev.some((p) => p.id === project.id)) return prev;
+      return [project, ...prev];
+    });
   }, [setHistoryProjects]);
 
   const updateHistoryProject = useCallback((id: string, updates: Partial<HistoricalProject>) => {
@@ -183,7 +206,206 @@ export function DataProvider({ children }: { children: ReactNode }) {
     setTestDocs((prev) => prev.filter((d) => d.id !== id));
   }, [setTestDocs]);
 
-  // ====== 重置数据 ======
+  // ====== 自动化流程：根据日期自动转换项目状态 ======
+  const autoProcessProjects = useCallback(() => {
+    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+    const todayStr = today;
+
+    let changed = false;
+
+    // 0. 清理：将 projects 中已有的"已完成"项目移到 historyProjects（防止数据污染）
+    const orphanedCompleted: Project[] = [];
+    const cleanedProjects: Project[] = [];
+
+    for (const p of projects) {
+      if (p.status === '已完成') {
+        orphanedCompleted.push(p);
+        changed = true;
+      } else {
+        cleanedProjects.push(p);
+      }
+    }
+
+    // 1. 未开始 → 测试中（今天 >= startDate 且 未过期）
+    //    特殊处理：如果整个项目周期已过（endDate < today），直接归档而不转测试中
+    const projectsToStart: Project[] = [];
+    const projectsToArchiveDirectly: Project[] = [];
+    const remainingProjects: Project[] = [];
+
+    for (const p of cleanedProjects) {
+      if (p.status === '未开始' && p.startDate <= todayStr) {
+        // 检查是否整个周期已过
+        if (p.endDate && p.endDate < todayStr) {
+          // 整个周期已过，直接归档
+          projectsToArchiveDirectly.push({
+            ...p,
+            status: '已完成' as const,
+            actualDeliveryDate: p.endDate,
+            updatedAt: new Date().toISOString(),
+          });
+          changed = true;
+        } else {
+          // 正常转测试中
+          projectsToStart.push({ ...p, status: '测试中' as const, updatedAt: new Date().toISOString() });
+          changed = true;
+        }
+      } else {
+        remainingProjects.push(p);
+      }
+    }
+
+    // 2. 测试中 → 已完成并归档（今天 > endDate）
+    const projectsToArchive: Project[] = [];
+    const finalProjects: Project[] = [];
+
+    for (const p of remainingProjects) {
+      if (p.status === '测试中' && p.endDate && p.endDate < todayStr) {
+        projectsToArchive.push({
+          ...p,
+          status: '已完成' as const,
+          actualDeliveryDate: p.endDate,
+          updatedAt: new Date().toISOString(),
+        });
+        changed = true;
+      } else {
+        finalProjects.push(p);
+      }
+    }
+
+    if (!changed) return;
+
+    // 应用状态变更
+    setProjects([...projectsToStart, ...finalProjects]);
+
+    // 同步更新指派人员：未开始→测试中 时，更新人员 projects/currentProjects
+    if (projectsToStart.length > 0) {
+      setTeamMembers((prevMembers) =>
+        prevMembers.map((m) => {
+          // 检查该人员是否被指派到任何转为测试中的项目
+          const assignedToStarted = projectsToStart.filter((p) =>
+            (p.assignedMemberIds || []).includes(m.id)
+          );
+          if (assignedToStarted.length === 0) return m;
+
+          // 合并项目信息
+          const newProjects = [...(m.projects || [])];
+          const newCurrentProjects = [...m.currentProjects];
+          const newUpcoming = [...(m.upcomingProjects || [])];
+
+          assignedToStarted.forEach((p) => {
+            const projectName = p.name;
+            // 从 upcomingProjects 中移除（如果存在）
+            const idx = newUpcoming.findIndex((up) => up.projectName === projectName);
+            if (idx >= 0) newUpcoming.splice(idx, 1);
+
+            // 添加到 projects 和 currentProjects
+            if (!newProjects.find((np) => np.projectName === projectName)) {
+              newProjects.push({ projectName, startDate: p.startDate, endDate: p.endDate });
+            }
+            if (!newCurrentProjects.includes(projectName)) {
+              newCurrentProjects.push(projectName);
+            }
+          });
+
+          return {
+            ...m,
+            // 休假中的成员不自动转为测试中，保留休假状态
+            status: m.status === '休假' ? m.status : '测试中' as const,
+            projects: newProjects,
+            currentProjects: newCurrentProjects,
+            upcomingProjects: newUpcoming,
+          };
+        })
+      );
+    }
+
+    // 归档项目：从 projects 移到 historyProjects（包括清理出的 orphanedCompleted + 直接归档的 + 正常归档的）
+    const allArchived = [...orphanedCompleted, ...projectsToArchiveDirectly, ...projectsToArchive];
+    // 对 allArchived 自身去重（防止重复 ID）
+    const seenIds = new Set<string>();
+    const dedupedArchived = allArchived.filter((p) => {
+      if (seenIds.has(p.id)) return false;
+      seenIds.add(p.id);
+      return true;
+    });
+    if (dedupedArchived.length > 0) {
+      setHistoryProjects((prev) => {
+        const existingIds = new Set(prev.map((p) => p.id));
+        const uniqueArchived = dedupedArchived.filter((p) => !existingIds.has(p.id));
+        return [...uniqueArchived, ...prev];
+      });
+
+      // 同时转移阶段数据（使用去重后的 dedupedArchived）
+      const newProjectPhases = { ...projectPhases };
+      const newHistoryPhases = { ...historyPhases };
+
+      for (const p of dedupedArchived) {
+        if (newProjectPhases[p.id]) {
+          newHistoryPhases[p.id] = newProjectPhases[p.id];
+          delete newProjectPhases[p.id];
+        }
+      }
+
+      setProjectPhases(newProjectPhases);
+      setHistoryPhases(newHistoryPhases);
+    }
+
+    console.log('[AutoProcess]', {
+      started: projectsToStart.length,
+      archived: projectsToArchive.length,
+      directArchived: projectsToArchiveDirectly.length,
+      cleaned: orphanedCompleted.length,
+      today: todayStr,
+    });
+  }, [projects, projectPhases, historyPhases, setProjects, setHistoryProjects, setProjectPhases, setHistoryPhases]);
+
+  // ====== 自动化流程：人员状态管理 ======
+  const autoProcessMembers = useCallback(() => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    let changed = false;
+
+    const updatedMembers: TeamMember[] = teamMembers.map((m) => {
+      // 1. 测试中 → 空闲（项目结束日期已过）
+      if (m.status === '测试中') {
+        const projects = m.projects || [];
+        // 检查是否所有项目都已结束
+        const allProjectsFinished = projects.length > 0 && projects.every(
+          (p) => p.endDate < todayStr
+        );
+        if (allProjectsFinished) {
+          changed = true;
+          return {
+            ...m,
+            status: '空闲' as const,
+            currentProjects: [],
+            updatedAt: new Date().toISOString(),
+          };
+        }
+      }
+
+      // 2. 休假 → 空闲（休假结束日期已过）
+      if (m.status === '休假') {
+        if (m.leaveEndDate && m.leaveEndDate < todayStr) {
+          changed = true;
+          return {
+            ...m,
+            status: '空闲' as const,
+            leaveStartDate: undefined,
+            leaveEndDate: undefined,
+            updatedAt: new Date().toISOString(),
+          };
+        }
+      }
+
+      return m;
+    });
+
+    if (changed) {
+      setTeamMembers(updatedMembers);
+      console.log('[AutoProcessMembers] 自动处理完成，日期：', todayStr);
+    }
+  }, [teamMembers, setTeamMembers]);
+
   const resetToDefaults = useCallback(() => {
     setProjects(mockProjects);
     setHistoryProjects(mockHistoryProjects);
@@ -223,6 +445,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
     regionMwOutput: mockRegionMwOutput,
     docCategoriesList: docCategories,
     resetToDefaults,
+    autoProcessProjects,
+    autoProcessMembers,
   };
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;

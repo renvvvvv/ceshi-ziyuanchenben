@@ -3,6 +3,7 @@ import express from 'express';
 import cors from 'cors';
 import resourceCalcRouter from './routes/resourceCalc.js';
 import projectsRouter from './routes/projects.js';
+import authRouter from './routes/auth.js';
 import { initDatabase } from './database.js';
 
 const app = express();
@@ -13,6 +14,7 @@ app.use(express.json({ limit: '2mb' }));
 
 app.use('/api/resource-calc', resourceCalcRouter);
 app.use('/api/projects', projectsRouter);
+app.use('/api/auth', authRouter);
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });

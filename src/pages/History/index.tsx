@@ -14,6 +14,8 @@ function History() {
   const navigate = useNavigate();
   const { historyProjects, setHistoryProjects } = useData();
   const [yearFilter, setYearFilter] = useState<string>('全部');
+  const [cityFilter, setCityFilter] = useState<string>('全部');
+  const [customerFilter, setCustomerFilter] = useState<string>('全部');
   const [searchText, setSearchText] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<HistoricalProject | null>(null);
@@ -30,11 +32,39 @@ function History() {
     return Array.from(years).sort((a, b) => b - a); // 降序：最新年份在前
   }, [historyProjects]);
 
+  // 从数据中动态提取城市列表（去重排序）
+  const cityOptions = useMemo(() => {
+    const cities = new Set<string>();
+    historyProjects.forEach((p) => {
+      if (p.city) {
+        cities.add(p.city);
+      }
+    });
+    return Array.from(cities).sort();
+  }, [historyProjects]);
+
+  // 从数据中动态提取客户列表（去重排序）
+  const customerOptions = useMemo(() => {
+    const customers = new Set<string>();
+    historyProjects.forEach((p) => {
+      if (p.customer) {
+        customers.add(p.customer);
+      }
+    });
+    return Array.from(customers).sort();
+  }, [historyProjects]);
+
   const filteredData = useMemo(() => {
     return historyProjects.filter((p) => {
       if (yearFilter !== '全部') {
         const year = p.startDate ? dayjs(p.startDate).year() : null;
         if (year?.toString() !== yearFilter) return false;
+      }
+      if (cityFilter !== '全部') {
+        if (!p.city || p.city !== cityFilter) return false;
+      }
+      if (customerFilter !== '全部') {
+        if (!p.customer || p.customer !== customerFilter) return false;
       }
       if (searchText) {
         const kw = searchText.toLowerCase();
@@ -47,7 +77,7 @@ function History() {
       }
       return true;
     });
-  }, [historyProjects, yearFilter, searchText]);
+  }, [historyProjects, yearFilter, cityFilter, customerFilter, searchText]);
 
   const handleAdd = () => {
     setEditingProject(null);
@@ -343,6 +373,34 @@ function History() {
           {yearOptions.map((year) => (
             <Select.Option key={year} value={year.toString()}>
               {year}年
+            </Select.Option>
+          ))}
+        </Select>
+        <Select
+          value={cityFilter}
+          onChange={setCityFilter}
+          style={{ width: 130, fontFamily: 'var(--font-primary)' }}
+          popupMatchSelectWidth={false}
+          placeholder="选择城市"
+        >
+          <Select.Option value="全部">全部城市</Select.Option>
+          {cityOptions.map((city) => (
+            <Select.Option key={city} value={city}>
+              {city}
+            </Select.Option>
+          ))}
+        </Select>
+        <Select
+          value={customerFilter}
+          onChange={setCustomerFilter}
+          style={{ width: 160, fontFamily: 'var(--font-primary)' }}
+          popupMatchSelectWidth={false}
+          placeholder="选择客户"
+        >
+          <Select.Option value="全部">全部客户</Select.Option>
+          {customerOptions.map((customer) => (
+            <Select.Option key={customer} value={customer}>
+              {customer}
             </Select.Option>
           ))}
         </Select>

@@ -121,18 +121,28 @@ class PgDbWrapper {
 const dbWrapper = new PgDbWrapper();
 
 export async function initDatabase(): Promise<PgDbWrapper> {
-  await dbWrapper.ready();
+  try {
+    await dbWrapper.ready();
+  } catch (err: any) {
+    console.warn('[DB] PostgreSQL connection failed:', err.message || err);
+    console.warn('[DB] Running in fallback mode (no database persistence)');
+    return dbWrapper;
+  }
 
   // 查找 init.sql
-  const possiblePaths = [
-    join(__dirname, '..', '..', 'scripts', 'init.sql'),
-    join(__dirname, '..', '..', '..', 'scripts', 'init.sql'),
-  ];
-  const initSqlPath = possiblePaths.find(p => existsSync(p));
-  if (initSqlPath) {
-    const initSql = readFileSync(initSqlPath, 'utf-8');
-    await dbWrapper.exec(initSql);
-    console.log('[DB] Schema initialized (PostgreSQL)');
+  try {
+    const possiblePaths = [
+      join(__dirname, '..', '..', 'scripts', 'init.sql'),
+      join(__dirname, '..', '..', '..', 'scripts', 'init.sql'),
+    ];
+    const initSqlPath = possiblePaths.find(p => existsSync(p));
+    if (initSqlPath) {
+      const initSql = readFileSync(initSqlPath, 'utf-8');
+      await dbWrapper.exec(initSql);
+      console.log('[DB] Schema initialized (PostgreSQL)');
+    }
+  } catch (err: any) {
+    console.warn('[DB] Failed to init schema:', err.message || err);
   }
   return dbWrapper;
 }

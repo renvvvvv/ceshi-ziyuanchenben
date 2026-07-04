@@ -65,21 +65,9 @@ function HistoryDetail() {
     }));
   }, [project, historyPhases]);
 
-  if (!project) {
-    return (
-      <div style={{ textAlign: 'center', padding: 80 }}>
-        <Empty description="历史项目不存在">
-          <Button type="primary" onClick={() => navigate('/history')}>
-            返回历史项目
-          </Button>
-        </Empty>
-      </div>
-    );
-  }
-
   /** 计算项目总周期 */
   const totalDays = useMemo(() => {
-    if (!project.startDate || !project.endDate) return null;
+    if (!project || !project.startDate || !project.endDate) return null;
     const start = new Date(project.startDate);
     const end = new Date(project.endDate);
     return Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
@@ -91,6 +79,18 @@ function HistoryDetail() {
     const completedPhases = phases.filter((p) => p.status === 'completed').length;
     return { total, completedPhases, totalPhases: phases.length };
   }, [phases]);
+
+  if (!project) {
+    return (
+      <div style={{ textAlign: 'center', padding: 80 }}>
+        <Empty description="历史项目不存在">
+          <Button type="primary" onClick={() => navigate('/history')}>
+            返回历史项目
+          </Button>
+        </Empty>
+      </div>
+    );
+  }
 
   /** 文件上传处理 */
   const handleUpload = (phaseKey: string, fileList: UploadFile[]) => {
@@ -106,14 +106,14 @@ function HistoryDetail() {
       uploadedAt: new Date().toLocaleString('zh-CN'),
     };
 
-    setHistoryPhases({
-      ...historyPhases,
+    setHistoryPhases((prev) => ({
+      ...prev,
       [project.id]: phases.map((phase) =>
         phase.key === phaseKey
           ? { ...phase, files: [...phase.files, newFile] }
           : phase
       ),
-    });
+    }));
     message.success(`文件「${lastFile.name}」上传成功`);
   };
 
@@ -126,14 +126,14 @@ function HistoryDetail() {
       okText: '删除',
       cancelText: '取消',
       onOk: () => {
-        setHistoryPhases({
-          ...historyPhases,
+        setHistoryPhases((prev) => ({
+          ...prev,
           [project.id]: phases.map((phase) =>
             phase.key === phaseKey
               ? { ...phase, files: phase.files.filter((f) => f.id !== fileId) }
               : phase
           ),
-        });
+        }));
         message.success('文件已删除');
       },
     });

@@ -9,6 +9,11 @@ import {
   ArrowUpOutlined,
   ArrowDownOutlined,
   MinusOutlined,
+  ThunderboltOutlined,
+  ClockCircleOutlined,
+  CalendarOutlined,
+  TeamOutlined,
+  AreaChartOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import type { Project, HistoricalProject } from '../types';
@@ -32,6 +37,12 @@ function calcOnTimeRate(planned?: string, actual?: string): string | null {
   if (!planned) return '未知';
   if (actual <= planned) return '提前或准时';
   return '延期';
+}
+
+/** 计算交付周期天数（计划交付日期 vs 实际交付日期） */
+function calcDeliveryDays(planned?: string, actual?: string): number | null {
+  if (!planned || !actual) return null;
+  return Math.ceil((new Date(actual).getTime() - new Date(planned).getTime()) / (1000 * 60 * 60 * 24));
 }
 
 /** 差异百分比 */
@@ -106,10 +117,26 @@ function ComparisonReportModal({ open, currentProjects, historyProjects, onClose
   const historyStats = useMemo(() => {
     if (selectedHistoryItems.length === 0) return null;
     const items = selectedHistoryItems;
+    const avgManpower = items.reduce((s, h) => s + (h.plannedManpower || 0), 0) / items.length;
     return {
       avgItOutput: items.reduce((s, h) => s + h.itOutput, 0) / items.length,
       avgDays: items.reduce((s, h) => s + calcDays(h.startDate, h.endDate), 0) / items.length,
+      avgManpower: avgManpower || 0,
       onTimeCount: items.filter((h) => calcOnTimeRate(h.plannedDeliveryDate, h.actualDeliveryDate) === '提前或准时').length,
+      avgDeliveryDelay: (() => {
+        const delays = items
+          .map((h) => calcDeliveryDays(h.plannedDeliveryDate, h.actualDeliveryDate))
+          .filter((d): d is number => d !== null && d > 0);
+        return delays.length > 0 ? delays.reduce((s, d) => s + d, 0) / delays.length : 0;
+      })(),
+      delayCount: items.filter((h) => {
+        const delay = calcDeliveryDays(h.plannedDeliveryDate, h.actualDeliveryDate);
+        return delay !== null && delay > 0;
+      }).length,
+      earlyCount: items.filter((h) => {
+        const delay = calcDeliveryDays(h.plannedDeliveryDate, h.actualDeliveryDate);
+        return delay !== null && delay < 0;
+      }).length,
     };
   }, [selectedHistoryItems]);
 
@@ -261,31 +288,33 @@ function ComparisonReportModal({ open, currentProjects, historyProjects, onClose
             </div>
           </div>
 
-          {/* 核心指标对比卡片 */}
+          {/* 核心指标对比卡片：兆瓦数 | 工期 | 交付周期 | 人员数量 */}
           {historyStats && (
             <>
               <Row gutter={[16, 16]} style={{ marginBottom: 22 }}>
+                {/* 1. 兆瓦数 */}
                 <Col span={6}>
                   <Card size="small" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10 }} bodyStyle={{ padding: '16px 12px' }}>
                     <Statistic
-                      title={<span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>IT产出(MW)</span>}
+                      title={<span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}><ThunderboltOutlined style={{ marginRight: 4 }} />兆瓦数(MW)</span>}
                       value={selectedCurrent?.itOutput || 0}
                       suffix="MW"
                       valueStyle={{ color: '#7cb8ff', fontSize: 22, fontWeight: 700 }}
                       prefix={<DiffArrow value={(selectedCurrent?.itOutput || 0) - historyStats.avgItOutput} />}
                     />
                     <div style={{ marginTop: 4, fontSize: 11, color: 'rgba(255,255,255,0.35)' }}>
-                      历史均值: {historyStats.avgItOutput.toFixed(1)}
+                      历史均值: {historyStats.avgItOutput.toFixed(1)} MW
                       <span style={{ marginLeft: 6, color: (selectedCurrent?.itOutput || 0) >= historyStats.avgItOutput ? '#52c41a' : '#ff4d4f' }}>
                         ({diffPercent(selectedCurrent?.itOutput || 0, historyStats.avgItOutput)})
                       </span>
                     </div>
                   </Card>
                 </Col>
+                {/* 2. 工期 */}
                 <Col span={6}>
                   <Card size="small" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10 }} bodyStyle={{ padding: '16px 12px' }}>
                     <Statistic
-                      title={<span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>工期(天)</span>}
+                      title={<span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}><ClockCircleOutlined style={{ marginRight: 4 }} />工期(天)</span>}
                       value={selectedCurrent ? calcDays(selectedCurrent.startDate, selectedCurrent.endDate || '') : 0}
                       suffix="天"
                       valueStyle={{ color: '#faad14', fontSize: 22, fontWeight: 700 }}
@@ -299,41 +328,47 @@ function ComparisonReportModal({ open, currentProjects, historyProjects, onClose
                     </div>
                   </Card>
                 </Col>
+                {/* 3. 交付周期 */}
                 <Col span={6}>
                   <Card size="small" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10 }} bodyStyle={{ padding: '16px 12px' }}>
                     <div style={{ marginBottom: 4 }}>
-                      <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>业务类型</span>
+                      <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}><CalendarOutlined style={{ marginRight: 4 }} />交付周期</span>
                     </div>
-                    <div style={{ fontSize: 18, fontWeight: 700, color: '#b37feb' }}>{selectedCurrent?.businessType || '-'}</div>
-                    <div style={{ marginTop: 8, display: 'flex', gap: 6 }}>
+                    <div style={{ fontSize: 22, fontWeight: 700, color: '#b37feb' }}>
                       {(() => {
-                        const matchCount = selectedHistoryItems.filter((h) => h.businessType === (selectedCurrent?.businessType || '')).length;
+                        const currentDays = selectedCurrent ? calcDays(selectedCurrent.startDate, selectedCurrent.plannedDeliveryDate || selectedCurrent.endDate || '') : 0;
+                        const avgDel = historyStats.avgDays;
                         return (
-                          <>
-                            <Tag style={{ background: matchCount > 0 ? 'rgba(82,196,26,0.15)' : 'rgba(255,255,255,0.06)', color: matchCount > 0 ? '#52c41a' : 'rgba(255,255,255,0.35)', border: `1px solid ${matchCount > 0 ? 'rgba(82,196,26,0.3)' : 'rgba(255,255,255,0.08)'}`, borderRadius: 4, fontSize: 11 }}>
-                              同类型 {matchCount}/{selectedHistoryItems.length}
-                            </Tag>
-                          </>
+                          <span>
+                            {currentDays} <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)' }}>天</span>
+                          </span>
                         );
                       })()}
                     </div>
+                    <div style={{ marginTop: 4, fontSize: 11, color: 'rgba(255,255,255,0.35)' }}>
+                      历史平均: {historyStats.avgDays.toFixed(0)}天
+                      <span style={{ marginLeft: 6, color: (selectedCurrent ? calcDays(selectedCurrent.startDate, selectedCurrent.plannedDeliveryDate || selectedCurrent.endDate || '') : 0) >= historyStats.avgDays ? '#ff4d4f' : '#52c41a' }}>
+                        ({diffPercent((selectedCurrent ? calcDays(selectedCurrent.startDate, selectedCurrent.plannedDeliveryDate || selectedCurrent.endDate || '') : 0), historyStats.avgDays)})
+                      </span>
+                    </div>
                   </Card>
                 </Col>
+                {/* 4. 人员数量 */}
                 <Col span={6}>
                   <Card size="small" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10 }} bodyStyle={{ padding: '16px 12px' }}>
                     <Statistic
-                      title={<span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>历史准时率</span>}
-                      value={historyStats.onTimeCount}
-                      suffix={`/ ${selectedHistoryItems.length}`}
-                      valueStyle={{ color: '#52c41a', fontSize: 22, fontWeight: 700 }}
+                      title={<span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}><TeamOutlined style={{ marginRight: 4 }} />人员数量(人)</span>}
+                      value={selectedCurrent?.plannedManpower || 0}
+                      suffix="人"
+                      valueStyle={{ color: '#00d4aa', fontSize: 22, fontWeight: 700 }}
+                      prefix={<DiffArrow value={(selectedCurrent?.plannedManpower || 0) - historyStats.avgManpower} />}
                     />
-                    <Progress
-                      percent={Math.round((historyStats.onTimeCount / selectedHistoryItems.length) * 100)}
-                      size="small"
-                      strokeColor="#52c41a"
-                      trailColor="rgba(255,255,255,0.08)"
-                      style={{ marginTop: 6 }}
-                    />
+                    <div style={{ marginTop: 4, fontSize: 11, color: 'rgba(255,255,255,0.35)' }}>
+                      历史均值: {historyStats.avgManpower.toFixed(0)}人
+                      <span style={{ marginLeft: 6, color: (selectedCurrent?.plannedManpower || 0) >= historyStats.avgManpower ? '#52c41a' : '#ff4d4f' }}>
+                        ({diffPercent(selectedCurrent?.plannedManpower || 0, historyStats.avgManpower)})
+                      </span>
+                    </div>
                   </Card>
                 </Col>
               </Row>
@@ -365,67 +400,82 @@ function ComparisonReportModal({ open, currentProjects, historyProjects, onClose
                     render: (t: string) => <span style={{ color: '#fff', fontWeight: 500 }}>{t}</span>,
                   },
                   {
-                    title: '客户匹配',
-                    key: 'customerMatch',
-                    width: 90,
-                    align: 'center' as const,
-                    render: (_: unknown, r: HistoricalProject & { _simCustomer?: boolean }) =>
-                      r._simCustomer ? <CheckCircleOutlined style={{ color: '#52c41a', fontSize: 16 }} /> : <CloseCircleOutlined style={{ color: 'rgba(255,255,255,0.15)', fontSize: 16 }} />,
-                  },
-                  {
-                    title: '城市匹配',
-                    key: 'cityMatch',
-                    width: 80,
-                    align: 'center' as const,
-                    render: (_: unknown, r: HistoricalProject & { _simCity?: boolean }) =>
-                      r._simCity ? <CheckCircleOutlined style={{ color: '#52c41a', fontSize: 16 }} /> : <CloseCircleOutlined style={{ color: 'rgba(255,255,255,0.15)', fontSize: 16 }} />,
-                  },
-                  {
-                    title: '业务类型',
-                    dataIndex: 'businessType',
-                    key: 'type',
-                    width: 95,
-                    render: (text?: string) => (
-                      <Space>
-                        <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12 }}>{text || '-'}</span>
-                        {(text && text === selectedCurrent?.businessType) && <CheckCircleOutlined style={{ color: '#52c41a', fontSize: 12 }} />}
-                      </Space>
-                    ),
-                  },
-                  {
-                    title: 'IT产出(MW)',
+                    title: '兆瓦数(MW)',
                     dataIndex: 'itOutput',
                     key: 'mw',
-                    width: 100,
+                    width: 120,
+                    align: 'center' as const,
                     sorter: (a, b) => a.itOutput - b.itOutput,
-                    render: (val: number) => (
-                      <Space>
-                        <span style={{ color: '#7cb8ff', fontWeight: 500 }}>{val}</span>
+                    render: (val: number, r: HistoricalProject) => (
+                      <Space direction="vertical" size={0} style={{ textAlign: 'center' }}>
+                        <span style={{ color: '#7cb8ff', fontWeight: 500 }}>{val} MW</span>
                         {selectedCurrent?.itOutput && (
                           <span style={{
                             fontSize: 11,
                             color: val > selectedCurrent.itOutput ? '#52c41a' : val < selectedCurrent.itOutput ? '#ff4d4f' : 'rgba(255,255,255,0.3)',
                           }}>
-                            ({diffPercent(selectedCurrent.itOutput, val)})
+                            {diffPercent(selectedCurrent.itOutput, val)}
                           </span>
                         )}
                       </Space>
                     ),
                   },
                   {
-                    title: '项目周期',
+                    title: '工期(天)',
                     key: 'duration',
-                    width: 85,
+                    width: 110,
+                    align: 'center' as const,
                     sorter: (a, b) => calcDays(a.startDate, a.endDate) - calcDays(b.startDate, b.endDate),
-                    render: (_: unknown, r) => {
+                    render: (_: unknown, r: HistoricalProject) => {
                       const days = calcDays(r.startDate, r.endDate);
                       const currentDays = selectedCurrent ? calcDays(selectedCurrent.startDate, selectedCurrent.endDate || '') : 0;
                       return (
-                        <Space>
+                        <Space direction="vertical" size={0} style={{ textAlign: 'center' }}>
                           <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12 }}>{days}天</span>
                           {currentDays > 0 && (
                             <span style={{ fontSize: 11, color: currentDays > days ? '#ff4d4f' : currentDays < days ? '#52c41a' : 'rgba(255,255,255,0.3)' }}>
-                              ({diffPercent(currentDays, days)})
+                              {diffPercent(currentDays, days)}
+                            </span>
+                          )}
+                        </Space>
+                      );
+                    },
+                  },
+                  {
+                    title: '交付周期(天)',
+                    key: 'deliveryCycle',
+                    width: 120,
+                    align: 'center' as const,
+                    render: (_: unknown, r: HistoricalProject) => {
+                      const cycle = calcDays(r.startDate, r.plannedDeliveryDate || r.endDate);
+                      const currentCycle = selectedCurrent ? calcDays(selectedCurrent.startDate, selectedCurrent.plannedDeliveryDate || selectedCurrent.endDate || '') : 0;
+                      return (
+                        <Space direction="vertical" size={0} style={{ textAlign: 'center' }}>
+                          <span style={{ color: '#b37feb', fontSize: 12 }}>{cycle}天</span>
+                          {currentCycle > 0 && (
+                            <span style={{ fontSize: 11, color: currentCycle > cycle ? '#ff4d4f' : currentCycle < cycle ? '#52c41a' : 'rgba(255,255,255,0.3)' }}>
+                              {diffPercent(currentCycle, cycle)}
+                            </span>
+                          )}
+                        </Space>
+                      );
+                    },
+                  },
+                  {
+                    title: '人员数量(人)',
+                    key: 'manpower',
+                    width: 120,
+                    align: 'center' as const,
+                    sorter: (a, b) => (a.plannedManpower || 0) - (b.plannedManpower || 0),
+                    render: (_: unknown, r: HistoricalProject) => {
+                      const mp = r.plannedManpower || 0;
+                      const currentMp = selectedCurrent?.plannedManpower || 0;
+                      return (
+                        <Space direction="vertical" size={0} style={{ textAlign: 'center' }}>
+                          <span style={{ color: '#00d4aa', fontSize: 12 }}>{mp}人</span>
+                          {currentMp > 0 && mp > 0 && (
+                            <span style={{ fontSize: 11, color: currentMp > mp ? '#52c41a' : currentMp < mp ? '#ff4d4f' : 'rgba(255,255,255,0.3)' }}>
+                              {diffPercent(currentMp, mp)}
                             </span>
                           )}
                         </Space>
@@ -435,14 +485,16 @@ function ComparisonReportModal({ open, currentProjects, historyProjects, onClose
                   {
                     title: '交付情况',
                     key: 'delivery',
-                    width: 85,
-                    render: (_: unknown, r) => {
+                    width: 100,
+                    align: 'center' as const,
+                    render: (_: unknown, r: HistoricalProject) => {
                       const rate = calcOnTimeRate(r.plannedDeliveryDate, r.actualDeliveryDate);
                       if (rate === '提前或准时') {
                         return <Tag icon={<CheckCircleOutlined />} color="#52c41a" style={{ border: 'none' }}>准时</Tag>;
                       }
                       if (rate === '延期') {
-                        return <Tag icon={<WarningOutlined />} color="#ff4d4f" style={{ border: 'none' }}>延期</Tag>;
+                        const delay = calcDeliveryDays(r.plannedDeliveryDate, r.actualDeliveryDate);
+                        return <Tag icon={<WarningOutlined />} color="#ff4d4f" style={{ border: 'none' }}>延期{delay ? ` ${delay}天` : ''}</Tag>;
                       }
                       return '-';
                     },
@@ -452,7 +504,7 @@ function ComparisonReportModal({ open, currentProjects, historyProjects, onClose
 
               {/* 报告结论 */}
               <Divider style={{ borderColor: 'rgba(255,255,255,0.08)', margin: '18px 0 12px' }}>
-                <span style={{ color: 'rgba(255,255,255,0.45)', fontSize: 13 }}>分析结论</span>
+                <span style={{ color: 'rgba(255,255,255,0.45)', fontSize: 13 }}><AreaChartOutlined style={{ marginRight: 6 }} />多维对比分析报告</span>
               </Divider>
 
               <Card
@@ -467,43 +519,118 @@ function ComparisonReportModal({ open, currentProjects, historyProjects, onClose
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
                   <FileTextOutlined style={{ color: '#7cb8ff', fontSize: 18, marginTop: 2 }} />
                   <div style={{ flex: 1 }}>
-                    <div style={{ color: '#fff', fontWeight: 600, marginBottom: 8, fontSize: 14 }}>
-                      「{selectedCurrent?.name}」与{selectedHistoryItems.length}个历史项目的对比分析
+                    <div style={{ color: '#fff', fontWeight: 600, marginBottom: 12, fontSize: 15 }}>
+                      「{selectedCurrent?.name}」与{selectedHistoryItems.length}个历史项目的深度对比分析
                     </div>
-                    <ul style={{ margin: 0, paddingLeft: 18, color: 'rgba(255,255,255,0.65)', fontSize: 13, lineHeight: 2 }}>
+                    <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12, marginBottom: 12, paddingBottom: 8, borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                      基于兆瓦数、工期、交付周期、人员数量四大核心维度进行量化对比
+                    </div>
+                    <ul style={{ margin: 0, paddingLeft: 18, color: 'rgba(255,255,255,0.65)', fontSize: 13, lineHeight: 2.2 }}>
+                      {/* 1. 兆瓦数分析 */}
                       <li>
-                        IT产出为 <strong style={{ color: '#7cb8ff' }}>{selectedCurrent?.itOutput} MW</strong>，相比历史均值{' '}
+                        <strong style={{ color: '#7cb8ff' }}>【兆瓦数对比】</strong>
+                        当前项目 IT产出为 <strong style={{ color: '#7cb8ff' }}>{selectedCurrent?.itOutput} MW</strong>，
                         {historyStats && ((selectedCurrent?.itOutput || 0) >= historyStats.avgItOutput ? (
-                          <span style={{ color: '#52c41a' }}>高出 {diffPercent(selectedCurrent?.itOutput || 0, historyStats.avgItOutput)}</span>
+                          <span>相比历史均值 <strong style={{ color: '#52c41a' }}>高出 {diffPercent(selectedCurrent?.itOutput || 0, historyStats.avgItOutput)}</strong></span>
                         ) : (
-                          <span style={{ color: '#ff4d4f' }}>低 {diffPercent(selectedCurrent?.itOutput || 0, historyStats.avgItOutput).replace('+', '')}</span>
-                        ))}{' '}
-                        （历史均值 {historyStats?.avgItOutput.toFixed(1)} MW）
+                          <span>相比历史均值 <strong style={{ color: '#ff4d4f' }}>低 {diffPercent(selectedCurrent?.itOutput || 0, historyStats.avgItOutput).replace('+', '')}</strong></span>
+                        ))}。
+                        历史项目平均 IT产出为 {historyStats?.avgItOutput.toFixed(1)} MW，
+                        {selectedHistoryItems.length > 1 && (() => {
+                          const maxOutput = Math.max(...selectedHistoryItems.map(h => h.itOutput));
+                          const minOutput = Math.min(...selectedHistoryItems.map(h => h.itOutput));
+                          return `参比项目兆瓦数分布范围 ${minOutput} ~ ${maxOutput} MW，`;
+                        })()}
+                        {(selectedCurrent?.itOutput || 0) >= (historyStats?.avgItOutput || 0) ? '当前项目规模处于中上水平' : '当前项目规模低于平均水平，需关注资源投入是否匹配'}。
                       </li>
+
+                      {/* 2. 工期分析 */}
                       <li>
-                        项目工期为 <strong style={{ color: '#faad14' }}>{selectedCurrent ? calcDays(selectedCurrent.startDate, selectedCurrent.endDate || '') : '-'} 天</strong>，相比历史均值{' '}
+                        <strong style={{ color: '#faad14' }}>【工期对比】</strong>
+                        当前项目工期为 <strong style={{ color: '#faad14' }}>{selectedCurrent ? calcDays(selectedCurrent.startDate, selectedCurrent.endDate || '') : '-'} 天</strong>（{selectedCurrent?.startDate} 至 {selectedCurrent?.endDate || '未定'}），
                         {historyStats && ((selectedCurrent ? calcDays(selectedCurrent.startDate, selectedCurrent.endDate || '') : 0) >= historyStats.avgDays ? (
-                          <span style={{ color: '#ff4d4f' }}>偏长 {diffPercent((selectedCurrent ? calcDays(selectedCurrent.startDate, selectedCurrent.endDate || '') : 0), historyStats.avgDays)}</span>
+                          <span>相比历史均值 <strong style={{ color: '#ff4d4f' }}>偏长 {diffPercent((selectedCurrent ? calcDays(selectedCurrent.startDate, selectedCurrent.endDate || '') : 0), historyStats.avgDays)}</strong></span>
                         ) : (
-                          <span style={{ color: '#52c41a' }}>更短 {diffPercent((selectedCurrent ? calcDays(selectedCurrent.startDate, selectedCurrent.endDate || '') : 0), historyStats.avgDays).replace('+', '')}</span>
-                        ))}{' '}
-                        （历史均值 {historyStats?.avgDays.toFixed(0)} 天）
+                          <span>相比历史均值 <strong style={{ color: '#52c41a' }}>更短 {diffPercent((selectedCurrent ? calcDays(selectedCurrent.startDate, selectedCurrent.endDate || '') : 0), historyStats.avgDays).replace('+', '')}</strong></span>
+                        ))}。
+                        历史项目平均工期 {historyStats?.avgDays.toFixed(0)} 天。
+                        {(selectedCurrent ? calcDays(selectedCurrent.startDate, selectedCurrent.endDate || '') : 0) > (historyStats?.avgDays || 0) * 1.2
+                          ? '⚠️ 当前工期显著超过历史均值，建议评估是否存在进度风险或阶段划分过细。'
+                          : (selectedCurrent ? calcDays(selectedCurrent.startDate, selectedCurrent.endDate || '') : 0) < (historyStats?.avgDays || 0) * 0.8
+                          ? '✓ 当前工期紧凑，建议确保各阶段验收节点按期完成。'
+                          : '✓ 当前工期与历史均值基本持平，符合正常交付节奏。'}
                       </li>
+
+                      {/* 3. 交付周期分析 */}
                       <li>
-                        参比的历史项目中 <strong style={{ color: '#52c41a' }}>{historyStats?.onTimeCount}/{selectedHistoryItems.length}</strong> 个按时交付，准时率{' '}
-                        <strong>{Math.round(((historyStats?.onTimeCount || 0) / selectedHistoryItems.length) * 100)}%</strong>
+                        <strong style={{ color: '#b37feb' }}>【交付周期对比】</strong>
+                        当前项目计划交付周期 <strong style={{ color: '#b37feb' }}>{selectedCurrent ? calcDays(selectedCurrent.startDate, selectedCurrent.plannedDeliveryDate || selectedCurrent.endDate || '') : '-'} 天</strong>。
+                        参比历史项目中 <strong style={{ color: '#52c41a' }}>{historyStats?.onTimeCount}/{selectedHistoryItems.length}</strong> 个按时交付，准时率 <strong>{Math.round(((historyStats?.onTimeCount || 0) / selectedHistoryItems.length) * 100)}%</strong>。
+                        {historyStats && historyStats.delayCount > 0 && (
+                          <span>其中 <strong style={{ color: '#ff4d4f' }}>{historyStats.delayCount} 个</strong> 项目出现延期，平均延期 {historyStats.avgDeliveryDelay.toFixed(0)} 天。</span>
+                        )}
+                        {historyStats && historyStats.earlyCount > 0 && (
+                          <span> <strong style={{ color: '#52c41a' }}>{historyStats.earlyCount} 个</strong> 项目提前交付。</span>
+                        )}
+                        {' '}根据历史准时率数据，
+                        {Math.round(((historyStats?.onTimeCount || 0) / selectedHistoryItems.length) * 100) >= 80
+                          ? '✓ 历史准时率良好，当前项目具备按时交付基础。'
+                          : Math.round(((historyStats?.onTimeCount || 0) / selectedHistoryItems.length) * 100) >= 50
+                          ? '⚠️ 历史准时率一般，建议预留缓冲时间应对潜在风险。'
+                          : '⚠️ 历史准时率偏低，建议加强进度管控并提前识别风险点。'}
                       </li>
-                      {selectedCurrent?.city && (() => {
-                        const sameCity = selectedHistoryItems.filter((h) => h.city === selectedCurrent!.city);
-                        if (sameCity.length > 0) {
+
+                      {/* 4. 人员数量分析 */}
+                      <li>
+                        <strong style={{ color: '#00d4aa' }}>【人员数量对比】</strong>
+                        当前项目计划投入 <strong style={{ color: '#00d4aa' }}>{selectedCurrent?.plannedManpower || 0} 人</strong>，
+                        {historyStats && ((selectedCurrent?.plannedManpower || 0) >= historyStats.avgManpower ? (
+                          <span>相比历史均值 <strong style={{ color: '#52c41a' }}>多出 {diffPercent(selectedCurrent?.plannedManpower || 0, historyStats.avgManpower)}</strong></span>
+                        ) : (
+                          <span>相比历史均值 <strong style={{ color: '#ff4d4f' }}>少 {diffPercent(selectedCurrent?.plannedManpower || 0, historyStats.avgManpower).replace('+', '')}</strong></span>
+                        ))}。
+                        历史项目平均投入人力 {historyStats?.avgManpower.toFixed(0)} 人。
+                        {(() => {
+                          const currentMp = selectedCurrent?.plannedManpower || 0;
+                          const avgMp = historyStats?.avgManpower || 1;
+                          const currentIt = selectedCurrent?.itOutput || 1;
+                          const avgIt = historyStats?.avgItOutput || 1;
+                          const currentMwPerPerson = currentIt / (currentMp || 1);
+                          const avgMwPerPerson = avgIt / (avgMp || 1);
                           return (
-                            <li>
-                              同城（<strong>{selectedCurrent.city}</strong>）有 <strong style={{ color: '#7cb8ff' }}>{sameCity.length}</strong> 个参考项目，
-                              平均工期 {sameCity.length > 0 ? `${(sameCity.reduce((s, h) => s + calcDays(h.startDate, h.endDate), 0) / sameCity.length).toFixed(0)} 天` : '-'}
-                            </li>
+                            <span>人均产出比：当前 <strong style={{ color: '#00d4aa' }}>{currentMwPerPerson.toFixed(1)} MW/人</strong> vs 历史均值 <strong>{avgMwPerPerson.toFixed(1)} MW/人</strong>，
+                            {currentMwPerPerson >= avgMwPerPerson
+                              ? '✓ 人均产出效率高于历史均值，资源配置合理。'
+                              : '⚠️ 人均产出效率低于历史均值，建议评估人员配置是否充足或任务分配是否均衡。'}</span>
                           );
-                        }
-                        return null;
+                        })()}
+                      </li>
+
+                      {/* 5. 综合建议 */}
+                      {(() => {
+                        const currentIt = selectedCurrent?.itOutput || 0;
+                        const avgIt = historyStats?.avgItOutput || 0;
+                        const currentDays = selectedCurrent ? calcDays(selectedCurrent.startDate, selectedCurrent.endDate || '') : 0;
+                        const avgDays = historyStats?.avgDays || 0;
+                        const currentMp = selectedCurrent?.plannedManpower || 0;
+                        const avgMp = historyStats?.avgManpower || 0;
+                        const onTimeRate = Math.round(((historyStats?.onTimeCount || 0) / selectedHistoryItems.length) * 100);
+                        const risks: string[] = [];
+                        const strengths: string[] = [];
+                        if (currentDays > avgDays * 1.2) risks.push('工期偏长');
+                        if (currentDays < avgDays * 0.8) strengths.push('工期紧凑');
+                        if (currentMp < avgMp * 0.8) risks.push('人员投入不足');
+                        if (currentMp > avgMp * 1.2) strengths.push('人员配置充足');
+                        if (onTimeRate < 60) risks.push('历史准时率偏低');
+                        if (onTimeRate >= 80) strengths.push('历史准时率良好');
+                        return (
+                          <li style={{ marginTop: 8, paddingTop: 8, borderTop: '1px dashed rgba(255,255,255,0.08)' }}>
+                            <strong style={{ color: '#fff' }}>【综合评估】</strong>
+                            {strengths.length > 0 && <span><strong style={{ color: '#52c41a' }}>优势：</strong>{strengths.join('、')}。</span>}
+                            {risks.length > 0 && <span><strong style={{ color: '#ff4d4f' }}>风险：</strong>{risks.join('、')}。</span>}
+                            {risks.length === 0 && strengths.length === 0 && '各项指标与历史均值基本持平，建议按常规流程推进。'}
+                          </li>
+                        );
                       })()}
                     </ul>
                   </div>
