@@ -1,5 +1,5 @@
 # 数据中心测试验证平台 - 后端服务
-FROM docker.m.daocloud.io/library/node:20-slim
+FROM node:20-slim
 
 WORKDIR /app
 

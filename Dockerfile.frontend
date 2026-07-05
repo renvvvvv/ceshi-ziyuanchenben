@@ -1,5 +1,5 @@
 # 数据中心测试验证平台 - 前端构建
-FROM docker.m.daocloud.io/library/node:20-slim AS builder
+FROM node:20-slim AS builder
 
 WORKDIR /app
 COPY package.json ./
@@ -9,7 +9,7 @@ COPY . .
 RUN npx vite build
 
 # Nginx serving
-FROM docker.m.daocloud.io/library/nginx:alpine
+FROM nginx:alpine
 COPY --from=builder /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 80
