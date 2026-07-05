@@ -13,6 +13,7 @@ import {
   LogoutOutlined,
   CalculatorOutlined,
   SafetyOutlined,
+  BookOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../store/AuthContext';
 import type { AppModule } from '../types';
@@ -32,6 +33,7 @@ const ALL_MENU_ITEMS: MenuItemDef[] = [
   { key: '/history', icon: <HistoryOutlined />, label: '历史项目', module: 'history' },
   { key: '/team-pool', icon: <TeamOutlined />, label: '测试人员池', module: 'teamPool' },
   { key: '/test-guide', icon: <FileTextOutlined />, label: '测试管理制度', module: 'testGuide' },
+  { key: '/knowledge-base', icon: <BookOutlined />, label: '知识库', module: 'dashboard' },
   { key: '/resource-calculator', icon: <CalculatorOutlined />, label: '资源计算器', module: 'resourceCalc' },
   { key: '/permission-config', icon: <SafetyOutlined />, label: '权限配置', module: 'permissionConfig' },
 ];
@@ -79,6 +81,7 @@ function MainLayout() {
     '/team-pool': '测试人员池',
     '/test-guide': '测试管理制度',
     '/resource-calculator': '资源计算器',
+    '/knowledge-base': '知识库',
     '/permission-config': '权限配置',
   };
 

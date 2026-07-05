@@ -10,6 +10,7 @@ import { CanvasRenderer } from 'echarts/renderers';
 import dayjs from 'dayjs';
 import KpiCard from '../../components/KpiCard';
 import GanttChart from '../../components/GanttChart';
+import type { GanttUnit } from '../../components/GanttChart';
 import { useData } from '../../store/DataContext';
 
 echarts.use([PieChart, BarChart, TitleComponent, TooltipComponent, LegendComponent, GridComponent, CanvasRenderer]);
@@ -35,6 +36,8 @@ function Dashboard() {
   const [loading, setLoading] = useState(false);
   // 默认只显示"未开始"和"测试中"，"已完成"项目默认不显示在甘特图中
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>(['未开始', '测试中']);
+  // 甘特图时间单位：天/周/月/季/年
+  const [ganttUnit, setGanttUnit] = useState<GanttUnit>('day');
   const { projects, historyProjects, regionMwOutput, autoProcessProjects, autoProcessMembers } = useData();
   const navigate = useNavigate();
 
@@ -565,7 +568,43 @@ function Dashboard() {
 
       <div className="chart-container" style={{ marginBottom: 20 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
-          <h4 style={{ margin: 0 }}>项目进度甘特图</h4>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <h4 style={{ margin: 0 }}>项目进度甘特图</h4>
+            {/* 时间单位选择器 */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(255,255,255,0.04)', borderRadius: 8, padding: 2 }}>
+              {([
+                { value: 'day', label: '日' },
+                { value: 'week', label: '周' },
+                { value: 'month', label: '月' },
+                { value: 'quarter', label: '季' },
+                { value: 'year', label: '年' },
+              ] as { value: GanttUnit; label: string }[]).map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => setGanttUnit(opt.value)}
+                  style={{
+                    padding: '3px 10px',
+                    fontSize: 12,
+                    fontFamily: 'var(--font-primary)',
+                    border: 'none',
+                    borderRadius: 6,
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                    background: ganttUnit === opt.value
+                      ? 'linear-gradient(135deg, #4d9fff, #00f0ff)'
+                      : 'transparent',
+                    color: ganttUnit === opt.value
+                      ? '#fff'
+                      : 'rgba(255,255,255,0.4)',
+                    fontWeight: ganttUnit === opt.value ? 600 : 400,
+                    boxShadow: ganttUnit === opt.value ? '0 2px 8px rgba(77,159,255,0.3)' : 'none',
+                  }}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
           {/* 状态筛选器 */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <FilterOutlined style={{ color: 'rgba(255,255,255,0.4)', fontSize: 14 }} />
@@ -592,11 +631,7 @@ function Dashboard() {
             </Button>
           </div>
         </div>
-        {/* 调试显示：筛选状态 */}
-        <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11, marginBottom: 8 }}>
-          当前筛选: [{selectedStatuses.join('、')}] | 共 {filteredProjects.length} 个项目 | 已完成: {filteredProjects.filter((p) => p.status === '已完成').length} 个
-        </div>
-        <GanttChart projects={ganttProjects} />
+        <GanttChart projects={ganttProjects} unit={ganttUnit} />
         <div style={{ marginTop: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: 'rgba(255,255,255,0.35)', fontSize: 12 }}>
           <span>
             未开始：{notStartedCount} · 测试中：{activeCount} · 已完成：{completedCount} 个项目

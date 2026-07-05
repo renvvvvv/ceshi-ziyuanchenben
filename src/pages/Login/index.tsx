@@ -1,24 +1,13 @@
-import { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Button, Input, Form, Card, message, Divider } from 'antd';
-import { UserOutlined, LockOutlined, SafetyOutlined, TeamOutlined } from '@ant-design/icons';
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Button, Input, Form, Card, message } from 'antd';
+import { UserOutlined, LockOutlined, SafetyOutlined } from '@ant-design/icons';
 import { useAuth } from '../../store/AuthContext';
 
 function Login() {
   const [loading, setLoading] = useState(false);
-  const [feishuLoading, setFeishuLoading] = useState(false);
-  const { login, loginWithFeishu } = useAuth();
+  const { login } = useAuth();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-
-  // 处理飞书回调
-  useEffect(() => {
-    const code = searchParams.get('code');
-    const state = searchParams.get('state');
-    if (code && state) {
-      handleFeishuCallback(code);
-    }
-  }, [searchParams]);
 
   const handleSubmit = (values: { username: string; password: string }) => {
     setLoading(true);
@@ -29,51 +18,6 @@ function Login() {
       navigate('/');
     } else {
       message.error(result.message);
-    }
-  };
-
-  const handleFeishuLogin = async () => {
-    setFeishuLoading(true);
-    try {
-      const redirectUri = `${window.location.origin}/login`;
-      const res = await fetch(`/api/auth/feishu/login?redirect_uri=${encodeURIComponent(redirectUri)}`);
-      const data = await res.json();
-      if (data.authUrl) {
-        window.location.href = data.authUrl;
-      } else {
-        message.error('获取飞书授权链接失败');
-      }
-    } catch (err) {
-      message.error('飞书登录失败，请检查后端服务是否运行');
-    } finally {
-      setFeishuLoading(false);
-    }
-  };
-
-  const handleFeishuCallback = async (code: string) => {
-    setFeishuLoading(true);
-    try {
-      const res = await fetch('/api/auth/feishu/callback', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        const result = loginWithFeishu(data.user);
-        if (result.success) {
-          message.success('飞书登录成功');
-          navigate('/');
-        } else {
-          message.error(result.message);
-        }
-      } else {
-        message.error(data.message || '飞书登录失败');
-      }
-    } catch (err) {
-      message.error('飞书回调处理失败');
-    } finally {
-      setFeishuLoading(false);
     }
   };
 
@@ -180,57 +124,6 @@ function Login() {
             </Button>
           </Form.Item>
         </Form>
-
-        {/* 分割线 */}
-        <Divider style={{ borderColor: 'rgba(255,255,255,0.1)', margin: '20px 0', color: 'rgba(255,255,255,0.3)', fontSize: 12 }}>
-          或
-        </Divider>
-
-        {/* 飞书登录按钮 */}
-        <Button
-          size="large"
-          loading={feishuLoading}
-          block
-          onClick={handleFeishuLogin}
-          style={{
-            background: 'rgba(255,255,255,0.08)',
-            border: '1px solid rgba(0, 200, 120, 0.3)',
-            color: 'rgba(255,255,255,0.9)',
-            borderRadius: 8,
-            height: 44,
-            fontSize: 15,
-            fontWeight: 500,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 8,
-          }}
-        >
-          <TeamOutlined style={{ color: '#00c878' }} />
-          飞书登录
-        </Button>
-
-        <div
-          style={{
-            marginTop: 20,
-            paddingTop: 16,
-            borderTop: '1px solid rgba(255,255,255,0.06)',
-            color: 'rgba(255,255,255,0.3)',
-            fontSize: 12,
-            textAlign: 'center',
-          }}
-        >
-          <div>演示账号</div>
-          <div style={{ marginTop: 4 }}>
-            管理者：admin / admin123
-          </div>
-          <div>
-            编辑者：editor / editor123
-          </div>
-          <div>
-            阅读者：reader / reader123
-          </div>
-        </div>
       </Card>
     </div>
   );
