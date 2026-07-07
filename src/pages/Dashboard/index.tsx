@@ -85,7 +85,6 @@ function Dashboard() {
     const result = unique.filter((p) => selectedStatuses.includes(p.status));
     // 安全检查：即使 selectedStatuses 不包含"已完成"，也强制排除
     const safeResult = selectedStatuses.includes('已完成') ? result : result.filter((p) => p.status !== '已完成');
-    console.log('[Dashboard] selectedStatuses:', selectedStatuses, 'uniqueAll:', unique.length, 'filtered:', result.length, 'safe:', safeResult.length);
     return safeResult;
   }, [projects, historyProjects, selectedStatuses]);
 

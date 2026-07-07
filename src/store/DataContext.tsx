@@ -335,76 +335,75 @@ export function DataProvider({ children }: { children: ReactNode }) {
         return [...uniqueArchived, ...prev];
       });
 
-      // 同时转移阶段数据（使用去重后的 dedupedArchived）
-      const newProjectPhases = { ...projectPhases };
-      const newHistoryPhases = { ...historyPhases };
-
+      // 同时转移阶段数据（函数式更新，避免覆盖并发更新）
+      const transferredPhases: Record<string, ProjectPhase[]> = {};
       for (const p of dedupedArchived) {
-        if (newProjectPhases[p.id]) {
-          newHistoryPhases[p.id] = newProjectPhases[p.id];
-          delete newProjectPhases[p.id];
+        if (projectPhases[p.id]) {
+          transferredPhases[p.id] = projectPhases[p.id];
         }
       }
 
-      setProjectPhases(newProjectPhases);
-      setHistoryPhases(newHistoryPhases);
-    }
+      setProjectPhases((prevPhases) => {
+        const newPhases = { ...prevPhases };
+        for (const p of dedupedArchived) {
+          delete newPhases[p.id];
+        }
+        return newPhases;
+      });
 
-    console.log('[AutoProcess]', {
-      started: projectsToStart.length,
-      archived: projectsToArchive.length,
-      directArchived: projectsToArchiveDirectly.length,
-      cleaned: orphanedCompleted.length,
-      today: todayStr,
-    });
+      setHistoryPhases((prevHistory) => ({
+        ...prevHistory,
+        ...transferredPhases,
+      }));
+    }
   }, [projects, projectPhases, historyPhases, setProjects, setHistoryProjects, setProjectPhases, setHistoryPhases]);
 
-  // ====== 自动化流程：人员状态管理 ======
+  // ====== 自动化流程：人员状态管理（函数式更新，避免覆盖 autoProcessProjects 的并发更新） ======
   const autoProcessMembers = useCallback(() => {
     const todayStr = new Date().toISOString().split('T')[0];
-    let changed = false;
 
-    const updatedMembers: TeamMember[] = teamMembers.map((m) => {
-      // 1. 测试中 → 空闲（项目结束日期已过）
-      if (m.status === '测试中') {
-        const projects = m.projects || [];
-        // 检查是否所有项目都已结束
-        const allProjectsFinished = projects.length > 0 && projects.every(
-          (p) => p.endDate < todayStr
-        );
-        if (allProjectsFinished) {
-          changed = true;
-          return {
-            ...m,
-            status: '空闲' as const,
-            currentProjects: [],
-            updatedAt: new Date().toISOString(),
-          };
+    setTeamMembers((prevMembers) => {
+      let changed = false;
+
+      const updatedMembers = prevMembers.map((m) => {
+        // 1. 测试中 → 空闲（项目结束日期已过）
+        if (m.status === '测试中') {
+          const projects = m.projects || [];
+          // 检查是否所有项目都已结束
+          const allProjectsFinished = projects.length > 0 && projects.every(
+            (p) => p.endDate < todayStr
+          );
+          if (allProjectsFinished) {
+            changed = true;
+            return {
+              ...m,
+              status: '空闲' as const,
+              currentProjects: [],
+              updatedAt: new Date().toISOString(),
+            };
+          }
         }
-      }
 
-      // 2. 休假 → 空闲（休假结束日期已过）
-      if (m.status === '休假') {
-        if (m.leaveEndDate && m.leaveEndDate < todayStr) {
-          changed = true;
-          return {
-            ...m,
-            status: '空闲' as const,
-            leaveStartDate: undefined,
-            leaveEndDate: undefined,
-            updatedAt: new Date().toISOString(),
-          };
+        // 2. 休假 → 空闲（休假结束日期已过）
+        if (m.status === '休假') {
+          if (m.leaveEndDate && m.leaveEndDate < todayStr) {
+            changed = true;
+            return {
+              ...m,
+              status: '空闲' as const,
+              leaveStartDate: undefined,
+              leaveEndDate: undefined,
+              updatedAt: new Date().toISOString(),
+            };
+          }
         }
-      }
 
-      return m;
+        return m;
+      });
+
+      return changed ? updatedMembers : prevMembers;
     });
-
-    if (changed) {
-      setTeamMembers(updatedMembers);
-      console.log('[AutoProcessMembers] 自动处理完成，日期：', todayStr);
-    }
-  }, [teamMembers, setTeamMembers]);
+  }, [setTeamMembers]);
 
   const resetToDefaults = useCallback(() => {
     setProjects(mockProjects);

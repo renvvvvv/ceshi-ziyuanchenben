@@ -119,7 +119,10 @@ function KnowledgeBase() {
   // 加载索引数据
   useEffect(() => {
     fetch('/kb/index.json')
-      .then((res) => res.json())
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
       .then((data: KBIndex) => {
         setKbData(data);
         // 默认展开第一层

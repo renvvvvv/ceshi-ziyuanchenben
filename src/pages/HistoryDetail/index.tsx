@@ -108,7 +108,7 @@ function HistoryDetail() {
 
     setHistoryPhases((prev) => ({
       ...prev,
-      [project.id]: phases.map((phase) =>
+      [project.id]: (prev[project.id] || phases).map((phase) =>
         phase.key === phaseKey
           ? { ...phase, files: [...phase.files, newFile] }
           : phase
@@ -128,7 +128,7 @@ function HistoryDetail() {
       onOk: () => {
         setHistoryPhases((prev) => ({
           ...prev,
-          [project.id]: phases.map((phase) =>
+          [project.id]: (prev[project.id] || phases).map((phase) =>
             phase.key === phaseKey
               ? { ...phase, files: phase.files.filter((f) => f.id !== fileId) }
               : phase

@@ -197,6 +197,12 @@ function TeamPool() {
       const isActive = isStarted && !isEnded; // 进行中
       const isUpcoming = !isStarted; // 未开始
 
+      // 项目已结束：直接拒绝，不执行指派（提前判断，避免无效的状态更新）
+      if (!isActive && !isUpcoming) {
+        message.error('该项目已结束，无法指派人员');
+        return;
+      }
+
       setMembers((prev) =>
         prev.map((m) => {
           if (!ids.includes(m.id)) return m;
@@ -242,12 +248,6 @@ function TeamPool() {
           return m;
         })
       );
-
-      // 项目已结束的情况（isActive=false 且 isUpcoming=false）
-      if (!isActive && !isUpcoming) {
-        message.error('该项目已结束，无法指派人员');
-        return;
-      }
 
       const statusHint = isActive
         ? '，项目进行中已自动转为测试中'

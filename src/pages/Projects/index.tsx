@@ -54,7 +54,7 @@ function Projects() {
     setModalOpen(true);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = useCallback((id: string) => {
     const project = projects.find((p) => p.id === id);
     const projectName = project?.name;
     setProjects((prev) => prev.filter((p) => p.id !== id));
@@ -68,7 +68,7 @@ function Projects() {
       })));
     }
     message.success('项目删除成功');
-  };
+  }, [projects, setProjects, setTeamMembers]);
 
   // 提交（新建或编辑）
   const handleSubmit = useCallback((values: Project) => {
@@ -109,7 +109,7 @@ function Projects() {
           id: editingProject.id,
           updatedAt: new Date().toISOString().slice(0, 10),
         };
-        setHistoryProjects((prev) => [archived, ...prev]);
+        setHistoryProjects((prev) => prev.some((p) => p.id === archived.id) ? prev : [archived, ...prev]);
         // 已完成时清除相关人员的项目关联，并检查是否需要转为空闲
         // 同时考虑旧名称和新名称（项目改名场景）
         const oldName = editingProject.name;
@@ -275,7 +275,7 @@ function Projects() {
         </Space>
       ),
     },
-  ], [navigate]);
+  ], [navigate, handleDelete]);
 
   return (
     <div>

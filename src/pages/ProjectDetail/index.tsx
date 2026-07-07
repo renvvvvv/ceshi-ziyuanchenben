@@ -118,7 +118,7 @@ function ProjectDetail() {
 
     setProjectPhases((prev) => ({
       ...prev,
-      [project.id]: phases.map((phase) =>
+      [project.id]: (prev[project.id] || phases).map((phase) =>
         phase.key === phaseKey
           ? { ...phase, files: [...phase.files, newFile], status: phase.status === 'pending' ? 'in_progress' : phase.status }
           : phase
@@ -138,7 +138,7 @@ function ProjectDetail() {
       onOk: () => {
         setProjectPhases((prev) => ({
           ...prev,
-          [project.id]: phases.map((phase) =>
+          [project.id]: (prev[project.id] || phases).map((phase) =>
             phase.key === phaseKey
               ? { ...phase, files: phase.files.filter((f) => f.id !== fileId) }
               : phase
