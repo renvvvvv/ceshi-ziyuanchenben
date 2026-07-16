@@ -19,26 +19,30 @@ router.post('/', async (req, res) => {
     return res.status(500).json({ success: false, message: 'AI 服务未配置（MINIMAX_API_KEY 未设置）' });
   }
 
-  try {
-    const response = await fetch('https://api.minimaxi.com/v1/text/chatcompletion_v2', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: 'abab6.5s-chat',
-        messages: [
-          {
-            role: 'system',
-            content: '你是专业的中文错别字审核助手。仔细审核用户提供的测试报告文本，找出所有错别字（包括同音错字、形近错字、多字少字、标点错误）。返回严格的JSON格式：{"errors":[{"original":"错误原文","suggestion":"正确写法","context":"包含错误的上下文片段（20字以内）"}]}。如果没有错别字，返回{"errors":[]}。只返回JSON，不要任何其他内容。',
-          },
-          { role: 'user', content: text },
-        ],
-        response_format: { type: 'json_object' },
-        temperature: 0.1,
-      }),
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30000);
+    try {
+      const response = await fetch('https://api.minimaxi.com/v1/text/chatcompletion_v2', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: 'abab6.5s-chat',
+          messages: [
+            {
+              role: 'system',
+              content: '你是专业的中文错别字审核助手。仔细审核用户提供的测试报告文本，找出所有错别字（包括同音错字、形近错字、多字少字、标点错误）。返回严格的JSON格式：{"errors":[{"original":"错误原文","suggestion":"正确写法","context":"包含错误的上下文片段（20字以内）"}]}。如果没有错别字，返回{"errors":[]}。只返回JSON，不要任何其他内容。',
+            },
+            { role: 'user', content: text },
+          ],
+          response_format: { type: 'json_object' },
+          temperature: 0.1,
+        }),
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
 
     if (!response.ok) {
       const errText = await response.text();

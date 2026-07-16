@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
+import dayjs from 'dayjs';
 import {
   mockProjects,
   mockHistoryProjects,
@@ -212,7 +213,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   // ====== 自动化流程：根据日期自动转换项目状态 ======
   const autoProcessProjects = useCallback(() => {
-    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+    const today = dayjs().format('YYYY-MM-DD'); // YYYY-MM-DD
     const todayStr = today;
 
     let changed = false;
@@ -364,7 +365,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   // ====== 自动化流程：人员状态管理（函数式更新，避免覆盖 autoProcessProjects 的并发更新） ======
   const autoProcessMembers = useCallback(() => {
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = dayjs().format('YYYY-MM-DD');
 
     setTeamMembers((prevMembers) => {
       let changed = false;
@@ -411,7 +412,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   // ====== 同步人员项目数据：根据 projects 的 assignedMemberIds + 项目时间自动生成人员的 projects/upcomingProjects/状态 ======
   const syncMembersFromProjects = useCallback(() => {
-    const today = new Date().toISOString().split('T')[0];
+    const today = dayjs().format('YYYY-MM-DD');
     // 进行中：非已完成 且 startDate <= today 且 endDate >= today
     const activeProjs = projects.filter((p) => p.status !== '已完成' && p.startDate <= today && p.endDate >= today);
     // 未开始：非已完成 且 startDate > today

@@ -64,7 +64,7 @@ function detectTimeConflicts(member: TeamMember): TimeConflict[] {
 }
 
 function TeamPool() {
-  const { teamMembers: members, setTeamMembers: setMembers, projects, autoProcessProjects, autoProcessMembers, syncMembersFromProjects } = useData();
+  const { teamMembers: members, setTeamMembers: setMembers, projects, setProjects, autoProcessProjects, autoProcessMembers, syncMembersFromProjects } = useData();
 
   // ===== 自动化流程：进入人员池时自动处理项目/人员状态 + 同步人员项目数据 =====
   useEffect(() => {
@@ -246,6 +246,10 @@ function TeamPool() {
       }
       const startDate = projectInfo.startDate;
       const endDate = projectInfo.endDate;
+      if (!startDate || !endDate) {
+        message.error('项目时间信息缺失，无法指派');
+        return;
+      }
       const now = dayjs();
       const isStarted = !dayjs(startDate).isAfter(now, 'day'); // startDate <= today
       const isEnded = dayjs(endDate).isBefore(now, 'day'); // endDate < today
@@ -323,6 +327,14 @@ function TeamPool() {
           return m;
         })
       );
+
+      // 同步更新项目的 assignedMemberIds（避免 syncMembersFromProjects 覆盖手动指派）
+      setProjects((prev) => prev.map((p) => {
+        if (p.name !== project) return p;
+        const existing = p.assignedMemberIds || [];
+        const merged = Array.from(new Set([...existing, ...ids]));
+        return { ...p, assignedMemberIds: merged };
+      }));
 
       const statusHint = isActive
         ? '，项目进行中已自动转为测试中'
