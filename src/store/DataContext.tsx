@@ -110,6 +110,9 @@ interface DataContextValue {
 
   // 自动化流程：人员状态管理
   autoProcessMembers: () => void;
+  syncMembersFromProjects: () => void;
+  attendanceAdjustments: Record<string, { projectStart?: string; projectEnd?: string; leaveDays?: number }>;
+  setAttendanceAdjustments: (updater: Record<string, { projectStart?: string; projectEnd?: string; leaveDays?: number }> | ((prev: Record<string, { projectStart?: string; projectEnd?: string; leaveDays?: number }>) => Record<string, { projectStart?: string; projectEnd?: string; leaveDays?: number }>)) => void;
 }
 
 const DataContext = createContext<DataContextValue | null>(null);
@@ -132,6 +135,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [testDocs, setTestDocs] = usePersistentState<TestDoc[]>('testDocs', mockTestDocs);
   const [projectPhases, setProjectPhases] = usePersistentState<Record<string, ProjectPhase[]>>('projectPhases', mockProjectPhases);
   const [historyPhases, setHistoryPhases] = usePersistentState<Record<string, ProjectPhase[]>>('historyPhases', mergedHistoryPhases);
+  const [attendanceAdjustments, setAttendanceAdjustments] = usePersistentState<Record<string, { projectStart?: string; projectEnd?: string; leaveDays?: number }>>('attendanceAdjustments', {});
 
   // ====== 初始化：自动去重 historyProjects（修复历史数据污染） ======
   useEffect(() => {
@@ -405,6 +409,40 @@ export function DataProvider({ children }: { children: ReactNode }) {
     });
   }, [setTeamMembers]);
 
+  // ====== 同步人员项目数据：根据 projects 的 assignedMemberIds + 项目时间自动生成人员的 projects/upcomingProjects/状态 ======
+  const syncMembersFromProjects = useCallback(() => {
+    const today = new Date().toISOString().split('T')[0];
+    // 进行中：非已完成 且 startDate <= today 且 endDate >= today
+    const activeProjs = projects.filter((p) => p.status !== '已完成' && p.startDate <= today && p.endDate >= today);
+    // 未开始：非已完成 且 startDate > today
+    const upcomingProjs = projects.filter((p) => p.status !== '已完成' && p.startDate > today);
+
+    setTeamMembers((prev) =>
+      prev.map((m) => {
+        const memberActive = activeProjs.filter((p) => (p.assignedMemberIds || []).includes(m.id));
+        const memberUpcoming = upcomingProjs.filter((p) => (p.assignedMemberIds || []).includes(m.id));
+
+        const newProjects = memberActive.map((p) => ({ projectName: p.name, startDate: p.startDate, endDate: p.endDate }));
+        const newUpcoming = memberUpcoming.map((p) => ({ projectName: p.name, startDate: p.startDate, endDate: p.endDate }));
+        const newCurrent = memberActive.map((p) => p.name);
+
+        // 状态：休假保持；有进行中项目→测试中；否则→空闲
+        let newStatus = m.status;
+        if (m.status !== '休假') {
+          newStatus = memberActive.length > 0 ? ('测试中' as const) : ('空闲' as const);
+        }
+
+        return { ...m, projects: newProjects, currentProjects: newCurrent, upcomingProjects: newUpcoming, status: newStatus };
+      }),
+    );
+  }, [projects, setTeamMembers]);
+
+  // 初始化时同步一次
+  useEffect(() => {
+    syncMembersFromProjects();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const resetToDefaults = useCallback(() => {
     setProjects(mockProjects);
     setHistoryProjects(mockHistoryProjects);
@@ -446,6 +484,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
     resetToDefaults,
     autoProcessProjects,
     autoProcessMembers,
+    syncMembersFromProjects,
+    attendanceAdjustments,
+    setAttendanceAdjustments,
   };
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;

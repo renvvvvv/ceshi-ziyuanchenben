@@ -115,6 +115,7 @@ export const mockProjects: Project[] = [
     plannedManpower: 45,
     businessType: '新建测试',
     description: '乌兰察布乌兰大三期A2楼数据中心新建测试项目',
+    assignedMemberIds: ['1021839', '1021793', '1021334', '1021619'],
     updatedAt: '2026-06-26',
   },
   {
@@ -132,6 +133,7 @@ export const mockProjects: Project[] = [
     plannedManpower: 10,
     businessType: '新建测试',
     description: '乌兰察布乌兰8号楼最后一个包间数据中心新建测试项目',
+    assignedMemberIds: ['1021844', '1021333'],
     updatedAt: '2026-06-26',
   },
   {
@@ -149,6 +151,7 @@ export const mockProjects: Project[] = [
     plannedManpower: 29,
     businessType: '新建测试',
     description: '乌兰察布乌兰大二期7号楼-第一批数据中心新建测试项目',
+    assignedMemberIds: ['1021363', '1021352'],
     updatedAt: '2026-06-26',
   },
   {
@@ -166,6 +169,7 @@ export const mockProjects: Project[] = [
     plannedManpower: 34,
     businessType: '新建测试',
     description: '乌兰察布乌兰大二期7号楼-第二批数据中心新建测试项目',
+    assignedMemberIds: ['1021351', '1021362', '1021357', '1021807'],
     updatedAt: '2026-06-26',
   },
   {

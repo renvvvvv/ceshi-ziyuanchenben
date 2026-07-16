@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import {
   Input, Tag, Avatar, Skeleton, Empty, message,
-  Button, Modal, Form, Select, Transfer, DatePicker,
+  Button, Modal, Form, Select, Transfer, DatePicker, Tooltip,
 } from 'antd';
 import type { TransferProps } from 'antd';
 import {
@@ -12,6 +12,7 @@ import {
   PlusOutlined,
   TeamOutlined,
   ClockCircleOutlined,
+  WarningOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { useData } from '../../store/DataContext';
@@ -34,14 +35,43 @@ function fmtShort(dateStr: string): string {
   return dayjs(dateStr).format('MM-DD');
 }
 
-function TeamPool() {
-  const { teamMembers: members, setTeamMembers: setMembers, projects, autoProcessProjects, autoProcessMembers } = useData();
+/** 检测人员参与的项目时间是否有重叠冲突 */
+interface TimeConflict {
+  project1: string;
+  project2: string;
+  overlapStart: string;
+  overlapEnd: string;
+  overlapDays: number;
+}
 
-  // ===== 自动化流程：进入人员池时自动处理项目/人员状态 =====
+function detectTimeConflicts(member: TeamMember): TimeConflict[] {
+  const all = [...(member.projects || []), ...(member.upcomingProjects || [])];
+  const conflicts: TimeConflict[] = [];
+  for (let i = 0; i < all.length; i++) {
+    for (let j = i + 1; j < all.length; j++) {
+      const a = all[i], b = all[j];
+      const s = dayjs(a.startDate).isAfter(b.startDate) ? a.startDate : b.startDate;
+      const e = dayjs(a.endDate).isBefore(b.endDate) ? a.endDate : b.endDate;
+      if (!dayjs(s).isAfter(e)) {
+        const days = dayjs(e).diff(dayjs(s), 'day') + 1;
+        if (days > 0) {
+          conflicts.push({ project1: a.projectName, project2: b.projectName, overlapStart: s, overlapEnd: e, overlapDays: days });
+        }
+      }
+    }
+  }
+  return conflicts;
+}
+
+function TeamPool() {
+  const { teamMembers: members, setTeamMembers: setMembers, projects, autoProcessProjects, autoProcessMembers, syncMembersFromProjects } = useData();
+
+  // ===== 自动化流程：进入人员池时自动处理项目/人员状态 + 同步人员项目数据 =====
   useEffect(() => {
     autoProcessProjects();
     autoProcessMembers();
-  }, [autoProcessProjects, autoProcessMembers]);
+    syncMembersFromProjects();
+  }, [autoProcessProjects, autoProcessMembers, syncMembersFromProjects]);
   const [statusFilter, setStatusFilter] = useState<string>('全部');
   const [projectFilter, setProjectFilter] = useState<string>('全部');
   const [searchText, setSearchText] = useState('');
@@ -53,6 +83,9 @@ function TeamPool() {
   // 批量指派
   const [batchModalOpen, setBatchModalOpen] = useState(false);
   const [batchTargetKeys, setBatchTargetKeys] = useState<string[]>([]);
+
+  // 冲突人员查看
+  const [conflictModalOpen, setConflictModalOpen] = useState(false);
   const [batchForm] = Form.useForm();
 
   // 从项目管理中提取未开始/测试中的项目列表
@@ -172,7 +205,29 @@ function TeamPool() {
     const testingCount = members.filter((m) => m.status === '测试中').length;
     const idleCount = members.filter((m) => m.status === '空闲').length;
     const onLeaveCount = members.filter((m) => m.status === '休假').length;
-    return { testingCount, idleCount, onLeaveCount };
+    const conflictCount = members.filter((m) => detectTimeConflicts(m).length > 0).length;
+    return { testingCount, idleCount, onLeaveCount, conflictCount };
+  }, [members]);
+
+  // 冲突人员列表（展平所有冲突为行）
+  const conflictRows = useMemo(() => {
+    const rows: { key: string; memberId: string; memberName: string; projectA: string; projectB: string; overlapStart: string; overlapEnd: string; overlapDays: number }[] = [];
+    members.forEach((m) => {
+      const conflicts = detectTimeConflicts(m);
+      conflicts.forEach((c, i) => {
+        rows.push({
+          key: `${m.id}-${i}`,
+          memberId: m.id,
+          memberName: m.name,
+          projectA: c.project1,
+          projectB: c.project2,
+          overlapStart: c.overlapStart,
+          overlapEnd: c.overlapEnd,
+          overlapDays: c.overlapDays,
+        });
+      });
+    });
+    return rows;
   }, [members]);
 
   const handleBatchAssign = () => {
@@ -201,6 +256,26 @@ function TeamPool() {
       if (!isActive && !isUpcoming) {
         message.error('该项目已结束，无法指派人员');
         return;
+      }
+
+      // 检测时间冲突：新增项目与被指派人员的现有项目时间重叠
+      const conflictNames: string[] = [];
+      ids.forEach((id) => {
+        const m = members.find((x) => x.id === id);
+        if (!m) return;
+        const existing = [...(m.projects || []), ...(m.upcomingProjects || [])];
+        for (const p of existing) {
+          if (p.projectName === project) continue;
+          const s = dayjs(p.startDate).isAfter(startDate) ? p.startDate : startDate;
+          const e = dayjs(p.endDate).isBefore(endDate) ? p.endDate : endDate;
+          if (!dayjs(s).isAfter(e)) {
+            conflictNames.push(m.name);
+            break;
+          }
+        }
+      });
+      if (conflictNames.length > 0) {
+        message.warning(`⚠ ${conflictNames.join('、')} 与现有项目时间冲突，请及时调整`);
       }
 
       setMembers((prev) =>
@@ -352,6 +427,28 @@ function TeamPool() {
             <div style={{ color: '#1890ff', fontSize: 24, fontWeight: 700, lineHeight: 1 }}>{stats.onLeaveCount}</div>
           </div>
         </div>
+        <div style={{
+          flex: 1, minWidth: 140, maxWidth: 200,
+          background: 'rgba(250, 173, 20, 0.08)',
+          border: '1px solid rgba(250, 173, 20, 0.2)',
+          borderRadius: 10,
+          padding: '16px 20px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+        }}>
+          <div style={{
+            width: 40, height: 40, borderRadius: '50%',
+            background: 'rgba(250, 173, 20, 0.15)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <WarningOutlined style={{ color: '#faad14', fontSize: 20 }} />
+          </div>
+          <div>
+            <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12, marginBottom: 2 }}>时间冲突</div>
+            <div style={{ color: '#faad14', fontSize: 24, fontWeight: 700, lineHeight: 1 }}>{stats.conflictCount}</div>
+          </div>
+        </div>
       </div>
 
       <div style={{ marginBottom: 24, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -429,6 +526,20 @@ function TeamPool() {
         >
           批量指派
         </Button>
+        <Button
+          icon={<WarningOutlined />}
+          onClick={() => setConflictModalOpen(true)}
+          style={{
+            background: stats.conflictCount > 0 ? 'rgba(250,173,20,0.15)' : 'rgba(250,173,20,0.05)',
+            border: `1px solid ${stats.conflictCount > 0 ? 'rgba(250,173,20,0.4)' : 'rgba(250,173,20,0.2)'}`,
+            color: stats.conflictCount > 0 ? '#faad14' : 'rgba(250,173,20,0.6)',
+            fontFamily: 'var(--font-primary)',
+            fontWeight: 500,
+            borderRadius: 8,
+          }}
+        >
+          冲突人员查看{stats.conflictCount > 0 ? ` (${stats.conflictCount})` : ''}
+        </Button>
       </div>
 
       {loading ? (
@@ -446,6 +557,7 @@ function TeamPool() {
           {filteredMembers.map((member) => {
             const statusCfg = statusConfig[member.status];
             const memberProjects = member.projects || [];
+            const conflicts = detectTimeConflicts(member);
             // 当前进行中的项目
             const now = dayjs();
             const activeProjects = memberProjects.filter(
@@ -491,6 +603,36 @@ function TeamPool() {
                     (e.target as HTMLElement).style.color = '#4d9fff';
                   }}
                 />
+
+                {/* 时间冲突警告 */}
+                {conflicts.length > 0 && (
+                  <Tooltip
+                    title={
+                      <div style={{ fontSize: 12, lineHeight: 1.8 }}>
+                        <div style={{ fontWeight: 600, marginBottom: 4 }}>时间冲突（{conflicts.length} 处）</div>
+                        {conflicts.map((c, i) => (
+                          <div key={i}>
+                            「{c.project1}」与「{c.project2}」重叠 {c.overlapDays} 天
+                            <span style={{ color: 'rgba(255,255,255,0.5)' }}>（{c.overlapStart} ~ {c.overlapEnd}）</span>
+                          </div>
+                        ))}
+                      </div>
+                    }
+                    placement="bottom"
+                  >
+                    <WarningOutlined
+                      style={{
+                        position: 'absolute',
+                        top: 12,
+                        right: 40,
+                        fontSize: 16,
+                        color: '#faad14',
+                        cursor: 'pointer',
+                        zIndex: 2,
+                      }}
+                    />
+                  </Tooltip>
+                )}
 
                 {/* 头像 + 名字 — 整体居中 */}
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', marginBottom: 12 }}>
@@ -785,6 +927,52 @@ function TeamPool() {
             </div>
           )}
         </Form>
+      </Modal>
+
+      {/* 冲突人员查看 Modal */}
+      <Modal
+        title={`时间冲突人员（共 ${stats.conflictCount} 人 / ${conflictRows.length} 处冲突）`}
+        open={conflictModalOpen}
+        onCancel={() => setConflictModalOpen(false)}
+        footer={<Button onClick={() => setConflictModalOpen(false)}>关闭</Button>}
+        width={820}
+        bodyStyle={{ background: 'rgba(13,31,60,0.95)' }}
+        style={{ top: 60 }}
+      >
+        {conflictRows.length === 0 ? (
+          <div style={{ padding: 40, textAlign: 'center', color: 'rgba(255,255,255,0.3)' }}>
+            当前没有时间冲突的人员
+          </div>
+        ) : (
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <thead>
+              <tr style={{ background: 'rgba(77,159,255,0.06)', borderBottom: '2px solid rgba(77,159,255,0.2)' }}>
+                <th style={{ padding: '10px 8px', textAlign: 'left', color: 'rgba(255,255,255,0.6)', fontWeight: 500 }}>人员</th>
+                <th style={{ padding: '10px 8px', textAlign: 'left', color: 'rgba(255,255,255,0.6)', fontWeight: 500 }}>冲突项目 A</th>
+                <th style={{ padding: '10px 8px', textAlign: 'left', color: 'rgba(255,255,255,0.6)', fontWeight: 500 }}>冲突项目 B</th>
+                <th style={{ padding: '10px 8px', textAlign: 'center', color: 'rgba(255,255,255,0.6)', fontWeight: 500 }}>重叠区间</th>
+                <th style={{ padding: '10px 8px', textAlign: 'center', color: 'rgba(255,255,255,0.6)', fontWeight: 500 }}>重叠天数</th>
+              </tr>
+            </thead>
+            <tbody>
+              {conflictRows.map((r) => (
+                <tr key={r.key} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                  <td style={{ padding: '10px 8px', color: 'rgba(255,255,255,0.9)', fontWeight: 500 }}>{r.memberName}</td>
+                  <td style={{ padding: '10px 8px', color: 'rgba(255,255,255,0.7)' }}>{r.projectA}</td>
+                  <td style={{ padding: '10px 8px', color: 'rgba(255,255,255,0.7)' }}>{r.projectB}</td>
+                  <td style={{ padding: '10px 8px', textAlign: 'center', color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>
+                    {r.overlapStart} ~ {r.overlapEnd}
+                  </td>
+                  <td style={{ padding: '10px 8px', textAlign: 'center' }}>
+                    <span style={{ display: 'inline-block', padding: '2px 10px', background: 'rgba(250,173,20,0.12)', color: '#faad14', border: '1px solid rgba(250,173,20,0.3)', borderRadius: 4, fontSize: 12 }}>
+                      {r.overlapDays} 天
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </Modal>
 
       {/* 批量指派 Modal */}

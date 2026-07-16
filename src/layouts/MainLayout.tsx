@@ -14,6 +14,8 @@ import {
   CalculatorOutlined,
   SafetyOutlined,
   BookOutlined,
+  CalendarOutlined,
+  FileSearchOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../store/AuthContext';
 import type { AppModule } from '../types';
@@ -32,8 +34,10 @@ const ALL_MENU_ITEMS: MenuItemDef[] = [
   { key: '/projects', icon: <ProjectOutlined />, label: '项目管理', module: 'projects' },
   { key: '/history', icon: <HistoryOutlined />, label: '历史项目', module: 'history' },
   { key: '/team-pool', icon: <TeamOutlined />, label: '测试人员池', module: 'teamPool' },
+  { key: '/attendance', icon: <CalendarOutlined />, label: '人员考勤', module: 'attendance' },
   { key: '/test-guide', icon: <FileTextOutlined />, label: '测试管理制度', module: 'testGuide' },
   { key: '/knowledge-base', icon: <BookOutlined />, label: '知识库', module: 'dashboard' },
+  { key: '/report-review', icon: <FileSearchOutlined />, label: '测试报告审核', module: 'reportReview' },
   { key: '/resource-calculator', icon: <CalculatorOutlined />, label: '资源计算器', module: 'resourceCalc' },
   { key: '/permission-config', icon: <SafetyOutlined />, label: '权限配置', module: 'permissionConfig' },
 ];
@@ -82,6 +86,8 @@ function MainLayout() {
     '/test-guide': '测试管理制度',
     '/resource-calculator': '资源计算器',
     '/knowledge-base': '知识库',
+    '/report-review': '测试报告审核',
+    '/attendance': '人员考勤',
     '/permission-config': '权限配置',
   };
 

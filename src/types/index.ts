@@ -96,6 +96,7 @@ export interface TeamMember {
   name: string;
   employeeId: string;
   status: MemberStatus;
+  position?: string;          // 岗位：助理测试工程师/测试工程师/项目主测/项目经理
   avatar?: string;
   skills: string[];
   currentProjects: string[];
@@ -194,6 +195,8 @@ export type AppModule =
   | 'teamPool'
   | 'testGuide'
   | 'resourceCalc'
+  | 'attendance'
+  | 'reportReview'
   | 'permissionConfig';
 
 export interface ModulePermission {

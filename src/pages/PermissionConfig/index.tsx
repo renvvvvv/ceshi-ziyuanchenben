@@ -11,6 +11,8 @@ const MODULE_LABELS: Record<AppModule, string> = {
   teamPool: '测试人员池',
   testGuide: '测试管理制度',
   resourceCalc: '资源计算器',
+  attendance: '人员考勤',
+  reportReview: '测试报告审核',
   permissionConfig: '权限配置',
 };
 

@@ -33,6 +33,8 @@ const MODULE_LIST: AppModule[] = [
   'teamPool',
   'testGuide',
   'resourceCalc',
+  'attendance',
+  'reportReview',
   'permissionConfig',
 ];
 
@@ -130,10 +132,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return {} as Record<AppModule, ModulePermission>;
     }
     const config = permissionConfigs.find((c) => c.role === authState.user!.role);
+    const defaultConfig = DEFAULT_PERMISSIONS.find((c) => c.role === authState.user!.role);
     const map = {} as Record<AppModule, ModulePermission>;
     if (config) {
       for (const p of config.permissions) {
         map[p.module] = p;
+      }
+    }
+    // 兼容新增模块：旧 localStorage 缺失时用默认权限补齐
+    for (const m of MODULE_LIST) {
+      if (!map[m]) {
+        const defaultPerm = defaultConfig?.permissions.find((p) => p.module === m);
+        if (defaultPerm) map[m] = defaultPerm;
       }
     }
     return map;
