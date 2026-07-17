@@ -503,6 +503,7 @@ function GanttChart({ projects, unit = 'day' }: GanttChartProps) {
                         <span className="gantt-bar-label">
                           {dayjs(project.startDate).format('MM/DD')} — {project.endDate ? dayjs(project.endDate).format('MM/DD') : '至今'}
                           {project.plannedManpower ? ` · ${project.plannedManpower}人` : ''}
+                          {project.itOutput ? ` · ${project.itOutput}MW` : ''}
                         </span>
                       </div>
                     </Tooltip>
