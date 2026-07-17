@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Table, Button, Select, Input, Space, Popconfirm, message, Tag, Tooltip } from 'antd';
 import { PlusOutlined, SearchOutlined, DeleteOutlined, EditOutlined, EyeOutlined, SwapOutlined, LinkOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
+import dayjs from 'dayjs';
 import StatusTag from '../../components/StatusTag';
 import ProjectModal from '../../components/ProjectModal';
 import ComparisonReportModal from '../../components/ComparisonReportModal';
@@ -87,7 +88,8 @@ function Projects() {
             return m;
           }
           // 添加到 upcomingProjects（如果项目还未开始）
-          const todayStr = new Date().toISOString().split('T')[0];
+          // 用本地日期比较（避免时区错位）
+          const todayStr = dayjs().format('YYYY-MM-DD');
           const isFuture = startDate > todayStr;
           const newUpcoming = isFuture
             ? [...(m.upcomingProjects || []).filter((up) => up.projectName !== projectName), { projectName, startDate, endDate }]
