@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { TERMINOLOGY, buildTerminologyPrompt, FEW_SHOT_EXAMPLES } from './terminology.js';
+import { ALL_COMMON_TYPOS, buildCommonTyposPrompt } from './commonTypos.js';
 import { buildLearnedPrompt, addCorrection, loadCorrections, getKnownOriginals } from './learnedCorrections.js';
 
 const router = Router();
@@ -18,7 +19,7 @@ const router = Router();
  *   - 长文档自动分块（>4000 字分段并行审）
  */
 
-const SYSTEM_PROMPT = `你是智航万恒测试验证管理平台的【专业错别字审核助手】。你的唯一职责是找出用户提供的测试报告/技术文档/验收文档中的错别字。
+const SYSTEM_PROMPT = `你是智航万恒测试验证管理平台的【专业错别字审核助手】。你的唯一职责是找出用户提供的测试报告/技术文档/验收文档/合同/发票/任何办公文档 中的错别字（包括同音、形近、多字少字、标点、用词不当等）。
 
 【输出严格格式】
 必须且只能返回如下 JSON：
@@ -29,21 +30,40 @@ const SYSTEM_PROMPT = `你是智航万恒测试验证管理平台的【专业错
 }
 如果没有错别字，返回 {"errors":[]}。除 JSON 外不允许输出任何字符、解释或 Markdown。
 
-【审核范围 — 必须全部识别】
+【审核范围 — 必须全部识别】（不限于数据中心领域）
 1. 同音错字：例如 "发电机组" 写成 "发电动机组"、"功率因数" 写成 "功率因素"
 2. 形近错字：例如 "配电柜" 写成 "配电拒"、"板换" 写成 "扳换"
 3. 多字/少字：例如 "已经配置" 写成 "以配置"、"气体灭火" 写成 "气体灭火车"
 4. 标点错误：句末标点缺失、中英文标点混用（如中文句子里出现全角逗号位置用了英文逗号）
 5. 数字与单位之间缺空格：例如 "100MW" 应写为 "100 MW"；"25℃" 应写为 "25 ℃"
 6. 行业术语别名：例如 "柴发机租" 应改为 "柴油发电机组"、"发电源" 应改为 "发电机"
-7. 错别成语：例如 "再接再厉" 写成 "再接再历"
+7. 错别成语：例如 "再接再厉" 写成 "再接再历"、"直截了当" 写成 "直接了当"
+8. 【地名错字】⭐ 重要：识别中国地名错写
+   例如 "北京" 写成 "北静"、"苏州" 写成 "苏洲"、"哈尔滨" 写成 "哈尔并"、
+   "杭州" 写成 "抗州"、"郑州" 写成 "郑洲"、"长沙" 写成 "长纱"、
+   "武汉" 写成 "武汗"、"成都" 写成 "城都"、"广州" 写成 "廣州"、
+   "济南" 写成 "济楠"、"西宁" 写成 "西灵" 等。每个城市名要按规范地名纠正。
+9. 【客户/品牌名错字】⭐ 重要：识别常见公司/品牌名错写
+   例如 "阿里巴巴" 写成 "阿里巴爸"/"阿里八八"/"阿里爸爸"、
+   "腾讯" 写成 "腾迅"/"腾寻"、"微信" 写成 "威信"、
+   "华为" 写成 "华伪"/"滑为"、"百度" 写成 "摆渡"/"白度"、
+   "京东" 写成 "景东"、"美团" 写成 "每团"、"拼多多" 写成 "评多多"、
+   "比亚迪" 写成 "比业迪" 等。客户文档尤其重要。
+10. 【IT/办公常用错字】
+    "登陆" → "登录"（系统登录非"登陆"）、"帐号" → "账号"、
+    "网络" → "网络"（非"网路"）、"硬件" → "硬件"（非"硬体"）、
+    "软件" → "软件"（非"软体"）、"连结" → "连接"、
+    "带宽" → "带宽"（非"频宽"）、"内存" → "内存"（非"记忆体"）、
+    "界面" → "界面"（非"介面"）、"部署" → "部署"（非"布署/部暑"）、
+    "配置" → "配置"（非"佩置"）、"其他" → "其他"（非"其它"）
 
 【注意事项】
 - "original" 必须是文本中【逐字】能找到的字串（含标点）
 - "suggestion" 必须是规范的替换写法
 - "context" 必须包含 original 的整段上下文，长度不超过 30 字
-- 同一错字只返回一次
+- 同一错字只返回一次（不要重复）
 - 没有错别字时一定返回 {"errors":[]}
+- **专有名词优先**：地名、品牌名、客户名这些错误一旦识别务必返回，影响报告专业性
 `;
 
 router.post('/', async (req, res) => {
@@ -127,7 +147,8 @@ async function callMiniMaxOnce(
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 60000);
 
-  // 拼装 system prompt：基础 + 术语词典 + 学习库 + Few-shot
+  // 拼装 system prompt：基础 + 通用错字词典 + 数据中心术语词典 + 学习库 + Few-shot
+  const commonTypos = buildCommonTyposPrompt();
   const terminology = buildTerminologyPrompt();
   const learned = buildLearnedPrompt();
   const fewshot = FEW_SHOT_EXAMPLES
@@ -136,6 +157,7 @@ async function callMiniMaxOnce(
 
   const systemContent = [
     SYSTEM_PROMPT,
+    '\n\n' + commonTypos,
     terminology ? '\n\n' + terminology : '',
     learned ? '\n\n' + learned : '',
     '\n\n【Few-shot 学习样例】\n' + fewshot,
@@ -198,24 +220,45 @@ async function callMiniMaxOnce(
 }
 
 /**
- * 词典兜底：用术语词典和学习库直接匹配文本，确保 AI 漏网也被抓到
+ * 词典兜底：用通用易混字词典、术语词典、学习库直接匹配文本，确保 AI 漏网也被抓到
  */
 function ruleBasedDetect(text: string): Array<{original: string; suggestion: string; context: string}> {
   const out: Array<{original: string; suggestion: string; context: string}> = [];
   const seen = new Set<string>();
 
   const checkAndPush = (original: string, suggestion: string, idx: number) => {
+    if (!original || original === suggestion) return;
     const key = original + '|' + suggestion;
     if (seen.has(key)) return;
     seen.add(key);
-    const ctx = text.substring(Math.max(0, idx - 15), Math.min(text.length, idx + original.length + 15)).replace(/\s+/g, ' ');
+    const ctx = text
+      .substring(Math.max(0, idx - 15), Math.min(text.length, idx + original.length + 15))
+      .replace(/\s+/g, ' ');
     out.push({ original, suggestion, context: ctx });
   };
 
-  // 1) 术语词典
+  const scanDict = (entries: Array<{original: string; suggestion: string; note?: string}>) => {
+    for (const e of entries) {
+      if (!e.original || e.original === e.suggestion) continue;
+      // 带有"语境依赖/同名多义"提示的不强制报（避免误报）
+      if (e.note && /(同名多义|按语境判断|首次出现|看语境)/.test(e.note)) continue;
+      let from = 0;
+      while (true) {
+        const i = text.indexOf(e.original, from);
+        if (i < 0) break;
+        checkAndPush(e.original, e.suggestion, i);
+        from = i + e.original.length;
+      }
+    }
+  };
+
+  // 1) 通用易混字 / 地名 / 品牌词典（覆盖阿里巴爸、北静、苏洲等）
+  scanDict(ALL_COMMON_TYPOS);
+
+  // 2) 数据中心术语词典
   for (const t of TERMINOLOGY) {
     for (const alias of t.aliases) {
-      if (alias === t.canonical || !alias) continue;
+      if (!alias || alias === t.canonical) continue;
       let from = 0;
       while (true) {
         const i = text.indexOf(alias, from);
@@ -226,7 +269,7 @@ function ruleBasedDetect(text: string): Array<{original: string; suggestion: str
     }
   }
 
-  // 2) 学习纠错库
+  // 3) 学习纠错库
   const known = getKnownOriginals();
   for (const original of known) {
     const c = loadCorrections()[original];
