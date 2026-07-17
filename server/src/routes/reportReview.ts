@@ -1,9 +1,14 @@
 import { Router } from 'express';
+import fs from 'fs';
+import path from 'path';
 import { TERMINOLOGY, buildTerminologyPrompt, FEW_SHOT_EXAMPLES } from './terminology.js';
 import { ALL_COMMON_TYPOS, buildCommonTyposPrompt } from './commonTypos.js';
 import { buildLearnedPrompt, addCorrection, loadCorrections, getKnownOriginals } from './learnedCorrections.js';
 
 const router = Router();
+
+// 已学习纠错库的落盘路径（与 learnedCorrections.ts DATA_DIR/FILE 保持一致）
+const PERSIST_PATH = path.resolve(process.cwd(), 'data', 'learned-corrections.json');
 
 /**
  * POST /api/report-review
@@ -142,10 +147,8 @@ router.delete('/learn', (req, res) => {
   }
   delete all[raw];
   // 落盘：复用持久化逻辑（与 learnedCorrections.ts 一致）
-  const persistPath = require('path').resolve(process.cwd(), 'data', 'learned-corrections.json');
-  const fs = require('fs');
   try {
-    fs.writeFileSync(persistPath, JSON.stringify(all, null, 2), 'utf-8');
+    fs.writeFileSync(PERSIST_PATH, JSON.stringify(all, null, 2), 'utf-8');
   } catch (e: any) {
     return res.status(500).json({ success: false, message: '落盘失败：' + (e?.message || 'unknown') });
   }
