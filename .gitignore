@@ -7,3 +7,6 @@ server/.env
 .env
 *.log
 .DS_Store
+
+# 学习纠错库（运行时生成，每台服务器独立）
+data/learned-corrections.json

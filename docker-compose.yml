@@ -32,6 +32,8 @@ services:
         condition: service_healthy
     volumes:
       - ./scripts:/app/scripts:ro
+      # 学习纠错库持久化（自学习能力）
+      - ./data:/app/data
     environment:
       - PORT=3001
       - NODE_ENV=production
