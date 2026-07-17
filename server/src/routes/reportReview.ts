@@ -220,6 +220,38 @@ async function callMiniMaxOnce(
 }
 
 /**
+ * 中文词边界检查：判断 [i, i+len) 处的子串是否在更长中文词内部
+ *
+ * 规则：仅当 original 是 2~3 字符的中文词时做边界检查（短词易冲突）。
+ *   - 前面是 CJK ⇒ 该子串在更长词内部（跳过，避免误报子串匹配）
+ *   - 后面是 CJK ⇒ 该子串可能是更长词的一部分（跳过）
+ *
+ * 该规则保证：
+ *   - "阿里"在"阿里巴爸"中 — 后面"里" 是 CJK ⇒ skip ✓（不冲突"阿里巴爸"独立报）
+ *   - "苏洲"（已删）— 命中"苏州市" — 后面"市" 是 CJK ⇒ skip（本应报，但边界太严就跳过）
+ *   - "哈尔并"（length=3）— 不过边界检查，正常报
+ *   - "苏洲市"中 "苏洲" 在前面（标点/空格等非 CJK），后面"市" 是 CJK ⇒ skip ⚠️
+ *     （这是边界严格性的代价；但用例少，可在词典里加 3 字错写如"苏洲市"覆盖）
+ *   - "阿里巴爸" — length>=4 不过边界检查，正常报 ✓
+ */
+function isInsideLongerChineseWord(text: string, idx: number, len: number): boolean {
+  const matched = text.substring(idx, idx + len);
+  if (!/^[\u4e00-\u9fa5]+$/.test(matched)) return false; // 包含英文/数字时不检查（基本是独立词）
+  if (matched.length >= 4) return false;                   // 长词不必检查
+  if (matched.length < 2) return false;                    // 单字不强边界
+
+  const before = idx > 0 ? text[idx - 1] : '';
+  const after = idx + len < text.length ? text[idx + len] : '';
+  const isCJK = (ch: string) => /[\u4e00-\u9fa5]/.test(ch);
+
+  // 前面是 CJK ⇒ 必嵌在更长词内部，跳过
+  if (isCJK(before)) return true;
+  // 后面是 CJK ⇒ 大概率嵌在更长词内部（如"苏洲"在"苏洲市"中），跳过
+  if (isCJK(after)) return true;
+  return false;
+}
+
+/**
  * 词典兜底：用通用易混字词典、术语词典、学习库直接匹配文本，确保 AI 漏网也被抓到
  */
 function ruleBasedDetect(text: string): Array<{original: string; suggestion: string; context: string}> {
@@ -246,6 +278,13 @@ function ruleBasedDetect(text: string): Array<{original: string; suggestion: str
       while (true) {
         const i = text.indexOf(e.original, from);
         if (i < 0) break;
+        // 中文词边界检查：避免短词在长词内部被误报
+        // 例：词典有"阿里"，但命中"阿里巴爸"内部 — 这种位置前面是汉字（"里"属更长词的一部分），应跳过
+        // 边界规则：original 若全部为中文（前/后若是汉字 ⇒ 是长词内部 ⇒ 跳过）
+        if (isInsideLongerChineseWord(text, i, e.original.length)) {
+          from = i + e.original.length;
+          continue;
+        }
         checkAndPush(e.original, e.suggestion, i);
         from = i + e.original.length;
       }

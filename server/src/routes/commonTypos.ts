@@ -20,12 +20,32 @@ export interface CommonTypo {
 
 // ============== 1. 地名错写（覆盖全国直辖市、省会、计划单列市） ==============
 export const PLACE_NAMES: CommonTypo[] = [
-  // 直辖市
+  // ===== 3 字地名错写（避免边界检查漏掉） =====
+  { original: '北静市', suggestion: '北京市', category: '地名' },
+  { original: '哈尔并市', suggestion: '哈尔滨市', category: '地名' },
+  { original: '哈尔并省', suggestion: '黑龙江省', category: '地名' },
+  { original: '苏洲市', suggestion: '苏州市', category: '地名' },
+  { original: '苏洲省', suggestion: '江苏省', category: '地名' },
+  { original: '杭洲市', suggestion: '杭州市', category: '地名' },
+  { original: '武汗市', suggestion: '武汉市', category: '地名' },
+  { original: '长纱市', suggestion: '长沙市', category: '地名' },
+  { original: '成都省', suggestion: '四川省', category: '地名' },
+  { original: '城都市', suggestion: '成都市', category: '地名' },
+  { original: '哈尔滨', suggestion: '哈尔滨', category: '地名' }, // 占位
+  { original: '济楠市', suggestion: '济南市', category: '地名' },
+  { original: '南竟市', suggestion: '南京市', category: '地名' },
+  { original: '西安省', suggestion: '陕西省', category: '地名' },
+  { original: '西案市', suggestion: '西安市', category: '地名' },
+  { original: '太远市', suggestion: '太原市', category: '地名' },
+  { original: '太远省', suggestion: '山西省', category: '地名' },
+  { original: '兰洲市', suggestion: '兰州市', category: '地名' },
+  { original: '贵阳市', suggestion: '贵阳市', category: '地名' },
+  { original: '桂阳市', suggestion: '贵阳市', category: '地名' },
+  // 直辖市 2 字
   { original: '北静', suggestion: '北京', category: '地名', note: '北京市' },
-  { original: '上海', suggestion: '上海', category: '地名', note: '上海市（无误）' }, // 占位：无错字
+  { original: '上海', suggestion: '上海', category: '地名' },
   { original: '重庆', suggestion: '重庆', category: '地名' },
   { original: '天京', suggestion: '天津', category: '地名' },
-  { original: '天津', suggestion: '天津', category: '地名' },
   // 省会城市
   { original: '哈尔并', suggestion: '哈尔滨', category: '地名' },
   { original: '哈滨', suggestion: '哈尔滨', category: '地名' },
@@ -107,12 +127,19 @@ export const PLACE_NAMES: CommonTypo[] = [
 
 // ============== 2. 品牌 / 客户名错写 ==============
 export const BRAND_NAMES: CommonTypo[] = [
+  // ===== 3 字/4 字品牌名错写（避免边界误伤） =====
+  { original: '阿里巴爸公司', suggestion: '阿里巴巴公司', category: '品牌' },
+  { original: '阿里巴爸集团', suggestion: '阿里巴巴集团', category: '品牌' },
+  { original: '阿里巴爸云', suggestion: '阿里云', category: '品牌' },
+  { original: '腾迅公司', suggestion: '腾讯公司', category: '品牌' },
+  { original: '腾迅科技', suggestion: '腾讯科技', category: '品牌' },
+  { original: '华伪公司', suggestion: '华为公司', category: '品牌' },
+  { original: '华伪技术', suggestion: '华为技术', category: '品牌' },
   // 阿里系
   { original: '阿里巴爸', suggestion: '阿里巴巴', category: '品牌', note: '阿里巴巴集团' },
   { original: '阿里八八', suggestion: '阿里巴巴', category: '品牌' },
   { original: '阿里爸爸', suggestion: '阿里巴巴', category: '品牌' },
   { original: '阿里吧吧', suggestion: '阿里巴巴', category: '品牌' },
-  { original: '阿里', suggestion: '阿里巴巴', category: '品牌', note: '上下文为"集团""公司"时可简写' },
   { original: '阿理巴巴', suggestion: '阿里巴巴', category: '品牌' },
   { original: 'Alibaba', suggestion: '阿里巴巴', category: '品牌', note: '英文应统一为中文' },
   { original: '淘宝', suggestion: '淘宝', category: '品牌' },
