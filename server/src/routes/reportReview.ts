@@ -103,14 +103,53 @@ router.post('/', async (req, res) => {
  * POST /api/report-review/learn
  * 前端用户在 UI 上点击"采纳"时调用 — 触发自我学习
  * body: { original: string, suggestion: string }
+ *
+ * 校验（防止学习库被污染）：
+ *  1. original/suggestion 必填，且为非空字符串
+ *  2. 长度 1~50（防止太长污染 prompt）
+ *  3. original !== suggestion（无意义学习直接拒）
+ *  4. trim 处理
  */
 router.post('/learn', (req, res) => {
-  const { original, suggestion } = req.body || {};
-  if (!original || !suggestion) {
+  const rawOriginal = (req.body?.original ?? '').toString().trim();
+  const rawSuggestion = (req.body?.suggestion ?? '').toString().trim();
+  if (!rawOriginal || !rawSuggestion) {
     return res.status(400).json({ success: false, message: 'original / suggestion 必填' });
   }
-  const updated = addCorrection(original, suggestion, 'user');
+  if (rawOriginal.length > 50 || rawSuggestion.length > 50) {
+    return res.status(400).json({ success: false, message: '单条纠错长度不能超过 50 字符' });
+  }
+  if (rawOriginal === rawSuggestion) {
+    return res.status(400).json({ success: false, message: '原词和推荐词相同，无需学习' });
+  }
+  const updated = addCorrection(rawOriginal, rawSuggestion, 'user');
   res.json({ success: true, correction: updated });
+});
+
+/**
+ * DELETE /api/report-review/learn
+ * 移除已学习的纠错（误学/废弃/已纠正时使用）
+ * body: { original: string }
+ */
+router.delete('/learn', (req, res) => {
+  const raw = (req.body?.original ?? '').toString().trim();
+  if (!raw) {
+    return res.status(400).json({ success: false, message: 'original 必填' });
+  }
+  const all = loadCorrections();
+  if (!all[raw]) {
+    return res.status(404).json({ success: false, message: '该条目不存在' });
+  }
+  delete all[raw];
+  // 落盘：复用持久化逻辑（与 learnedCorrections.ts 一致）
+  const persistPath = require('path').resolve(process.cwd(), 'data', 'learned-corrections.json');
+  const fs = require('fs');
+  try {
+    fs.writeFileSync(persistPath, JSON.stringify(all, null, 2), 'utf-8');
+  } catch (e: any) {
+    return res.status(500).json({ success: false, message: '落盘失败：' + (e?.message || 'unknown') });
+  }
+  res.json({ success: true, removed: raw, remaining: Object.keys(all).length });
 });
 
 /**

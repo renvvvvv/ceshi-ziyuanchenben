@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import { Upload, Button, Spin, message, Tooltip } from 'antd';
+import { Upload, Button, Spin, message, Tooltip, Modal, List, Empty } from 'antd';
 import type { UploadProps } from 'antd';
 import {
   InboxOutlined,
@@ -10,6 +10,7 @@ import {
   ReloadOutlined,
   BookOutlined,
   BulbOutlined,
+  DeleteOutlined,
 } from '@ant-design/icons';
 
 const { Dragger } = Upload;
@@ -33,6 +34,8 @@ function ReportReview() {
   const [activeErrorId, setActiveErrorId] = useState<number | null>(null);
   const [learnedSize, setLearnedSize] = useState<number>(0);
   const [reviewStats, setReviewStats] = useState<{aiErrors: number; ruleErrors: number; merged: number}>({aiErrors: 0, ruleErrors: 0, merged: 0});
+  const [manageLibOpen, setManageLibOpen] = useState(false);
+  const [learnedItems, setLearnedItems] = useState<Array<{original:string;suggestion:string;count:number;lastSeen:string;source?:string}>>([]);
   const previewRef = useRef<HTMLDivElement>(null);
 
   // 加载学习库规模
@@ -42,6 +45,46 @@ function ReportReview() {
       .then((d) => { if (d.success) setLearnedSize(d.size); })
       .catch(() => {});
   }, []);
+
+  // 打开"管理学习库"Modal 时刷新列表
+  const openManageLib = async () => {
+    try {
+      const r = await fetch('/api/report-review/learned');
+      const d = await r.json();
+      if (d.success) setLearnedItems(d.items || []);
+    } catch {}
+    setManageLibOpen(true);
+  };
+
+  // 删除一条学习记录
+  const handleDeleteLearned = async (original: string) => {
+    Modal.confirm({
+      title: '从学习库移除',
+      content: `确认移除纠错："${original}"？`,
+      okText: '移除',
+      okButtonProps: { danger: true },
+      cancelText: '取消',
+      onOk: async () => {
+        try {
+          const r = await fetch('/api/report-review/learn', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ original }),
+          });
+          const d = await r.json();
+          if (d.success) {
+            setLearnedItems((prev) => prev.filter((i) => i.original !== original));
+            setLearnedSize(d.remaining);
+            message.success(`已移除："${original}"（剩余 ${d.remaining} 条）`);
+          } else {
+          message.error(d.message || '移除失败');
+        }
+      } catch {
+        message.error('网络异常');
+      }
+    },
+  });
+};
 
   // 提交采纳纠错到后端学习库
   const submitLearning = useCallback(async (original: string, suggestion: string) => {
@@ -54,6 +97,9 @@ function ReportReview() {
       const data = await res.json();
       if (data.success) {
         setLearnedSize((s) => s + 1);
+      } else {
+        // 后端校验失败（如"原词=推荐词"），给出友好提示
+        message.warning(data.message || '该纠错未能加入学习库');
       }
     } catch {
       // 静默失败，不打扰主流程
@@ -307,13 +353,20 @@ function ReportReview() {
               </div>
             </Tooltip>
           )}
-          <Tooltip title="采纳过的纠错会进入自我学习库，下一次审核会自动应用相同规则">
-            <div style={{
-              background: 'rgba(82,196,26,0.08)', border: '1px solid rgba(82,196,26,0.2)',
-              borderRadius: 6, padding: '4px 10px', fontSize: 11, color: 'rgba(255,255,255,0.6)',
-            }}>
+          <Tooltip title="点击管理已学习的纠错（采纳后会自动应用于下次审核）">
+            <div
+              onClick={openManageLib}
+              style={{
+                cursor: 'pointer', userSelect: 'none',
+                background: 'rgba(82,196,26,0.08)', border: '1px solid rgba(82,196,26,0.2)',
+                borderRadius: 6, padding: '4px 10px', fontSize: 11, color: 'rgba(255,255,255,0.6)',
+                transition: 'all 0.2s',
+              }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = 'rgba(82,196,26,0.16)'; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.background = 'rgba(82,196,26,0.08)'; }}
+            >
               <BookOutlined style={{ color: '#52c41a', marginRight: 4 }} />
-              学习库 {learnedSize} 条
+              学习库 {learnedSize} 条（点击管理）
             </div>
           </Tooltip>
         </div>
@@ -481,6 +534,71 @@ function ReportReview() {
           </div>
         </div>
       </div>
+
+      {/* 管理学习库 Modal */}
+      <Modal
+        title={
+          <span>
+            <BookOutlined style={{ color: '#52c41a', marginRight: 8 }} />
+            自我学习库管理
+            <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginLeft: 12, fontWeight: 'normal' }}>
+              共 {learnedItems.length} 条已采纳纠错
+            </span>
+          </span>
+        }
+        open={manageLibOpen}
+        onCancel={() => setManageLibOpen(false)}
+        footer={<Button onClick={() => setManageLibOpen(false)}>关闭</Button>}
+        width={760}
+      >
+        <div style={{ marginBottom: 12, padding: '8px 12px', background: 'rgba(77,159,255,0.05)', border: '1px solid rgba(77,159,255,0.15)', borderRadius: 6, fontSize: 12, color: 'rgba(255,255,255,0.65)' }}>
+          <BulbOutlined style={{ color: '#4d9fff', marginRight: 6 }} />
+          这些纠错已在历史审核中被你采纳，下次遇到相同错误会优先识别（按 count 频次排序）。
+          误学的条目可点击右侧"移除"按钮清除。
+        </div>
+        {learnedItems.length === 0 ? (
+          <Empty description="暂无学习数据" />
+        ) : (
+          <div style={{ maxHeight: 440, overflowY: 'auto' }}>
+            <List
+              size="small"
+              dataSource={learnedItems}
+              renderItem={(item) => (
+                <List.Item
+                  actions={[
+                    <Tooltip key="del" title="从学习库移除">
+                      <Button
+                        type="text"
+                        danger
+                        size="small"
+                        icon={<DeleteOutlined />}
+                        onClick={() => handleDeleteLearned(item.original)}
+                      >
+                        移除
+                      </Button>
+                    </Tooltip>,
+                  ]}
+                >
+                  <List.Item.Meta
+                    title={
+                      <span style={{ fontSize: 13 }}>
+                        <span style={{ color: '#ff4d4f', textDecoration: 'line-through' }}>{item.original}</span>
+                        {' → '}
+                        <span style={{ color: '#52c41a' }}>{item.suggestion}</span>
+                      </span>
+                    }
+                    description={
+                      <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>
+                        采纳 {item.count} 次 · 最近 {new Date(item.lastSeen).toLocaleString('zh-CN')} · 来源 {item.source || 'user'}
+                      </span>
+                    }
+                  />
+                </List.Item>
+              )}
+            />
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }
