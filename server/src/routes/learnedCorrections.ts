@@ -12,12 +12,11 @@
 
 import fs from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-const DATA_DIR = path.resolve(__dirname, '../../data');
+// 用 process.cwd() 解析，兼容：
+//   - 生产：Docker WORKDIR=/app，node dist/src/index.js → cwd=/app → /app/data
+//   - 开发：tsx watch src/index.ts → cwd=server/ → server/data
+const DATA_DIR = path.resolve(process.cwd(), 'data');
 const FILE = path.join(DATA_DIR, 'learned-corrections.json');
 
 export interface Correction {
