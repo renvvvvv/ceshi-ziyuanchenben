@@ -152,7 +152,7 @@ function ProjectDetail() {
 
   /** 渲染单个阶段内容 */
   const renderPhaseContent = (phase: ProjectPhase, index: number) => {
-    const config = PHASE_STATUS_CONFIG[phase.status];
+    const config = PHASE_STATUS_CONFIG[phase.status] || PHASE_STATUS_CONFIG.pending;
     return (
       <div style={{ width: '100%', minHeight: phase.files.length > 0 ? 'auto' : 40 }}>
         {/* 阶段头部：名称 + 说明 + 状态标签 */}

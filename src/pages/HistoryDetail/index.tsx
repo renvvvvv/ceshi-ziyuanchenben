@@ -141,7 +141,7 @@ function HistoryDetail() {
 
   /** 渲染单个阶段内容（支持上传与删除） */
   const renderPhaseContent = (phase: ProjectPhase) => {
-    const config = PHASE_STATUS_CONFIG[phase.status];
+    const config = PHASE_STATUS_CONFIG[phase.status] || PHASE_STATUS_CONFIG.pending;
     return (
       <div style={{ width: '100%', minHeight: phase.files.length > 0 ? 'auto' : 40 }}>
         {/* 阶段头部 */}

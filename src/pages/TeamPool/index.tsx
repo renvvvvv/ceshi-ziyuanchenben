@@ -24,6 +24,11 @@ const statusConfig: Record<MemberStatus, { bg: string; color: string; dot: strin
   '休假': { bg: 'rgba(24, 144, 255, 0.12)', color: '#1890ff', dot: '#1890ff' },
 };
 
+/** 安全获取状态配置：未知 status 兜底为'空闲'，永远不返回 undefined */
+function getStatusConfig(status: string): { bg: string; color: string; dot: string } {
+  return statusConfig[status as MemberStatus] || statusConfig['空闲'];
+}
+
 /** 取名字后 1~2 个字作为头像文字 */
 function getAvatarText(name: string): string {
   if (name.length <= 2) return name;
@@ -347,7 +352,7 @@ function TeamPool() {
   };
 
   const transferRender: TransferProps<{ key: string; title: string; status: MemberStatus }>['render'] = (item) => {
-    const cfg = statusConfig[item.status];
+    const cfg = getStatusConfig(item.status);
     return (
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <span
@@ -566,8 +571,8 @@ function TeamPool() {
         <Empty description={<span style={{ color: 'rgba(255,255,255,0.4)', fontFamily: 'var(--font-primary)' }}>暂无匹配的团队成员</span>} />
       ) : (
         <div className="team-grid">
-          {filteredMembers.map((member) => {
-            const statusCfg = statusConfig[member.status];
+{filteredMembers.map((member) => {
+          const statusCfg = getStatusConfig(member.status);
             const memberProjects = member.projects || [];
             const conflicts = detectTimeConflicts(member);
             // 当前进行中的项目

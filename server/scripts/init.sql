@@ -68,7 +68,7 @@ CREATE TABLE IF NOT EXISTS team_members (
     id              SERIAL PRIMARY KEY,
     name            TEXT    NOT NULL,
     employee_id     TEXT    NOT NULL UNIQUE,
-    status          TEXT    NOT NULL DEFAULT '在线',
+    status          TEXT    NOT NULL DEFAULT '空闲',
     skills          TEXT    NOT NULL DEFAULT '[]',
     current_projects TEXT   NOT NULL DEFAULT '[]',
     email           TEXT,
@@ -78,9 +78,9 @@ CREATE TABLE IF NOT EXISTS team_members (
 
 -- 插入默认数据（仅首次初始化）
 INSERT INTO team_members (name, employee_id, status, skills, current_projects, email, phone)
-SELECT '张家晟', 'EMP001', '在线', '["电力系统","项目管理","UPS测试"]', '["乌兰D5数据中心测试验证"]', 'zhangjs@example.com', '13800001001'
+SELECT '张家晟', 'EMP001', '空闲', '["电力系统","项目管理","UPS测试"]', '["乌兰D5数据中心测试验证"]', 'zhangjs@example.com', '13800001001'
 WHERE NOT EXISTS (SELECT 1 FROM team_members WHERE employee_id = 'EMP001');
 
 INSERT INTO team_members (name, employee_id, status, skills, current_projects, email, phone)
-SELECT '李铭', 'EMP002', '忙碌', '["暖通系统","节能测试","BA系统"]', '["乌兰D3扩容测试","广州天河数据中心测试"]', 'liming@example.com', '13800001002'
+SELECT '李铭', 'EMP002', '空闲', '["暖通系统","节能测试","BA系统"]', '["乌兰D3扩容测试","广州天河数据中心测试"]', 'liming@example.com', '13800001002'
 WHERE NOT EXISTS (SELECT 1 FROM team_members WHERE employee_id = 'EMP002');

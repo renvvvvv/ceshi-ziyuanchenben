@@ -64,7 +64,7 @@ function Projects() {
       setTeamMembers((prev) => prev.map((m) => ({
         ...m,
         projects: (m.projects || []).filter((p) => p.projectName !== projectName),
-        currentProjects: m.currentProjects.filter((p) => p !== projectName),
+        currentProjects: (m.currentProjects || []).filter((p) => p !== projectName),
         upcomingProjects: (m.upcomingProjects || []).filter((up) => up.projectName !== projectName),
       })));
     }
@@ -81,7 +81,7 @@ function Projects() {
             // 如果该人员不在新的指派列表中，但之前被指派过这个项目，需要移除
             const newUpcoming = (m.upcomingProjects || []).filter((up) => up.projectName !== projectName);
             const newProjects = (m.projects || []).filter((p) => p.projectName !== projectName);
-            const newCurrent = m.currentProjects.filter((p) => p !== projectName);
+            const newCurrent = (m.currentProjects || []).filter((p) => p !== projectName);
             if (newUpcoming.length !== (m.upcomingProjects || []).length || newProjects.length !== (m.projects || []).length) {
               return { ...m, upcomingProjects: newUpcoming, projects: newProjects, currentProjects: newCurrent };
             }
@@ -121,7 +121,7 @@ function Projects() {
           prevMembers.map((m) => {
             if (!allRelatedIds.includes(m.id)) return m;
             const newProjects = (m.projects || []).filter((p) => !nameMatch(p.projectName));
-            const newCurrent = m.currentProjects.filter((p) => !nameMatch(p));
+            const newCurrent = (m.currentProjects || []).filter((p) => !nameMatch(p));
             const newUpcoming = (m.upcomingProjects || []).filter((up) => !nameMatch(up.projectName));
             // 如果人员之前是「测试中」，且清除后没有其他进行中的项目，转为空闲
             if (m.status === '测试中' && newCurrent.length === 0) {

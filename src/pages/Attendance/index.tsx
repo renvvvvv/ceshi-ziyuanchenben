@@ -120,7 +120,7 @@ function Attendance() {
     const today = dayjs().format('YYYY-MM-DD');
     const all = [...(m.projects || []), ...(m.upcomingProjects || [])];
     const first = all[0];
-    if (first) {
+    if (first && first.startDate && first.endDate) {
       setManualProject(first.projectName);
       const duty = dutyRange(first.startDate, first.endDate, cycleStart, cycleEnd, today);
       let leaveDays = 0;
@@ -148,7 +148,12 @@ function Attendance() {
       if (duty && m.leaveStartDate && m.leaveEndDate) {
         leaveDays = overlapDays(m.leaveStartDate, m.leaveEndDate, duty.start, duty.end);
       }
-      manualForm.setFieldsValue({ projectStart: dayjs(p.startDate), projectEnd: dayjs(p.endDate), leaveDays });
+      // p.startDate/endDate 可能为 undefined，用 ?? 兜底
+      manualForm.setFieldsValue({
+        projectStart: p.startDate ? dayjs(p.startDate) : undefined,
+        projectEnd: p.endDate ? dayjs(p.endDate) : undefined,
+        leaveDays,
+      });
     }
   };
 

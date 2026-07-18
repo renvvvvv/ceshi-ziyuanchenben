@@ -363,11 +363,18 @@ export function dbRowToTeamMember(row: Record<string, unknown>): TeamMember {
   try {
     if (typeof c.currentProjects === 'string') currentProjects = JSON.parse(c.currentProjects);
   } catch { /* ignore */ }
+
+  // 归一化 status：后端默认值是'在线'，但前端枚举只有'空闲'/'测试中'/'休假'
+  // 把'在线'和任何未知值都映射为'空闲'，避免 TeamPool statusConfig[member.status] 是 undefined
+  const rawStatus = String(c.status || '');
+  const normalizedStatus: TeamMember['status'] =
+    rawStatus === '测试中' || rawStatus === '休假' ? rawStatus : '空闲';
+
   return {
     id: String(c.id),
     name: String(c.name || ''),
     employeeId: String(c.employeeId || ''),
-    status: (c.status || '在线') as TeamMember['status'],
+    status: normalizedStatus,
     skills,
     currentProjects,
     email: c.email ? String(c.email) : undefined,
