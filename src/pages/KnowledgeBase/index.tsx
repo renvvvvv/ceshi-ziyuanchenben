@@ -393,7 +393,8 @@ function MixedPane({ node }: { node: KBNode | null }) {
   const cfg = node ? (TYPE_CONFIG[node.type] || TYPE_CONFIG.docx) : null;
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [iframeState, setIframeState] = useState<'loading' | 'loaded' | 'failed'>('loading');
-  const [mode, setMode] = useState<ViewMode>('auto');
+  // 默认 'card' 模式：用户主动点「实时嵌入」才切到 iframe（且锁定）
+  const [mode, setMode] = useState<ViewMode>('card');
   const loadTimerRef = useRef<number | null>(null);
 
   // 切换节点 / 重置为 iframe + 重启超时
@@ -437,6 +438,9 @@ function MixedPane({ node }: { node: KBNode | null }) {
     setMode('iframe');
     setIframeState('loading');
     if (loadTimerRef.current) window.clearTimeout(loadTimerRef.current);
+    // 用户主动切换到 iframe → 锁定 iframe 模式，【不再】自动降级
+    // 即使 iframe 加载失败，也保持 iframe 显示（让用户自行处理）
+    // 但仍保留 8s 状态指示（让用户看到加载进度）
     loadTimerRef.current = window.setTimeout(() => {
       setIframeState('failed');
     }, 8000);
@@ -446,14 +450,11 @@ function MixedPane({ node }: { node: KBNode | null }) {
   };
 
   // 决定实际显示模式
-  // - mode='iframe' 强制 iframe
-  // - mode='card' 强制卡片
-  // - mode='auto'：iframe 加载成功 → iframe；超时失败 → 自动降级到卡片
+  // 用户主动选了 iframe → 锁定 iframe（不再自动降级到卡片）
+  // 用户主动选了 card → 锁定卡片
+  // 默认 mode='card'，所以新用户看到的是稳定卡片
   const effectiveMode: 'iframe' | 'card' =
-    mode === 'card' ? 'card'
-    : mode === 'iframe' ? 'iframe'
-    : iframeState === 'failed' ? 'card'
-    : 'iframe';
+    mode === 'card' ? 'card' : 'iframe';
 
   return (
     <>
@@ -498,7 +499,12 @@ function MixedPane({ node }: { node: KBNode | null }) {
                 </span>
                 {effectiveMode === 'iframe' && iframeState === 'loading' && <span style={{ color: '#4d9fff' }}>· 加载中…</span>}
                 {effectiveMode === 'iframe' && iframeState === 'loaded' && <span style={{ color: '#52c41a' }}>· 已加载</span>}
-                {effectiveMode === 'iframe' && iframeState === 'failed' && <span style={{ color: '#faad14' }}>· 加载超时</span>}
+                {effectiveMode === 'iframe' && iframeState === 'failed' && <span style={{ color: '#faad14' }}>· 加载超时（未登录飞书？）</span>}
+                {effectiveMode === 'card' && (
+                  <Tooltip title="点上方 ⚡ 按钮切换到 iframe 实时嵌入模式（需要 Safari 已登录飞书）">
+                    <span style={{ color: 'rgba(255,255,255,0.3)' }}>· 点 ⚡ 切到 iframe 实时嵌入</span>
+                  </Tooltip>
+                )}
               </>
             ) : '从左侧目录选择文档'}
           </div>
@@ -515,17 +521,20 @@ function MixedPane({ node }: { node: KBNode | null }) {
                 />
               </Tooltip>
             )}
-            <Tooltip title={effectiveMode === 'iframe' ? '切换到元数据卡片模式' : '切换到实时嵌入模式'}>
+            <Tooltip title={effectiveMode === 'iframe' ? '切换到元数据卡片模式' : '切换到 iframe 实时嵌入模式（需要 Safari 已登录飞书）'}>
               <Button
                 size="small"
+                type={effectiveMode === 'iframe' ? 'default' : 'primary'}
                 icon={effectiveMode === 'iframe' ? <AppstoreOutlined /> : <ThunderboltOutlined />}
                 onClick={effectiveMode === 'iframe' ? handleSwitchToCard : handleSwitchToIframe}
-                style={{
-                  background: effectiveMode === 'iframe' ? 'rgba(255,255,255,0.06)' : 'rgba(77,159,255,0.1)',
-                  border: effectiveMode === 'iframe' ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(77,159,255,0.3)',
-                  color: effectiveMode === 'iframe' ? 'rgba(255,255,255,0.7)' : '#7cb8ff',
-                }}
-              />
+                style={
+                  effectiveMode === 'iframe'
+                    ? { background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.7)' }
+                    : { background: 'linear-gradient(135deg, #4d9fff, #00f0ff)', border: 'none', color: '#fff', fontWeight: 500 }
+                }
+              >
+                {effectiveMode === 'iframe' ? '卡片' : '实时嵌入'}
+              </Button>
             </Tooltip>
             <Button
               size="small"
