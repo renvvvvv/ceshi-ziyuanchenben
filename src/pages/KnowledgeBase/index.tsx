@@ -401,9 +401,12 @@ function MixedPane({ node }: { node: KBNode | null }) {
     if (!node) return;
     setIframeState('loading');
     if (loadTimerRef.current) window.clearTimeout(loadTimerRef.current);
-    // 8 秒后仍未 onLoad → 标记为 failed（可能未登录飞书）
+    // 关键修复：8 秒后【强制】判定为 failed（不论 onLoad 是否触发）
+    // 原因：飞书的登录页 HTML 加载也会触发 onLoad → 单纯靠 onLoad 判断不准
+    // 我们必须用【超时】作为唯一判定标准，因为只有登录成功的飞书文档页面
+    // 才会真正显示内容；登录页/二维码页"看似加载完成"但实际是失败状态
     loadTimerRef.current = window.setTimeout(() => {
-      setIframeState((s) => (s === 'loading' ? 'failed' : s));
+      setIframeState('failed');
     }, 8000);
     return () => {
       if (loadTimerRef.current) window.clearTimeout(loadTimerRef.current);
@@ -411,8 +414,8 @@ function MixedPane({ node }: { node: KBNode | null }) {
   }, [node?.key]);
 
   const handleIframeLoad = () => {
-    if (loadTimerRef.current) window.clearTimeout(loadTimerRef.current);
-    setIframeState('loaded');
+    // onLoad 只是辅助信息，不影响超时逻辑
+    setIframeState((s) => (s === 'failed' ? 'failed' : 'loaded'));
   };
 
   const handleRefresh = () => {
@@ -420,7 +423,7 @@ function MixedPane({ node }: { node: KBNode | null }) {
     setIframeState('loading');
     if (loadTimerRef.current) window.clearTimeout(loadTimerRef.current);
     loadTimerRef.current = window.setTimeout(() => {
-      setIframeState((s) => (s === 'loading' ? 'failed' : s));
+      setIframeState('failed');
     }, 8000);
     iframeRef.current.src = node.feishuLink;
   };
@@ -435,7 +438,7 @@ function MixedPane({ node }: { node: KBNode | null }) {
     setIframeState('loading');
     if (loadTimerRef.current) window.clearTimeout(loadTimerRef.current);
     loadTimerRef.current = window.setTimeout(() => {
-      setIframeState((s) => (s === 'loading' ? 'failed' : s));
+      setIframeState('failed');
     }, 8000);
     if (iframeRef.current && node) {
       iframeRef.current.src = node.feishuLink;
