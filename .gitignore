@@ -10,3 +10,6 @@ server/.env
 
 # 学习纠错库（运行时生成，每台服务器独立）
 data/learned-corrections.json
+
+# 服务器数据备份（手动同步，不入库）
+backups/
