@@ -1,5 +1,5 @@
-import { useState, useMemo, useEffect } from 'react';
-import { Tree, Input, Empty, Spin, Tag, Button, Tooltip } from 'antd';
+import { useState, useMemo, useEffect, useRef } from 'react';
+import { Tree, Input, Empty, Spin, Tag, Button, Tooltip, Alert, Space } from 'antd';
 import type { DataNode } from 'antd/es/tree';
 import {
   SearchOutlined,
@@ -11,6 +11,8 @@ import {
   BookOutlined,
   ExpandOutlined,
   CompressOutlined,
+  ExclamationCircleOutlined,
+  ReloadOutlined,
 } from '@ant-design/icons';
 
 // ============================================================
@@ -373,10 +375,48 @@ function KnowledgeBase() {
 }
 
 // ============================================================
-// 中间：iframe 嵌入面板
+// 中间：iframe 嵌入面板（带智能加载状态 + 飞书登录引导）
 // ============================================================
 function IframePane({ node }: { node: KBNode | null }) {
   const cfg = node ? (TYPE_CONFIG[node.type] || TYPE_CONFIG.docx) : null;
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  // iframe 加载状态：'idle' | 'loading' | 'loaded' | 'blocked'
+  // 'blocked' 触发条件：onLoad 超时（说明被 X-Frame-Options 拦截或网络不通）
+  const [loadState, setLoadState] = useState<'idle' | 'loading' | 'loaded' | 'blocked'>('idle');
+  const loadTimerRef = useRef<number | null>(null);
+
+  // 切换节点时重置加载状态 + 启动超时检测
+  useEffect(() => {
+    if (!node) {
+      setLoadState('idle');
+      if (loadTimerRef.current) window.clearTimeout(loadTimerRef.current);
+      return;
+    }
+    setLoadState('loading');
+    // 6 秒后仍未 onLoad → 视为被拦截
+    if (loadTimerRef.current) window.clearTimeout(loadTimerRef.current);
+    loadTimerRef.current = window.setTimeout(() => {
+      setLoadState((s) => (s === 'loading' ? 'blocked' : s));
+    }, 6000);
+    return () => {
+      if (loadTimerRef.current) window.clearTimeout(loadTimerRef.current);
+    };
+  }, [node?.key]);
+
+  const handleIframeLoad = () => {
+    if (loadTimerRef.current) window.clearTimeout(loadTimerRef.current);
+    setLoadState('loaded');
+  };
+
+  const handleManualRefresh = () => {
+    if (!iframeRef.current || !node) return;
+    setLoadState('loading');
+    if (loadTimerRef.current) window.clearTimeout(loadTimerRef.current);
+    loadTimerRef.current = window.setTimeout(() => {
+      setLoadState((s) => (s === 'loading' ? 'blocked' : s));
+    }, 6000);
+    iframeRef.current.src = node.feishuLink;
+  };
 
   return (
     <>
@@ -411,57 +451,95 @@ function IframePane({ node }: { node: KBNode | null }) {
           }}>
             {node ? node.title : '智航测试部知识库'}
           </div>
-          <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 11, marginTop: 2 }}>
-            {node ? `${cfg?.label || ''} · 飞书内嵌预览` : '从左侧目录选择文档以预览'}
+          <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 11, marginTop: 2, display: 'flex', alignItems: 'center', gap: 6 }}>
+            {node ? (
+              <>
+                <span>{cfg?.label || ''} · 飞书内嵌预览</span>
+                {loadState === 'loading' && <span style={{ color: '#4d9fff' }}>· 加载中…</span>}
+                {loadState === 'loaded' && <span style={{ color: '#52c41a' }}>· 已加载</span>}
+                {loadState === 'blocked' && <span style={{ color: '#faad14' }}>· 嵌入受限</span>}
+              </>
+            ) : '从左侧目录选择文档以预览'}
           </div>
         </div>
         {node && (
-          <Button
-            size="small"
-            type="primary"
-            icon={<LinkOutlined />}
-            href={node.feishuLink}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{
-              background: 'linear-gradient(135deg, #4d9fff, #00f0ff)',
-              border: 'none',
-              borderRadius: 6,
-              fontSize: 12,
-            }}
-          >
-            在飞书中打开 ↗
-          </Button>
+          <Space>
+            <Tooltip title="刷新 iframe">
+              <Button
+                size="small"
+                icon={<ReloadOutlined />}
+                onClick={handleManualRefresh}
+                style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.7)' }}
+              />
+            </Tooltip>
+            <Button
+              size="small"
+              type="primary"
+              icon={<LinkOutlined />}
+              href={node.feishuLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                background: 'linear-gradient(135deg, #4d9fff, #00f0ff)',
+                border: 'none',
+                borderRadius: 6,
+                fontSize: 12,
+              }}
+            >
+              在飞书中打开 ↗
+            </Button>
+          </Space>
         )}
       </div>
+
+      {/* 智能引导 banner：检测到被拦截时显示 */}
+      {loadState === 'blocked' && node && (
+        <Alert
+          banner
+          type="warning"
+          showIcon
+          icon={<ExclamationCircleOutlined />}
+          message={
+            <span>
+              <strong style={{ color: '#faad14' }}>iframe 嵌入受限</strong>
+              <span style={{ color: 'rgba(255,255,255,0.65)', marginLeft: 8 }}>
+                飞书禁止跨域嵌入（X-Frame-Options）。请按下方步骤操作：
+              </span>
+            </span>
+          }
+          description={
+            <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, lineHeight: 1.7, paddingTop: 4 }}>
+              <div>① 点击右上角 <strong style={{ color: '#7cb8ff' }}>「在飞书中打开 ↗」</strong>，在新标签登录飞书</div>
+              <div>② 登录成功后浏览器会记住飞书 cookie（同一域自动生效）</div>
+              <div>③ 回到本页，点 <strong style={{ color: '#7cb8ff' }}>「刷新」</strong> 或重新选择文档</div>
+              <div style={{ marginTop: 4, color: 'rgba(255,255,255,0.45)' }}>
+                提示：只要浏览器在 feishu.cn 有登录态，本页 iframe 就能直接展示和操作。
+              </div>
+            </div>
+          }
+          style={{
+            background: 'rgba(250,173,20,0.08)',
+            border: '1px solid rgba(250,173,20,0.2)',
+            borderRadius: 0,
+            margin: 0,
+          }}
+        />
+      )}
 
       {/* iframe 区 */}
       <div style={{ flex: 1, position: 'relative', background: '#fff', minHeight: 0 }}>
         {node ? (
-          <>
-            <iframe
-              key={node.key}
-              src={node.feishuLink}
-              title={node.title}
-              style={{
-                width: '100%', height: '100%', border: 'none', display: 'block',
-              }}
-              sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
-            />
-            {/* iframe 被 X-Frame-Options 拦截时的兜底提示（叠加在最上层） */}
-            <div
-              style={{
-                position: 'absolute', inset: 0,
-                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                color: 'rgba(255,255,255,0.6)', pointerEvents: 'none',
-              }}
-            >
-              <BookOutlined style={{ fontSize: 36, marginBottom: 8, opacity: 0.5 }} />
-              <div style={{ fontSize: 12, opacity: 0.5 }}>
-                若上方区域空白或显示拒绝访问，请点击右上角"在飞书中打开"
-              </div>
-            </div>
-          </>
+          <iframe
+            ref={iframeRef}
+            key={node.key}
+            src={node.feishuLink}
+            title={node.title}
+            onLoad={handleIframeLoad}
+            style={{
+              width: '100%', height: '100%', border: 'none', display: 'block',
+            }}
+            sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-top-navigation allow-modals"
+          />
         ) : (
           <div
             style={{

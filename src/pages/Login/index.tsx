@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button, Input, Form, Card, message } from 'antd';
 import { UserOutlined, LockOutlined, SafetyOutlined } from '@ant-design/icons';
@@ -6,8 +6,16 @@ import { useAuth } from '../../store/AuthContext';
 
 function Login() {
   const [loading, setLoading] = useState(false);
-  const { login } = useAuth();
+  const { login, isAuthenticated } = useAuth();
   const navigate = useNavigate();
+
+  // 关键修复：用 useEffect 监听登录态，state 更新完成后再跳转
+  // 解决"login() 同步触发 navigate 但 setState 异步"导致的反复跳登录 bug
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [isAuthenticated, navigate]);
 
   const handleSubmit = (values: { username: string; password: string }) => {
     setLoading(true);
@@ -15,7 +23,7 @@ function Login() {
     setLoading(false);
     if (result.success) {
       message.success(result.message);
-      navigate('/');
+      // 不再直接 navigate；让 useEffect 在 state 更新后自动跳转
     } else {
       message.error(result.message);
     }
@@ -124,6 +132,13 @@ function Login() {
             </Button>
           </Form.Item>
         </Form>
+
+        <div style={{ marginTop: 16, padding: 10, background: 'rgba(77,159,255,0.05)', border: '1px solid rgba(77,159,255,0.12)', borderRadius: 6, fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>
+          <div style={{ fontWeight: 600, color: 'rgba(77,159,255,0.85)', marginBottom: 4 }}>演示账号</div>
+          <div>管理员：<code style={{ color: '#7cb8ff' }}>admin</code> / <code style={{ color: '#7cb8ff' }}>admin123</code></div>
+          <div>编辑者：<code style={{ color: '#7cb8ff' }}>editor</code> / <code style={{ color: '#7cb8ff' }}>editor123</code></div>
+          <div>阅读者：<code style={{ color: '#7cb8ff' }}>reader</code> / <code style={{ color: '#7cb8ff' }}>reader123</code></div>
+        </div>
       </Card>
     </div>
   );
