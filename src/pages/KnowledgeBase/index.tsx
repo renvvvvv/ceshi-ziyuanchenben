@@ -1,5 +1,5 @@
-import { useState, useMemo, useEffect } from 'react';
-import { Tree, Input, Empty, Spin, Tag, Button, Tooltip, Space } from 'antd';
+import { useState, useMemo, useEffect, useRef } from 'react';
+import { Tree, Input, Empty, Spin, Tag, Button, Tooltip, Space, Alert } from 'antd';
 import type { DataNode } from 'antd/es/tree';
 import {
   SearchOutlined,
@@ -15,6 +15,9 @@ import {
   ThunderboltOutlined,
   ClockCircleOutlined,
   ApartmentOutlined,
+  AppstoreOutlined,
+  ReloadOutlined,
+  ExclamationCircleOutlined,
 } from '@ant-design/icons';
 
 // ============================================================
@@ -334,7 +337,7 @@ function KnowledgeBase() {
         )}
       </div>
 
-      {/* ===== 中间：文档详情卡片区（替代 iframe 嵌入） ===== */}
+      {/* ===== 中间：iframe + 元数据卡片混合模式 ===== */}
       <div
         style={{
           flex: 1,
@@ -348,7 +351,7 @@ function KnowledgeBase() {
           overflow: 'hidden',
         }}
       >
-        <DocumentCardPane node={selectedNode} />
+        <MixedPane node={selectedNode} />
       </div>
 
       {/* ===== 右边：超链接列表 ===== */}
@@ -377,18 +380,81 @@ function KnowledgeBase() {
 }
 
 // ============================================================
-// 中间：文档详情卡片（替代 iframe 嵌入）
+// 中间：混合模式（iframe + 元数据卡片自动降级）
 //
-// 设计原因：浏览器默认禁止第三方 cookie（Safari/FF 全禁，Chrome 即将全禁）
-// iframe 嵌入飞书会导致扫码登录失败（qrPolling API 报"系统繁忙"）
-// 飞书官方建议：使用 window.open() 在新标签打开
+// 策略：
+//  1. 默认 iframe 模式（如果浏览器已登录飞书 → 直接显示内容）
+//  2. 6 秒后仍在登录态 → 自动降级到元数据卡片（提示去主窗口登录）
+//  3. 用户可手动切换模式
 // ============================================================
-function DocumentCardPane({ node }: { node: KBNode | null }) {
+type ViewMode = 'auto' | 'iframe' | 'card';
+
+function MixedPane({ node }: { node: KBNode | null }) {
   const cfg = node ? (TYPE_CONFIG[node.type] || TYPE_CONFIG.docx) : null;
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [iframeState, setIframeState] = useState<'loading' | 'loaded' | 'failed'>('loading');
+  const [mode, setMode] = useState<ViewMode>('auto');
+  const loadTimerRef = useRef<number | null>(null);
+
+  // 切换节点 / 重置为 iframe + 重启超时
+  useEffect(() => {
+    if (!node) return;
+    setIframeState('loading');
+    if (loadTimerRef.current) window.clearTimeout(loadTimerRef.current);
+    // 8 秒后仍未 onLoad → 标记为 failed（可能未登录飞书）
+    loadTimerRef.current = window.setTimeout(() => {
+      setIframeState((s) => (s === 'loading' ? 'failed' : s));
+    }, 8000);
+    return () => {
+      if (loadTimerRef.current) window.clearTimeout(loadTimerRef.current);
+    };
+  }, [node?.key]);
+
+  const handleIframeLoad = () => {
+    if (loadTimerRef.current) window.clearTimeout(loadTimerRef.current);
+    setIframeState('loaded');
+  };
+
+  const handleRefresh = () => {
+    if (!iframeRef.current || !node) return;
+    setIframeState('loading');
+    if (loadTimerRef.current) window.clearTimeout(loadTimerRef.current);
+    loadTimerRef.current = window.setTimeout(() => {
+      setIframeState((s) => (s === 'loading' ? 'failed' : s));
+    }, 8000);
+    iframeRef.current.src = node.feishuLink;
+  };
+
+  const handleSwitchToCard = () => {
+    setMode('card');
+    if (loadTimerRef.current) window.clearTimeout(loadTimerRef.current);
+  };
+
+  const handleSwitchToIframe = () => {
+    setMode('iframe');
+    setIframeState('loading');
+    if (loadTimerRef.current) window.clearTimeout(loadTimerRef.current);
+    loadTimerRef.current = window.setTimeout(() => {
+      setIframeState((s) => (s === 'loading' ? 'failed' : s));
+    }, 8000);
+    if (iframeRef.current && node) {
+      iframeRef.current.src = node.feishuLink;
+    }
+  };
+
+  // 决定实际显示模式
+  // - mode='iframe' 强制 iframe
+  // - mode='card' 强制卡片
+  // - mode='auto'：iframe 加载成功 → iframe；超时失败 → 自动降级到卡片
+  const effectiveMode: 'iframe' | 'card' =
+    mode === 'card' ? 'card'
+    : mode === 'iframe' ? 'iframe'
+    : iframeState === 'failed' ? 'card'
+    : 'iframe';
 
   return (
     <>
-      {/* 顶部条：标题 + 类型 + 外链按钮 */}
+      {/* 顶部条：标题 + 类型 + 外链按钮 + 模式切换 */}
       <div
         style={{
           display: 'flex',
@@ -419,36 +485,111 @@ function DocumentCardPane({ node }: { node: KBNode | null }) {
           }}>
             {node ? node.title : '智航测试部知识库'}
           </div>
-          <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 11, marginTop: 2 }}>
-            {node ? `${cfg?.label || ''} · 飞书知识库` : '从左侧目录选择文档以查看详情'}
+          <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 11, marginTop: 2, display: 'flex', alignItems: 'center', gap: 6 }}>
+            {node ? (
+              <>
+                <span>{cfg?.label || ''}</span>
+                <span>·</span>
+                <span style={{ color: effectiveMode === 'iframe' ? '#4d9fff' : '#52c41a' }}>
+                  {effectiveMode === 'iframe' ? '实时嵌入预览' : '元数据卡片'}
+                </span>
+                {effectiveMode === 'iframe' && iframeState === 'loading' && <span style={{ color: '#4d9fff' }}>· 加载中…</span>}
+                {effectiveMode === 'iframe' && iframeState === 'loaded' && <span style={{ color: '#52c41a' }}>· 已加载</span>}
+                {effectiveMode === 'iframe' && iframeState === 'failed' && <span style={{ color: '#faad14' }}>· 加载超时</span>}
+              </>
+            ) : '从左侧目录选择文档'}
           </div>
         </div>
         {node && (
-          <Button
-            size="small"
-            type="primary"
-            icon={<ExportOutlined />}
-            href={node.feishuLink}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{
-              background: 'linear-gradient(135deg, #4d9fff, #00f0ff)',
-              border: 'none',
-              borderRadius: 6,
-              fontSize: 12,
-            }}
-          >
-            在飞书中打开 ↗
-          </Button>
+          <Space>
+            {effectiveMode === 'iframe' && (
+              <Tooltip title="刷新嵌入">
+                <Button
+                  size="small"
+                  icon={<ReloadOutlined />}
+                  onClick={handleRefresh}
+                  style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.7)' }}
+                />
+              </Tooltip>
+            )}
+            <Tooltip title={effectiveMode === 'iframe' ? '切换到元数据卡片模式' : '切换到实时嵌入模式'}>
+              <Button
+                size="small"
+                icon={effectiveMode === 'iframe' ? <AppstoreOutlined /> : <ThunderboltOutlined />}
+                onClick={effectiveMode === 'iframe' ? handleSwitchToCard : handleSwitchToIframe}
+                style={{
+                  background: effectiveMode === 'iframe' ? 'rgba(255,255,255,0.06)' : 'rgba(77,159,255,0.1)',
+                  border: effectiveMode === 'iframe' ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(77,159,255,0.3)',
+                  color: effectiveMode === 'iframe' ? 'rgba(255,255,255,0.7)' : '#7cb8ff',
+                }}
+              />
+            </Tooltip>
+            <Button
+              size="small"
+              type="primary"
+              icon={<ExportOutlined />}
+              href={node.feishuLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                background: 'linear-gradient(135deg, #4d9fff, #00f0ff)',
+                border: 'none',
+                borderRadius: 6,
+                fontSize: 12,
+              }}
+            >
+              在飞书中打开 ↗
+            </Button>
+          </Space>
         )}
       </div>
 
-      {/* 主体卡片区 */}
-      <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
-        {node ? (
-          <DocumentCard node={node} />
-        ) : (
+      {/* iframe 模式失败时的引导 banner */}
+      {effectiveMode === 'iframe' && iframeState === 'failed' && node && (
+        <Alert
+          banner
+          type="warning"
+          showIcon
+          icon={<ExclamationCircleOutlined />}
+          message={
+            <span>
+              <strong style={{ color: '#faad14' }}>iframe 加载超时（可能未登录飞书）</strong>
+            </span>
+          }
+          description={
+            <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, lineHeight: 1.7, paddingTop: 4 }}>
+              <div>① 在 Safari <strong style={{ color: '#7cb8ff' }}>单独打开新标签</strong> → 访问 <code style={{ color: '#7cb8ff' }}>https://feishu.cn</code></div>
+              <div>② 扫码登录飞书 → 浏览器自动保存 cookie（30 天有效）</div>
+              <div>③ 回到本页，点 <strong style={{ color: '#7cb8ff' }}>刷新按钮</strong>，或点击右上角切换到「卡片」查看文档元数据</div>
+            </div>
+          }
+          style={{
+            background: 'rgba(250,173,20,0.08)',
+            border: '1px solid rgba(250,173,20,0.2)',
+            borderRadius: 0,
+            margin: 0,
+          }}
+        />
+      )}
+
+      {/* 主体 */}
+      <div style={{ flex: 1, position: 'relative', background: '#fff', minHeight: 0, overflow: 'hidden' }}>
+        {!node ? (
           <WelcomeCard />
+        ) : effectiveMode === 'iframe' ? (
+          <iframe
+            ref={iframeRef}
+            key={node.key}
+            src={node.feishuLink}
+            title={node.title}
+            onLoad={handleIframeLoad}
+            style={{ width: '100%', height: '100%', border: 'none', display: 'block' }}
+            sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-top-navigation allow-modals"
+          />
+        ) : (
+          <div style={{ flex: 1, overflowY: 'auto', minHeight: 0, height: '100%' }}>
+            <DocumentCard node={node} />
+          </div>
         )}
       </div>
     </>
