@@ -1,0 +1,1648 @@
+{
+  "mockProjects": [
+    {
+      "id": "1",
+      "name": "南通EA119-V",
+      "city": "江苏",
+      "customer": "阿里",
+      "status": "测试中",
+      "manager": "梅炳荣",
+      "startDate": "2026-06-22",
+      "endDate": "2026-07-01",
+      "plannedDeliveryDate": "2026-07-01",
+      "actualDeliveryDate": "",
+      "itOutput": 0,
+      "plannedManpower": 10,
+      "businessType": "新建测试",
+      "description": "江苏南通EA119-V数据中心新建测试项目",
+      "updatedAt": "2026-06-26"
+    },
+    {
+      "id": "2",
+      "name": "三河铭泰",
+      "city": "廊坊",
+      "customer": "贝壳",
+      "status": "测试中",
+      "manager": "剧志鹏",
+      "startDate": "2026-06-22",
+      "endDate": "2026-07-02",
+      "plannedDeliveryDate": "2026-07-02",
+      "actualDeliveryDate": "",
+      "itOutput": 12,
+      "plannedManpower": 15,
+      "businessType": "新建测试",
+      "description": "廊坊三河铭泰数据中心新建测试项目",
+      "updatedAt": "2026-06-26"
+    },
+    {
+      "id": "3",
+      "name": "广州苹果",
+      "city": "广州",
+      "customer": "苹果",
+      "status": "测试中",
+      "manager": "王志强",
+      "startDate": "2026-06-25",
+      "endDate": "2026-07-01",
+      "plannedDeliveryDate": "2026-07-01",
+      "actualDeliveryDate": "",
+      "itOutput": 5,
+      "plannedManpower": 14,
+      "businessType": "新建测试",
+      "description": "广州广州苹果数据中心新建测试项目",
+      "updatedAt": "2026-06-26"
+    },
+    {
+      "id": "4",
+      "name": "乌兰大三期A2楼",
+      "city": "乌兰察布",
+      "customer": "字节",
+      "status": "未开始",
+      "manager": "剧志鹏",
+      "startDate": "2026-06-30",
+      "endDate": "2026-08-05",
+      "plannedDeliveryDate": "2026-08-05",
+      "actualDeliveryDate": "",
+      "itOutput": 68,
+      "plannedManpower": 45,
+      "businessType": "新建测试",
+      "description": "乌兰察布乌兰大三期A2楼数据中心新建测试项目",
+      "assignedMemberIds": [
+        "1021839",
+        "1021793",
+        "1021334",
+        "1021619"
+      ],
+      "updatedAt": "2026-06-26"
+    },
+    {
+      "id": "5",
+      "name": "乌兰8号楼最后一个包间",
+      "city": "乌兰察布",
+      "customer": "阿里",
+      "status": "未开始",
+      "manager": "刘洋",
+      "startDate": "2026-07-10",
+      "endDate": "2026-07-18",
+      "plannedDeliveryDate": "2026-07-18",
+      "actualDeliveryDate": "",
+      "itOutput": 6,
+      "plannedManpower": 10,
+      "businessType": "新建测试",
+      "description": "乌兰察布乌兰8号楼最后一个包间数据中心新建测试项目",
+      "assignedMemberIds": [
+        "1021844",
+        "1021333"
+      ],
+      "updatedAt": "2026-06-26"
+    },
+    {
+      "id": "6",
+      "name": "乌兰大二期7号楼-第一批",
+      "city": "乌兰察布",
+      "customer": "字节",
+      "status": "未开始",
+      "manager": "王志强",
+      "startDate": "2026-08-03",
+      "endDate": "2026-08-10",
+      "plannedDeliveryDate": "2026-08-10",
+      "actualDeliveryDate": "",
+      "itOutput": 6.2,
+      "plannedManpower": 29,
+      "businessType": "新建测试",
+      "description": "乌兰察布乌兰大二期7号楼-第一批数据中心新建测试项目",
+      "assignedMemberIds": [
+        "1021363",
+        "1021352"
+      ],
+      "updatedAt": "2026-06-26"
+    },
+    {
+      "id": "7",
+      "name": "乌兰大二期7号楼-第二批",
+      "city": "乌兰察布",
+      "customer": "字节",
+      "status": "未开始",
+      "manager": "王志强",
+      "startDate": "2026-08-08",
+      "endDate": "2026-08-30",
+      "plannedDeliveryDate": "2026-08-30",
+      "actualDeliveryDate": "",
+      "itOutput": 15,
+      "plannedManpower": 34,
+      "businessType": "新建测试",
+      "description": "乌兰察布乌兰大二期7号楼-第二批数据中心新建测试项目",
+      "assignedMemberIds": [
+        "1021351",
+        "1021362",
+        "1021357",
+        "1021807"
+      ],
+      "updatedAt": "2026-06-26"
+    },
+    {
+      "id": "8",
+      "name": "乌兰大三期A3楼-第一批",
+      "city": "乌兰察布",
+      "customer": "字节",
+      "status": "未开始",
+      "manager": "剧志鹏",
+      "startDate": "2026-08-10",
+      "endDate": "2026-08-20",
+      "plannedDeliveryDate": "2026-08-20",
+      "actualDeliveryDate": "",
+      "itOutput": 6,
+      "plannedManpower": 0,
+      "businessType": "新建测试",
+      "description": "乌兰察布乌兰大三期A3楼-第一批数据中心新建测试项目",
+      "updatedAt": "2026-06-26"
+    },
+    {
+      "id": "9",
+      "name": "苏州算力公司",
+      "city": "江苏",
+      "customer": "字节",
+      "status": "未开始",
+      "manager": "刘洋",
+      "startDate": "2026-08-30",
+      "endDate": "2026-09-16",
+      "plannedDeliveryDate": "2026-09-16",
+      "actualDeliveryDate": "",
+      "itOutput": 12,
+      "plannedManpower": 0,
+      "businessType": "新建测试",
+      "description": "江苏苏州算力公司数据中心新建测试项目",
+      "updatedAt": "2026-06-26"
+    },
+    {
+      "id": "10",
+      "name": "乌兰大三期A3楼-第二批",
+      "city": "乌兰察布",
+      "customer": "字节",
+      "status": "未开始",
+      "manager": "剧志鹏",
+      "startDate": "2026-09-10",
+      "endDate": "2026-10-10",
+      "plannedDeliveryDate": "2026-10-10",
+      "actualDeliveryDate": "",
+      "itOutput": 63,
+      "plannedManpower": 0,
+      "businessType": "新建测试",
+      "description": "乌兰察布乌兰大三期A3楼-第二批数据中心新建测试项目",
+      "updatedAt": "2026-06-26"
+    },
+    {
+      "id": "11",
+      "name": "乌兰大二期7号楼-第三批",
+      "city": "乌兰察布",
+      "customer": "字节",
+      "status": "未开始",
+      "manager": "王志强",
+      "startDate": "2026-09-22",
+      "endDate": "2026-10-17",
+      "plannedDeliveryDate": "2026-10-17",
+      "actualDeliveryDate": "",
+      "itOutput": 24.5,
+      "plannedManpower": 0,
+      "businessType": "新建测试",
+      "description": "乌兰察布乌兰大二期7号楼-第三批数据中心新建测试项目",
+      "updatedAt": "2026-06-26"
+    },
+    {
+      "id": "12",
+      "name": "乌兰察布自建基地11号楼（PCG）--1/2南区",
+      "city": "乌兰察布",
+      "customer": "字节",
+      "status": "未开始",
+      "manager": "剧志鹏",
+      "startDate": "2026-11-21",
+      "endDate": "2026-12-20",
+      "plannedDeliveryDate": "2026-12-20",
+      "actualDeliveryDate": "",
+      "itOutput": 32.5,
+      "plannedManpower": 0,
+      "businessType": "新建测试",
+      "description": "乌兰察布乌兰察布自建基地11号楼（PCG）--1/2南区数据中心新建测试项目",
+      "updatedAt": "2026-06-26"
+    },
+    {
+      "id": "13",
+      "name": "乌兰察布自建基地11号楼（PCG）--1/2北区",
+      "city": "乌兰察布",
+      "customer": "字节",
+      "status": "未开始",
+      "manager": "剧志鹏",
+      "startDate": "2026-11-21",
+      "endDate": "2026-12-20",
+      "plannedDeliveryDate": "2026-12-20",
+      "actualDeliveryDate": "",
+      "itOutput": 32.5,
+      "plannedManpower": 0,
+      "businessType": "新建测试",
+      "description": "乌兰察布乌兰察布自建基地11号楼（PCG）--1/2北区数据中心新建测试项目",
+      "updatedAt": "2026-06-26"
+    }
+  ],
+  "mockHistoryProjects": [
+    {
+      "id": "h001",
+      "name": "乌兰D2",
+      "city": "乌兰察布",
+      "customer": "字节",
+      "status": "已完成",
+      "manager": "梅炳荣",
+      "startDate": "2024-12-31",
+      "endDate": "2025-01-23",
+      "plannedDeliveryDate": "2025-01-23",
+      "actualDeliveryDate": "2025-01-23",
+      "itOutput": 38.9,
+      "plannedManpower": 130,
+      "businessType": "新建测试",
+      "description": "乌兰察布乌兰D2数据中心新建测试项目",
+      "updatedAt": "2025-01-23 12:00:00"
+    },
+    {
+      "id": "h002",
+      "name": "太仓D16",
+      "city": "江苏",
+      "customer": "字节",
+      "status": "已完成",
+      "manager": "陈林",
+      "startDate": "2025-01-20",
+      "endDate": "2025-02-10",
+      "plannedDeliveryDate": "2025-02-10",
+      "actualDeliveryDate": "2025-02-10",
+      "itOutput": 33,
+      "plannedManpower": 87,
+      "businessType": "新建测试",
+      "description": "江苏太仓D16数据中心新建测试项目",
+      "updatedAt": "2025-02-10 12:00:00"
+    },
+    {
+      "id": "h003",
+      "name": "乌兰D5",
+      "city": "乌兰察布",
+      "customer": "字节",
+      "status": "已完成",
+      "manager": "孙飞",
+      "startDate": "2025-03-30",
+      "endDate": "2025-04-30",
+      "plannedDeliveryDate": "2025-04-30",
+      "actualDeliveryDate": "2025-04-30",
+      "itOutput": 30,
+      "plannedManpower": 58,
+      "businessType": "新建测试",
+      "description": "乌兰察布乌兰D5数据中心新建测试项目",
+      "updatedAt": "2025-04-30 12:00:00"
+    },
+    {
+      "id": "h004",
+      "name": "上海枫泾-C",
+      "city": "上海",
+      "customer": "阿里",
+      "status": "已完成",
+      "manager": "洪鹏贵",
+      "startDate": "2025-04-01",
+      "endDate": "2025-04-11",
+      "plannedDeliveryDate": "2025-04-11",
+      "actualDeliveryDate": "2025-04-11",
+      "itOutput": 16,
+      "plannedManpower": 5,
+      "businessType": "新建测试",
+      "description": "上海上海枫泾-C数据中心新建测试项目",
+      "updatedAt": "2025-04-11 12:00:00"
+    },
+    {
+      "id": "h005",
+      "name": "乌兰D3-3期",
+      "city": "乌兰察布",
+      "customer": "幻方",
+      "status": "已完成",
+      "manager": "李尚坤",
+      "startDate": "2025-05-15",
+      "endDate": "2025-05-30",
+      "plannedDeliveryDate": "2025-05-30",
+      "actualDeliveryDate": "2025-05-30",
+      "itOutput": 10,
+      "plannedManpower": 28,
+      "businessType": "新建测试",
+      "description": "乌兰察布乌兰D3-3期数据中心新建测试项目",
+      "updatedAt": "2025-05-30 12:00:00"
+    },
+    {
+      "id": "h006",
+      "name": "杭钢D楼",
+      "city": "杭州",
+      "customer": "阿里",
+      "status": "已完成",
+      "manager": "梅炳荣",
+      "startDate": "2025-05-25",
+      "endDate": "2025-06-20",
+      "plannedDeliveryDate": "2025-06-20",
+      "actualDeliveryDate": "2025-06-20",
+      "itOutput": 14.1,
+      "plannedManpower": 32,
+      "businessType": "新建测试",
+      "description": "杭州杭钢D楼数据中心新建测试项目",
+      "updatedAt": "2025-06-20 12:00:00"
+    },
+    {
+      "id": "h007",
+      "name": "乌兰D4",
+      "city": "乌兰察布",
+      "customer": "字节",
+      "status": "已完成",
+      "manager": "李尚坤",
+      "startDate": "2025-05-29",
+      "endDate": "2025-06-26",
+      "plannedDeliveryDate": "2025-06-26",
+      "actualDeliveryDate": "2025-06-26",
+      "itOutput": 37.3,
+      "plannedManpower": 55,
+      "businessType": "新建测试",
+      "description": "乌兰察布乌兰D4数据中心新建测试项目",
+      "updatedAt": "2025-06-26 12:00:00"
+    },
+    {
+      "id": "h008",
+      "name": "乌兰D6-A",
+      "city": "乌兰察布",
+      "customer": "字节",
+      "status": "已完成",
+      "manager": "孙飞",
+      "startDate": "2025-06-30",
+      "endDate": "2025-07-20",
+      "plannedDeliveryDate": "2025-07-20",
+      "actualDeliveryDate": "2025-07-20",
+      "itOutput": 27.5,
+      "plannedManpower": 52,
+      "businessType": "新建测试",
+      "description": "乌兰察布乌兰D6-A数据中心新建测试项目",
+      "updatedAt": "2025-07-20 12:00:00"
+    },
+    {
+      "id": "h009",
+      "name": "大兴星光",
+      "city": "北京",
+      "customer": "小米",
+      "status": "已完成",
+      "manager": "李尚坤",
+      "startDate": "2025-07-08",
+      "endDate": "2025-07-12",
+      "plannedDeliveryDate": "2025-07-12",
+      "actualDeliveryDate": "2025-07-12",
+      "itOutput": 3.2,
+      "plannedManpower": 15,
+      "businessType": "扩容测试",
+      "description": "北京大兴星光数据中心扩容测试项目",
+      "updatedAt": "2025-07-12 12:00:00"
+    },
+    {
+      "id": "h010",
+      "name": "安次D1",
+      "city": "廊坊",
+      "customer": "常高新",
+      "status": "已完成",
+      "manager": "刘洋",
+      "startDate": "2025-07-18",
+      "endDate": "2025-08-10",
+      "plannedDeliveryDate": "2025-08-10",
+      "actualDeliveryDate": "2025-08-10",
+      "itOutput": 30,
+      "plannedManpower": 53,
+      "businessType": "新建测试",
+      "description": "廊坊安次D1数据中心新建测试项目",
+      "updatedAt": "2025-08-10 12:00:00"
+    },
+    {
+      "id": "h011",
+      "name": "安次D2",
+      "city": "廊坊",
+      "customer": "常高新",
+      "status": "已完成",
+      "manager": "梅炳荣",
+      "startDate": "2025-07-26",
+      "endDate": "2025-08-14",
+      "plannedDeliveryDate": "2025-08-14",
+      "actualDeliveryDate": "2025-08-14",
+      "itOutput": 32,
+      "plannedManpower": 53,
+      "businessType": "新建测试",
+      "description": "廊坊安次D2数据中心新建测试项目",
+      "updatedAt": "2025-08-14 12:00:00"
+    },
+    {
+      "id": "h012",
+      "name": "乌兰D6-B",
+      "city": "乌兰察布",
+      "customer": "字节",
+      "status": "已完成",
+      "manager": "孙飞",
+      "startDate": "2025-08-04",
+      "endDate": "2025-08-25",
+      "plannedDeliveryDate": "2025-08-25",
+      "actualDeliveryDate": "2025-08-25",
+      "itOutput": 27.5,
+      "plannedManpower": 50,
+      "businessType": "新建测试",
+      "description": "乌兰察布乌兰D6-B数据中心新建测试项目",
+      "updatedAt": "2025-08-25 12:00:00"
+    },
+    {
+      "id": "h013",
+      "name": "大兴星光CQC认证",
+      "city": "北京",
+      "customer": "小米",
+      "status": "已完成",
+      "manager": "李尚坤",
+      "startDate": "2025-08-20",
+      "endDate": "2025-08-30",
+      "plannedDeliveryDate": "2025-08-30",
+      "actualDeliveryDate": "2025-08-30",
+      "itOutput": 3.2,
+      "plannedManpower": 6,
+      "businessType": "扩容测试",
+      "description": "北京大兴星光CQC认证数据中心扩容测试项目",
+      "updatedAt": "2025-08-30 12:00:00"
+    },
+    {
+      "id": "h014",
+      "name": "乌兰D8",
+      "city": "乌兰察布",
+      "customer": "阿里",
+      "status": "已完成",
+      "manager": "刘洋",
+      "startDate": "2025-09-03",
+      "endDate": "2025-10-08",
+      "plannedDeliveryDate": "2025-10-08",
+      "actualDeliveryDate": "2025-10-08",
+      "itOutput": 25,
+      "plannedManpower": 48,
+      "businessType": "新建测试",
+      "description": "乌兰察布乌兰D8数据中心新建测试项目",
+      "updatedAt": "2025-10-08 12:00:00"
+    },
+    {
+      "id": "h015",
+      "name": "安次16KW增项",
+      "city": "廊坊",
+      "customer": "字节",
+      "status": "已完成",
+      "manager": "刘洋",
+      "startDate": "2025-10-09",
+      "endDate": "2025-10-14",
+      "plannedDeliveryDate": "2025-10-14",
+      "actualDeliveryDate": "2025-10-14",
+      "itOutput": 0,
+      "plannedManpower": 12,
+      "businessType": "扩容测试",
+      "description": "廊坊安次16KW增项数据中心扩容测试项目",
+      "updatedAt": "2025-10-14 12:00:00"
+    },
+    {
+      "id": "h016",
+      "name": "乌兰D3-4期",
+      "city": "乌兰察布",
+      "customer": "幻方",
+      "status": "已完成",
+      "manager": "刘洋",
+      "startDate": "2025-10-20",
+      "endDate": "2025-11-01",
+      "plannedDeliveryDate": "2025-11-01",
+      "actualDeliveryDate": "2025-11-01",
+      "itOutput": 8,
+      "plannedManpower": 12,
+      "businessType": "新建测试",
+      "description": "乌兰察布乌兰D3-4期数据中心新建测试项目",
+      "updatedAt": "2025-11-01 12:00:00"
+    },
+    {
+      "id": "h017",
+      "name": "固安项目一期-风冷",
+      "city": "廊坊",
+      "customer": "京东",
+      "status": "已完成",
+      "manager": "宋帅奇",
+      "startDate": "2025-11-11",
+      "endDate": "2025-11-19",
+      "plannedDeliveryDate": "2025-11-19",
+      "actualDeliveryDate": "2025-11-19",
+      "itOutput": 6.3,
+      "plannedManpower": 20,
+      "businessType": "新建测试",
+      "description": "廊坊固安项目一期-风冷数据中心新建测试项目",
+      "updatedAt": "2025-11-19 12:00:00"
+    },
+    {
+      "id": "h018",
+      "name": "临平EA200-D",
+      "city": "杭州",
+      "customer": "阿里",
+      "status": "已完成",
+      "manager": "李尚坤",
+      "startDate": "2025-11-26",
+      "endDate": "2025-12-30",
+      "plannedDeliveryDate": "2025-12-30",
+      "actualDeliveryDate": "2025-12-30",
+      "itOutput": 19,
+      "plannedManpower": 27,
+      "businessType": "新建测试",
+      "description": "杭州临平EA200-D数据中心新建测试项目",
+      "updatedAt": "2025-12-30 12:00:00"
+    },
+    {
+      "id": "h019",
+      "name": "固安项目二期-液冷",
+      "city": "廊坊",
+      "customer": "京东",
+      "status": "已完成",
+      "manager": "宋帅奇",
+      "startDate": "2025-12-01",
+      "endDate": "2025-12-09",
+      "plannedDeliveryDate": "2025-12-09",
+      "actualDeliveryDate": "2025-12-09",
+      "itOutput": 6.8,
+      "plannedManpower": 20,
+      "businessType": "新建测试",
+      "description": "廊坊固安项目二期-液冷数据中心新建测试项目",
+      "updatedAt": "2025-12-09 12:00:00"
+    },
+    {
+      "id": "h020",
+      "name": "南通EA119-O",
+      "city": "江苏",
+      "customer": "阿里",
+      "status": "已完成",
+      "manager": "梅炳荣",
+      "startDate": "2026-02-23",
+      "endDate": "2026-03-30",
+      "plannedDeliveryDate": "2026-03-30",
+      "actualDeliveryDate": "2026-03-30",
+      "itOutput": 19,
+      "plannedManpower": 27,
+      "businessType": "新建测试",
+      "description": "江苏南通EA119-O数据中心新建测试项目",
+      "updatedAt": "2026-03-30 12:00:00"
+    },
+    {
+      "id": "h021",
+      "name": "太仓D17-第一批",
+      "city": "江苏",
+      "customer": "字节",
+      "status": "已完成",
+      "manager": "宋帅奇",
+      "startDate": "2026-02-28",
+      "endDate": "2026-03-30",
+      "plannedDeliveryDate": "2026-03-30",
+      "actualDeliveryDate": "2026-03-30",
+      "itOutput": 30,
+      "plannedManpower": 15,
+      "businessType": "新建测试",
+      "description": "江苏太仓D17-第一批数据中心新建测试项目",
+      "updatedAt": "2026-03-30 12:00:00"
+    },
+    {
+      "id": "h022",
+      "name": "乌兰互联1号基地9号楼南区",
+      "city": "乌兰察布",
+      "customer": "阿里",
+      "status": "已完成",
+      "manager": "剧志鹏",
+      "startDate": "2026-04-20",
+      "endDate": "2026-05-15",
+      "plannedDeliveryDate": "2026-05-15",
+      "actualDeliveryDate": "2026-05-15",
+      "itOutput": 30,
+      "plannedManpower": 46,
+      "businessType": "新建测试",
+      "description": "乌兰察布乌兰互联1号基地9号楼南区数据中心新建测试项目",
+      "updatedAt": "2026-05-15 12:00:00"
+    },
+    {
+      "id": "h023",
+      "name": "乌兰大一期3号楼5期",
+      "city": "乌兰察布",
+      "customer": "幻方",
+      "status": "已完成",
+      "manager": "刘洋",
+      "startDate": "2026-05-11",
+      "endDate": "2026-05-18",
+      "plannedDeliveryDate": "2026-05-18",
+      "actualDeliveryDate": "2026-05-18",
+      "itOutput": 9.5,
+      "plannedManpower": 12,
+      "businessType": "新建测试",
+      "description": "乌兰察布乌兰大一期3号楼5期数据中心新建测试项目",
+      "updatedAt": "2026-05-18 12:00:00"
+    },
+    {
+      "id": "h024",
+      "name": "南通EA119-U",
+      "city": "江苏",
+      "customer": "阿里",
+      "status": "已完成",
+      "manager": "梅炳荣",
+      "startDate": "2026-05-16",
+      "endDate": "2026-05-30",
+      "plannedDeliveryDate": "2026-05-30",
+      "actualDeliveryDate": "2026-05-30",
+      "itOutput": 0,
+      "plannedManpower": 10,
+      "businessType": "新建测试",
+      "description": "江苏南通EA119-U数据中心新建测试项目",
+      "updatedAt": "2026-05-30 12:00:00"
+    },
+    {
+      "id": "h025",
+      "name": "南通综保B江海EA119-T",
+      "city": "江苏",
+      "customer": "阿里",
+      "status": "已完成",
+      "manager": "梅炳荣",
+      "startDate": "2026-05-16",
+      "endDate": "2026-05-30",
+      "plannedDeliveryDate": "2026-05-30",
+      "actualDeliveryDate": "2026-05-30",
+      "itOutput": 0,
+      "plannedManpower": 10,
+      "businessType": "新建测试",
+      "description": "江苏南通综保B江海EA119-T数据中心新建测试项目",
+      "updatedAt": "2026-05-30 12:00:00"
+    },
+    {
+      "id": "h026",
+      "name": "乌兰大三期A1楼",
+      "city": "乌兰察布",
+      "customer": "小米",
+      "status": "已完成",
+      "manager": "剧志鹏",
+      "startDate": "2026-05-18",
+      "endDate": "2026-06-18",
+      "plannedDeliveryDate": "2026-06-18",
+      "actualDeliveryDate": "2026-06-18",
+      "itOutput": 29,
+      "plannedManpower": 45,
+      "businessType": "新建测试",
+      "description": "乌兰察布乌兰大三期A1楼数据中心新建测试项目",
+      "updatedAt": "2026-06-18 12:00:00"
+    },
+    {
+      "id": "h027",
+      "name": "太仓D17-第二批",
+      "city": "江苏",
+      "customer": "字节",
+      "status": "已完成",
+      "manager": "宋帅奇",
+      "startDate": "2026-06-10",
+      "endDate": "2026-06-25",
+      "plannedDeliveryDate": "2026-06-25",
+      "actualDeliveryDate": "2026-06-25",
+      "itOutput": 12,
+      "plannedManpower": 28,
+      "businessType": "新建测试",
+      "description": "江苏太仓D17-第二批数据中心新建测试项目",
+      "updatedAt": "2026-06-25 12:00:00"
+    }
+  ],
+  "mockTeamMembers": [
+    {
+      "id": "1021839",
+      "name": "黄子光",
+      "employeeId": "1021839",
+      "status": "测试中",
+      "skills": [
+        "暖通",
+        "低压特种作业操作证书",
+        "制冷特种作业操作证书"
+      ],
+      "currentProjects": [
+        "江苏太仓 D17A 段"
+      ],
+      "projects": [
+        {
+          "projectName": "江苏太仓 D17A 段",
+          "startDate": "2026-06-15",
+          "endDate": "2026-07-15"
+        }
+      ],
+      "email": "",
+      "phone": ""
+    },
+    {
+      "id": "1021793",
+      "name": "富嘉杰",
+      "employeeId": "1021793",
+      "status": "测试中",
+      "skills": [
+        "消防",
+        "低压特种作业操作证书",
+        "二级建造师证书"
+      ],
+      "currentProjects": [
+        "乌兰三期XM A1"
+      ],
+      "projects": [
+        {
+          "projectName": "乌兰三期XM A1",
+          "startDate": "2026-06-15",
+          "endDate": "2026-07-15"
+        }
+      ],
+      "email": "",
+      "phone": ""
+    },
+    {
+      "id": "1021334",
+      "name": "刘洋",
+      "employeeId": "1021334",
+      "status": "测试中",
+      "skills": [
+        "电气",
+        "低压特种作业操作证书"
+      ],
+      "currentProjects": [
+        "廊坊三河铭泰改造"
+      ],
+      "projects": [
+        {
+          "projectName": "廊坊三河铭泰改造",
+          "startDate": "2026-06-15",
+          "endDate": "2026-07-15"
+        }
+      ],
+      "email": "",
+      "phone": ""
+    },
+    {
+      "id": "1021619",
+      "name": "王东东",
+      "employeeId": "1021619",
+      "status": "测试中",
+      "skills": [
+        "暖通",
+        "高压特种作业操作证书",
+        "低压特种作业操作证书",
+        "制冷特种作业操作证书"
+      ],
+      "currentProjects": [
+        "广州苹果"
+      ],
+      "projects": [
+        {
+          "projectName": "广州苹果",
+          "startDate": "2026-06-15",
+          "endDate": "2026-07-15"
+        }
+      ],
+      "email": "",
+      "phone": ""
+    },
+    {
+      "id": "1021844",
+      "name": "马志伟",
+      "employeeId": "1021844",
+      "status": "测试中",
+      "skills": [
+        "消防",
+        "低压特种作业操作证书"
+      ],
+      "currentProjects": [
+        "乌兰三期字节A2"
+      ],
+      "projects": [
+        {
+          "projectName": "乌兰三期字节A2",
+          "startDate": "2026-06-15",
+          "endDate": "2026-07-15"
+        }
+      ],
+      "email": "",
+      "phone": ""
+    },
+    {
+      "id": "1021333",
+      "name": "张旭铭",
+      "employeeId": "1021333",
+      "status": "测试中",
+      "skills": [
+        "电气",
+        "高压特种作业操作证书"
+      ],
+      "currentProjects": [
+        "江苏太仓 D17A 段"
+      ],
+      "projects": [
+        {
+          "projectName": "江苏太仓 D17A 段",
+          "startDate": "2026-06-15",
+          "endDate": "2026-07-15"
+        }
+      ],
+      "email": "",
+      "phone": ""
+    },
+    {
+      "id": "1021363",
+      "name": "张旭东",
+      "employeeId": "1021363",
+      "status": "测试中",
+      "skills": [
+        "电气",
+        "高压特种作业操作证书"
+      ],
+      "currentProjects": [
+        "乌兰三期XM A1"
+      ],
+      "projects": [
+        {
+          "projectName": "乌兰三期XM A1",
+          "startDate": "2026-06-15",
+          "endDate": "2026-07-15"
+        }
+      ],
+      "email": "",
+      "phone": ""
+    },
+    {
+      "id": "1021352",
+      "name": "卫嘉俊",
+      "employeeId": "1021352",
+      "status": "测试中",
+      "skills": [
+        "弱电",
+        "低压特种作业操作证书",
+        "高压特种作业操作证书"
+      ],
+      "currentProjects": [
+        "廊坊三河铭泰改造"
+      ],
+      "projects": [
+        {
+          "projectName": "廊坊三河铭泰改造",
+          "startDate": "2026-06-15",
+          "endDate": "2026-07-15"
+        }
+      ],
+      "email": "",
+      "phone": ""
+    },
+    {
+      "id": "1021351",
+      "name": "陆旭金",
+      "employeeId": "1021351",
+      "status": "测试中",
+      "skills": [
+        "暖通",
+        "低压特种作业操作证书",
+        "高压特种作业操作证书",
+        "制冷特种作业操作证书"
+      ],
+      "currentProjects": [
+        "广州苹果"
+      ],
+      "projects": [
+        {
+          "projectName": "广州苹果",
+          "startDate": "2026-06-15",
+          "endDate": "2026-07-15"
+        }
+      ],
+      "email": "",
+      "phone": ""
+    },
+    {
+      "id": "1021362",
+      "name": "江轲",
+      "employeeId": "1021362",
+      "status": "测试中",
+      "skills": [
+        "暖通",
+        "制冷特种作业操作证书"
+      ],
+      "currentProjects": [
+        "乌兰三期字节A2"
+      ],
+      "projects": [
+        {
+          "projectName": "乌兰三期字节A2",
+          "startDate": "2026-06-15",
+          "endDate": "2026-07-15"
+        }
+      ],
+      "email": "",
+      "phone": ""
+    },
+    {
+      "id": "1021357",
+      "name": "张恩宇",
+      "employeeId": "1021357",
+      "status": "测试中",
+      "skills": [
+        "电气",
+        "低压特种作业操作证书",
+        "高压特种作业操作证书"
+      ],
+      "currentProjects": [
+        "江苏太仓 D17A 段"
+      ],
+      "projects": [
+        {
+          "projectName": "江苏太仓 D17A 段",
+          "startDate": "2026-06-15",
+          "endDate": "2026-07-15"
+        }
+      ],
+      "email": "",
+      "phone": ""
+    },
+    {
+      "id": "1021807",
+      "name": "张志东",
+      "employeeId": "1021807",
+      "status": "测试中",
+      "skills": [
+        "电气",
+        "低压特种作业操作证书",
+        "高压特种作业操作证书"
+      ],
+      "currentProjects": [
+        "乌兰三期XM A1"
+      ],
+      "projects": [
+        {
+          "projectName": "乌兰三期XM A1",
+          "startDate": "2026-06-15",
+          "endDate": "2026-07-15"
+        }
+      ],
+      "email": "",
+      "phone": ""
+    },
+    {
+      "id": "1020382",
+      "name": "李佳伟",
+      "employeeId": "1020382",
+      "status": "测试中",
+      "skills": [
+        "电气",
+        "低压特种作业操作证书"
+      ],
+      "currentProjects": [
+        "廊坊三河铭泰改造"
+      ],
+      "projects": [
+        {
+          "projectName": "廊坊三河铭泰改造",
+          "startDate": "2026-06-15",
+          "endDate": "2026-07-15"
+        }
+      ],
+      "email": "",
+      "phone": ""
+    },
+    {
+      "id": "1021356",
+      "name": "孔庆宇",
+      "employeeId": "1021356",
+      "status": "测试中",
+      "skills": [
+        "弱电",
+        "低压特种作业操作证书"
+      ],
+      "currentProjects": [
+        "广州苹果"
+      ],
+      "projects": [
+        {
+          "projectName": "广州苹果",
+          "startDate": "2026-06-15",
+          "endDate": "2026-07-15"
+        }
+      ],
+      "email": "",
+      "phone": ""
+    },
+    {
+      "id": "1021327",
+      "name": "宋帅奇",
+      "employeeId": "1021327",
+      "status": "测试中",
+      "skills": [
+        "暖通",
+        "高压特种作业操作证书",
+        "制冷特种作业操作证书"
+      ],
+      "currentProjects": [
+        "乌兰三期字节A2"
+      ],
+      "projects": [
+        {
+          "projectName": "乌兰三期字节A2",
+          "startDate": "2026-06-15",
+          "endDate": "2026-07-15"
+        }
+      ],
+      "email": "",
+      "phone": ""
+    },
+    {
+      "id": "1021332",
+      "name": "王志强",
+      "employeeId": "1021332",
+      "status": "测试中",
+      "skills": [
+        "电气",
+        "高压特种作业操作证书",
+        "低压特种作业操作证书"
+      ],
+      "currentProjects": [
+        "江苏太仓 D17A 段"
+      ],
+      "projects": [
+        {
+          "projectName": "江苏太仓 D17A 段",
+          "startDate": "2026-06-15",
+          "endDate": "2026-07-15"
+        }
+      ],
+      "email": "",
+      "phone": ""
+    },
+    {
+      "id": "116529",
+      "name": "剧志鹏",
+      "employeeId": "116529",
+      "status": "测试中",
+      "skills": [
+        "管理",
+        "低压特种作业操作证书",
+        "高压特种作业操作证书",
+        "制冷特种作业操作证书"
+      ],
+      "currentProjects": [
+        "乌兰三期XM A1"
+      ],
+      "projects": [
+        {
+          "projectName": "乌兰三期XM A1",
+          "startDate": "2026-06-15",
+          "endDate": "2026-07-15"
+        }
+      ],
+      "email": "",
+      "phone": ""
+    },
+    {
+      "id": "1021461",
+      "name": "林玙璠",
+      "employeeId": "1021461",
+      "status": "空闲",
+      "skills": [
+        "电气",
+        "低压特种作业操作证书",
+        "高压特种作业操作证书",
+        "职业技能等级电工中级证书",
+        "职业技能等级电工高级证书"
+      ],
+      "currentProjects": [],
+      "email": "",
+      "phone": ""
+    },
+    {
+      "id": "1021449",
+      "name": "王文浩",
+      "employeeId": "1021449",
+      "status": "空闲",
+      "skills": [
+        "电气",
+        "低压特种作业操作证书",
+        "高压特种作业操作证书",
+        "职业技能等级电工高级证书",
+        "职业技能等级电工中级证书"
+      ],
+      "currentProjects": [],
+      "email": "",
+      "phone": ""
+    },
+    {
+      "id": "1021454",
+      "name": "姜浩",
+      "employeeId": "1021454",
+      "status": "空闲",
+      "skills": [
+        "电气",
+        "低压特种作业操作证书",
+        "高压特种作业操作证书",
+        "职业技能等级电工高级证书",
+        "职业技能等级电工中级证书"
+      ],
+      "currentProjects": [],
+      "email": "",
+      "phone": ""
+    },
+    {
+      "id": "1021583",
+      "name": "高旌硕",
+      "employeeId": "1021583",
+      "status": "空闲",
+      "skills": [
+        "电气",
+        "低压特种作业操作证书"
+      ],
+      "currentProjects": [],
+      "email": "",
+      "phone": ""
+    },
+    {
+      "id": "1021578",
+      "name": "田慧宇",
+      "employeeId": "1021578",
+      "status": "空闲",
+      "skills": [
+        "消防",
+        "低压特种作业操作证书",
+        "职业技能等级电工高级证书"
+      ],
+      "currentProjects": [],
+      "email": "",
+      "phone": ""
+    },
+    {
+      "id": "1021580",
+      "name": "孙卓然",
+      "employeeId": "1021580",
+      "status": "空闲",
+      "skills": [
+        "弱电",
+        "低压特种作业操作证书",
+        "职业技能等级电工高级证书"
+      ],
+      "currentProjects": [],
+      "email": "",
+      "phone": ""
+    },
+    {
+      "id": "1021577",
+      "name": "王振轩",
+      "employeeId": "1021577",
+      "status": "空闲",
+      "skills": [
+        "电气",
+        "职业技能等级电工高级证书",
+        "低压特种作业操作证书"
+      ],
+      "currentProjects": [],
+      "email": "",
+      "phone": ""
+    },
+    {
+      "id": "1021458",
+      "name": "曹誉川",
+      "employeeId": "1021458",
+      "status": "空闲",
+      "skills": [
+        "电气",
+        "低压特种作业操作证书",
+        "职业技能等级电工中级证书",
+        "职业技能等级电工高级证书"
+      ],
+      "currentProjects": [],
+      "email": "",
+      "phone": ""
+    },
+    {
+      "id": "1021576",
+      "name": "何建坤",
+      "employeeId": "1021576",
+      "status": "空闲",
+      "skills": [
+        "暖通",
+        "低压特种作业操作证书",
+        "职业技能等级电工高级证书"
+      ],
+      "currentProjects": [],
+      "email": "",
+      "phone": ""
+    },
+    {
+      "id": "1021581",
+      "name": "李文成",
+      "employeeId": "1021581",
+      "status": "空闲",
+      "skills": [
+        "电气",
+        "低压特种作业操作证书",
+        "职业技能等级电工高级证书"
+      ],
+      "currentProjects": [],
+      "email": "",
+      "phone": ""
+    },
+    {
+      "id": "1021445",
+      "name": "何俊奥",
+      "employeeId": "1021445",
+      "status": "空闲",
+      "skills": [
+        "暖通",
+        "低压特种作业操作证书",
+        "高压特种作业操作证书",
+        "职业技能等级电工高级证书",
+        "职业技能等级电工中级证书"
+      ],
+      "currentProjects": [],
+      "email": "",
+      "phone": ""
+    },
+    {
+      "id": "1021453",
+      "name": "王雨轩",
+      "employeeId": "1021453",
+      "status": "空闲",
+      "skills": [
+        "暖通",
+        "低压特种作业操作证书",
+        "职业技能等级电工高级证书",
+        "职业技能等级电工中级证书"
+      ],
+      "currentProjects": [],
+      "email": "",
+      "phone": ""
+    },
+    {
+      "id": "1021579",
+      "name": "高宇鹏",
+      "employeeId": "1021579",
+      "status": "空闲",
+      "skills": [
+        "暖通",
+        "低压特种作业操作证书",
+        "职业技能等级电工高级证书"
+      ],
+      "currentProjects": [],
+      "email": "",
+      "phone": ""
+    },
+    {
+      "id": "1021444",
+      "name": "余俊龙",
+      "employeeId": "1021444",
+      "status": "空闲",
+      "skills": [
+        "弱电",
+        "职业技能等级电工中级证书",
+        "职业技能等级电工高级证书",
+        "高压特种作业操作证书",
+        "低压特种作业操作证书"
+      ],
+      "currentProjects": [],
+      "email": "",
+      "phone": ""
+    },
+    {
+      "id": "1021455",
+      "name": "李佳",
+      "employeeId": "1021455",
+      "status": "空闲",
+      "skills": [
+        "电气",
+        "低压特种作业操作证书",
+        "高压特种作业操作证书",
+        "职业技能等级电工中级证书",
+        "职业技能等级电工高级证书"
+      ],
+      "currentProjects": [],
+      "email": "",
+      "phone": ""
+    },
+    {
+      "id": "1021462",
+      "name": "艾文昊",
+      "employeeId": "1021462",
+      "status": "空闲",
+      "skills": [
+        "弱电",
+        "低压特种作业操作证书",
+        "高压特种作业操作证书",
+        "职业技能等级电工高级证书",
+        "职业技能等级电工中级证书"
+      ],
+      "currentProjects": [],
+      "email": "",
+      "phone": ""
+    },
+    {
+      "id": "1021456",
+      "name": "隋羿",
+      "employeeId": "1021456",
+      "status": "空闲",
+      "skills": [
+        "弱电",
+        "低压特种作业操作证书",
+        "职业技能等级电工高级证书",
+        "职业技能等级电工中级证书"
+      ],
+      "currentProjects": [],
+      "email": "",
+      "phone": ""
+    },
+    {
+      "id": "1021448",
+      "name": "刘汪洋",
+      "employeeId": "1021448",
+      "status": "空闲",
+      "skills": [
+        "电气",
+        "低压特种作业操作证书",
+        "高压特种作业操作证书"
+      ],
+      "currentProjects": [],
+      "email": "",
+      "phone": ""
+    },
+    {
+      "id": "1021573",
+      "name": "李浩哲",
+      "employeeId": "1021573",
+      "status": "空闲",
+      "skills": [
+        "弱电",
+        "低压特种作业操作证书",
+        "职业技能等级电工高级证书"
+      ],
+      "currentProjects": [],
+      "email": "",
+      "phone": ""
+    },
+    {
+      "id": "1021450",
+      "name": "杨丞佑",
+      "employeeId": "1021450",
+      "status": "空闲",
+      "skills": [
+        "消防",
+        "低压特种作业操作证书",
+        "高压特种作业操作证书",
+        "职业技能等级电工高级证书",
+        "职业技能等级电工中级证书"
+      ],
+      "currentProjects": [],
+      "email": "",
+      "phone": ""
+    },
+    {
+      "id": "1021582",
+      "name": "石昌",
+      "employeeId": "1021582",
+      "status": "空闲",
+      "skills": [
+        "电气",
+        "低压特种作业操作证书",
+        "职业技能等级电工高级证书"
+      ],
+      "currentProjects": [],
+      "email": "",
+      "phone": ""
+    },
+    {
+      "id": "1021575",
+      "name": "韩博文",
+      "employeeId": "1021575",
+      "status": "空闲",
+      "skills": [
+        "电气",
+        "低压特种作业操作证书"
+      ],
+      "currentProjects": [],
+      "email": "",
+      "phone": ""
+    },
+    {
+      "id": "1021457",
+      "name": "曹强强",
+      "employeeId": "1021457",
+      "status": "空闲",
+      "skills": [
+        "电气",
+        "低压特种作业操作证书"
+      ],
+      "currentProjects": [],
+      "email": "",
+      "phone": ""
+    },
+    {
+      "id": "1021460",
+      "name": "裴鹏翔",
+      "employeeId": "1021460",
+      "status": "空闲",
+      "skills": [
+        "暖通",
+        "低压特种作业操作证书",
+        "高压特种作业操作证书",
+        "职业技能等级电工高级证书",
+        "职业技能等级电工中级证书"
+      ],
+      "currentProjects": [],
+      "email": "",
+      "phone": ""
+    },
+    {
+      "id": "1021452",
+      "name": "宋亚超",
+      "employeeId": "1021452",
+      "status": "空闲",
+      "skills": [
+        "暖通",
+        "职业技能等级电工高级证书",
+        "职业技能等级电工中级证书"
+      ],
+      "currentProjects": [],
+      "email": "",
+      "phone": ""
+    },
+    {
+      "id": "1021459",
+      "name": "张庞飞",
+      "employeeId": "1021459",
+      "status": "空闲",
+      "skills": [
+        "暖通",
+        "低压特种作业操作证书",
+        "高压特种作业操作证书",
+        "职业技能等级电工高级证书",
+        "职业技能等级电工中级证书"
+      ],
+      "currentProjects": [],
+      "email": "",
+      "phone": ""
+    },
+    {
+      "id": "1021574",
+      "name": "郝健康",
+      "employeeId": "1021574",
+      "status": "空闲",
+      "skills": [
+        "弱电",
+        "低压特种作业操作证书",
+        "职业技能等级电工高级证书"
+      ],
+      "currentProjects": [],
+      "email": "",
+      "phone": ""
+    },
+    {
+      "id": "1021447",
+      "name": "夏航京",
+      "employeeId": "1021447",
+      "status": "空闲",
+      "skills": [
+        "电气",
+        "低压特种作业操作证书",
+        "高压特种作业操作证书",
+        "职业技能等级电工高级证书",
+        "职业技能等级电工中级证书"
+      ],
+      "currentProjects": [],
+      "email": "",
+      "phone": ""
+    },
+    {
+      "id": "1021451",
+      "name": "李浩",
+      "employeeId": "1021451",
+      "status": "空闲",
+      "skills": [
+        "电气",
+        "高压特种作业操作证书",
+        "职业技能等级电工中级证书"
+      ],
+      "currentProjects": [],
+      "email": "",
+      "phone": ""
+    },
+    {
+      "id": "1021446",
+      "name": "王家晟",
+      "employeeId": "1021446",
+      "status": "空闲",
+      "skills": [
+        "电气",
+        "低压特种作业操作证书",
+        "高压特种作业操作证书",
+        "职业技能等级电工高级证书",
+        "职业技能等级电工中级证书"
+      ],
+      "currentProjects": [],
+      "email": "",
+      "phone": ""
+    },
+    {
+      "id": "1021771",
+      "name": "李苏琪",
+      "employeeId": "1021771",
+      "status": "空闲",
+      "skills": [
+        "电气",
+        "低压特种作业操作证书",
+        "高压特种作业操作证书",
+        "职业技能等级电工高级证书",
+        "职业技能等级电工中级证书"
+      ],
+      "currentProjects": [],
+      "email": "",
+      "phone": ""
+    },
+    {
+      "id": "1021876",
+      "name": "黄毅",
+      "employeeId": "1021876",
+      "status": "空闲",
+      "skills": [
+        "电气",
+        "低压特种作业操作证书",
+        "高压特种作业操作证书",
+        "职业技能等级电工高级证书",
+        "职业技能等级电工中级证书"
+      ],
+      "currentProjects": [],
+      "email": "",
+      "phone": ""
+    }
+  ],
+  "mockTestDocs": [
+    {
+      "id": "d1",
+      "title": "数据中心电气系统测试规范",
+      "category": "电气系统",
+      "lastUpdated": "2025-12-01",
+      "content": "电气系统测试规范详细内容，涵盖高压配电、低压配电、UPS、柴发等设备的测试标准与流程。",
+      "fileName": "数据中心电气系统测试规范.pdf",
+      "fileSize": "2.4 MB",
+      "fileType": "pdf"
+    },
+    {
+      "id": "d2",
+      "title": "数据中心暖通系统测试规范",
+      "category": "暖通系统",
+      "lastUpdated": "2025-11-15",
+      "content": "暖通系统测试规范详细内容，涵盖冷机、水泵、冷却塔、精密空调等设备的测试标准与流程。",
+      "fileName": "数据中心暖通系统测试规范.pdf",
+      "fileSize": "1.8 MB",
+      "fileType": "pdf"
+    },
+    {
+      "id": "d3",
+      "title": "数据中心弱电系统测试规范",
+      "category": "弱电系统",
+      "lastUpdated": "2025-10-20",
+      "content": "弱电系统测试规范详细内容，涵盖BMS、门禁、视频监控、巡更等系统的测试标准与流程。",
+      "fileName": "数据中心弱电系统测试规范.pdf",
+      "fileSize": "3.1 MB",
+      "fileType": "pdf"
+    },
+    {
+      "id": "d4",
+      "title": "数据中心消防系统测试规范",
+      "category": "消防系统",
+      "lastUpdated": "2025-09-10",
+      "content": "消防系统测试规范详细内容，涵盖消防联动、消防广播、消防电源、防火卷帘等系统的测试标准与流程。",
+      "fileName": "数据中心消防系统测试规范.pdf",
+      "fileSize": "2.7 MB",
+      "fileType": "pdf"
+    }
+  ],
+  "mockProjectPhases": {},
+  "mockHistoryPhases": {},
+  "mockRegionMwOutput": [
+    {
+      "name": "乌兰察布",
+      "mwOutput": 272.7
+    },
+    {
+      "name": "江苏",
+      "mwOutput": 94
+    },
+    {
+      "name": "廊坊",
+      "mwOutput": 75.1
+    },
+    {
+      "name": "杭州",
+      "mwOutput": 33.1
+    },
+    {
+      "name": "北京",
+      "mwOutput": 6.4
+    },
+    {
+      "name": "上海",
+      "mwOutput": 16
+    }
+  ],
+  "docCategories": [
+    "全部",
+    "电气系统",
+    "暖通系统",
+    "弱电系统",
+    "消防系统"
+  ]
+}
