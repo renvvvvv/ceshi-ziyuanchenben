@@ -83,6 +83,7 @@ function KnowledgeBase() {
 function FullscreenIframe({ kbData, loading }: { kbData: KBIndex | null; loading: boolean }) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [iframeState, setIframeState] = useState<'loading' | 'loaded' | 'failed'>('loading');
+  const [bannerVisible, setBannerVisible] = useState(true);
   const loadTimerRef = useRef<number | null>(null);
 
   // 默认 URL：第一个顶层节点的链接
@@ -107,6 +108,7 @@ function FullscreenIframe({ kbData, loading }: { kbData: KBIndex | null; loading
 
   const handleRefresh = () => {
     if (!iframeRef.current || !defaultUrl) return;
+    setBannerVisible(true); // 重新显示 banner 让用户看引导
     setIframeState('loading');
     if (loadTimerRef.current) window.clearTimeout(loadTimerRef.current);
     loadTimerRef.current = window.setTimeout(() => {
@@ -193,12 +195,14 @@ function FullscreenIframe({ kbData, loading }: { kbData: KBIndex | null; loading
         )}
       </div>
 
-      {/* 加载超时引导 banner */}
-      {iframeState === 'failed' && defaultUrl && (
+      {/* 加载超时引导 banner（可关闭） */}
+      {iframeState === 'failed' && defaultUrl && bannerVisible && (
         <Alert
           banner
           type="warning"
           showIcon
+          closable
+          onClose={() => setBannerVisible(false)}
           icon={<ExclamationCircleOutlined />}
           message={
             <span>
