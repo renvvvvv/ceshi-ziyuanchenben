@@ -8,6 +8,10 @@ server/.env
 *.log
 .DS_Store
 
+# Vite 临时构建文件
+*.timestamp-*.mjs
+vite.config.ts.timestamp-*
+
 # 学习纠错库（运行时生成，每台服务器独立）
 data/learned-corrections.json
 

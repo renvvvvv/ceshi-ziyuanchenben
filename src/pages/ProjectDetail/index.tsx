@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Descriptions, Timeline, Button, Breadcrumb, Card, Avatar, Empty, Tag, Upload, message, Modal, Input } from 'antd';
 import { EditOutlined, ArrowLeftOutlined, HomeOutlined, ProjectOutlined, DeleteOutlined, UploadOutlined, FileOutlined, LinkOutlined, SaveOutlined } from '@ant-design/icons';
 import type { UploadFile } from 'antd/es/upload/interface';
+import dayjs from 'dayjs';
 import StatusTag from '../../components/StatusTag';
 import ProjectModal from '../../components/ProjectModal';
 import { useData } from '../../store/DataContext';
@@ -88,7 +89,7 @@ function ProjectDetail() {
   }
 
   const handleEdit = (values: Project) => {
-    setProjects((prev) => prev.map((p) => (p.id === project.id ? { ...values, id: project.id, updatedAt: new Date().toISOString().slice(0, 10) } : p)));
+    setProjects((prev) => prev.map((p) => (p.id === project.id ? { ...values, id: project.id, updatedAt: dayjs().format('YYYY-MM-DD') } : p)));
     setModalOpen(false);
   };
 
@@ -96,7 +97,7 @@ function ProjectDetail() {
   const handleUpdateDocLink = () => {
     setProjects((prev) => prev.map((p) =>
       p.id === project.id
-        ? { ...p, docLink: docLinkInput.trim(), updatedAt: new Date().toISOString().slice(0, 10) }
+        ? { ...p, docLink: docLinkInput.trim(), updatedAt: dayjs().format('YYYY-MM-DD') }
         : p
     ));
     message.success('测试管理链接已更新');

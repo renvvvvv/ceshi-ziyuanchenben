@@ -109,7 +109,7 @@ function Projects() {
         const archived: HistoricalProject = {
           ...values,
           id: editingProject.id,
-          updatedAt: new Date().toISOString().slice(0, 10),
+          updatedAt: dayjs().format('YYYY-MM-DD'),
         };
         setHistoryProjects((prev) => prev.some((p) => p.id === archived.id) ? prev : [archived, ...prev]);
         // 已完成时清除相关人员的项目关联，并检查是否需要转为空闲
@@ -145,7 +145,7 @@ function Projects() {
       } else {
         setProjects((prev) => prev.map((p) =>
           (p.id === editingProject.id
-            ? { ...values, id: editingProject.id, updatedAt: new Date().toISOString().slice(0, 10) }
+            ? { ...values, id: editingProject.id, updatedAt: dayjs().format('YYYY-MM-DD') }
             : p)
         ));
         syncMemberAssignments(editingProject.id, values.name, values.startDate, values.endDate, newMemberIds);
@@ -162,7 +162,7 @@ function Projects() {
       const newProject: Project = {
         ...values,
         id: Date.now().toString(),
-        updatedAt: new Date().toISOString().slice(0, 10),
+        updatedAt: dayjs().format('YYYY-MM-DD'),
       };
       setProjects((prev) => [newProject, ...prev]);
       syncMemberAssignments(newProject.id, newProject.name, newProject.startDate, newProject.endDate, newProject.assignedMemberIds || []);

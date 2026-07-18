@@ -3,9 +3,15 @@
  *
  * 开发环境：Vite proxy /api → http://localhost:3001
  * 生产环境：nginx proxy /api → backend:3001
+ *
+ * 提供：
+ *  - 通用 fetch wrapper（request/ApiError/timeout/abort）
+ *  - 业务模块：resourceCalc / projects / teamMembers / historyProjects
+ *  - 字段名转换：snake_case ↔ camelCase
+ *  - 业务转换函数：dbRowToProject / projectToDbBody / 等
  */
 
-import type { ApiResponse, PaginatedResponse } from '../types';
+import type { ApiResponse, PaginatedResponse, Project, HistoricalProject, TeamMember } from '../types';
 
 // -------------------- 配置 --------------------
 const BASE = '/api';
@@ -196,18 +202,18 @@ export interface ProjectDTO {
 
 export const projectApi = {
   /** 获取项目列表 */
-  getList: (params?: Record<string, string>): Promise<ApiResponse<PaginatedResponse<ProjectDTO>>> => {
+  getList: (params?: Record<string, string>): Promise<ApiResponse<PaginatedResponse<Record<string, unknown>>>> => {
     const qs = params ? '?' + new URLSearchParams(params).toString() : '';
     return request('/projects' + qs);
   },
 
   /** 获取单个项目 */
-  getById: (id: number): Promise<ApiResponse<ProjectDTO>> => {
+  getById: (id: number): Promise<ApiResponse<Record<string, unknown>>> => {
     return request('/projects/' + id);
   },
 
   /** 创建项目 */
-  create: (data: ProjectDTO): Promise<ApiResponse<{ id: number }>> => {
+  create: (data: Record<string, unknown>): Promise<ApiResponse<{ id: number }>> => {
     return request('/projects', {
       method: 'POST',
       body: JSON.stringify(data),
@@ -215,7 +221,7 @@ export const projectApi = {
   },
 
   /** 更新项目 */
-  update: (id: number, data: ProjectDTO): Promise<ApiResponse<void>> => {
+  update: (id: number, data: Record<string, unknown>): Promise<ApiResponse<void>> => {
     return request('/projects/' + id, {
       method: 'PUT',
       body: JSON.stringify(data),
@@ -228,7 +234,7 @@ export const projectApi = {
   },
 
   /** 获取历史项目列表 */
-  getHistoryList: (): Promise<ApiResponse<ProjectDTO[]>> => {
+  getHistoryList: (): Promise<ApiResponse<Record<string, unknown>[]>> => {
     return request('/projects/history/list');
   },
 
@@ -237,4 +243,245 @@ export const projectApi = {
     const qs = params ? '?' + new URLSearchParams(params).toString() : '';
     return request('/projects/members/list' + qs);
   },
+};
+
+// ============================================================
+// 字段名转换工具（snake_case ↔ camelCase）
+// ============================================================
+// 背景：后端 PostgreSQL 列名是 snake_case（start_date / end_date / it_output）
+//      前端 TypeScript 类型是 camelCase（startDate / endDate / itOutput）
+
+const SNAKE_TO_CAMEL: Record<string, string> = {
+  start_date: 'startDate',
+  end_date: 'endDate',
+  it_output: 'itOutput',
+  business_type: 'businessType',
+  created_at: 'createdAt',
+  updated_at: 'updatedAt',
+  planned_manpower: 'plannedManpower',
+  assigned_member_ids: 'assignedMemberIds',
+  employee_id: 'employeeId',
+  current_projects: 'currentProjects',
+  doc_link: 'docLink',
+};
+
+const CAMEL_TO_SNAKE: Record<string, string> = Object.fromEntries(
+  Object.entries(SNAKE_TO_CAMEL).map(([snake, camel]) => [camel, snake]),
+);
+
+export function snakeToCamel<T = unknown>(obj: unknown): T {
+  if (obj === null || obj === undefined) return obj as T;
+  if (Array.isArray(obj)) return obj.map((v) => snakeToCamel(v)) as unknown as T;
+  if (typeof obj !== 'object') return obj as T;
+  const result: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(obj as Record<string, unknown>)) {
+    const newKey = SNAKE_TO_CAMEL[k] || k;
+    result[newKey] = v === null || v === undefined ? v : snakeToCamel(v);
+  }
+  return result as T;
+}
+
+export function camelToSnake<T = unknown>(obj: unknown): T {
+  if (obj === null || obj === undefined) return obj as T;
+  if (Array.isArray(obj)) return obj.map((v) => camelToSnake(v)) as unknown as T;
+  if (typeof obj !== 'object') return obj as T;
+  const result: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(obj as Record<string, unknown>)) {
+    const newKey = CAMEL_TO_SNAKE[k] || k;
+    result[newKey] = v === null || v === undefined ? v : camelToSnake(v);
+  }
+  return result as T;
+}
+
+// ============================================================
+// 业务数据转换层（db row ↔ 前端业务对象）
+// ============================================================
+
+/**
+ * 后端 test_projects 行 → 前端 Project
+ */
+export function dbRowToProject(row: Record<string, unknown>): Project {
+  const c = snakeToCamel<Record<string, unknown>>(row);
+  let assignedMemberIds: string[] | undefined;
+  if (typeof c.assignedMemberIds === 'string' && c.assignedMemberIds) {
+    try { assignedMemberIds = JSON.parse(c.assignedMemberIds); } catch { /* ignore */ }
+  }
+  return {
+    id: String(c.id),
+    name: String(c.name || ''),
+    customer: String(c.customer || ''),
+    status: (c.status || '未开始') as Project['status'],
+    manager: String(c.manager || ''),
+    startDate: String(c.startDate || ''),
+    endDate: c.endDate ? String(c.endDate) : undefined,
+    itOutput: Number(c.itOutput || 0),
+    plannedManpower: c.plannedManpower ? Number(c.plannedManpower) : undefined,
+    businessType: c.businessType ? String(c.businessType) : undefined,
+    city: c.city ? String(c.city) : undefined,
+    description: c.description ? String(c.description) : undefined,
+    assignedMemberIds,
+    docLink: undefined,
+    updatedAt: c.updatedAt ? String(c.updatedAt) : undefined,
+  } as Project;
+}
+
+/**
+ * 前端 Project → 后端接收 body
+ */
+export function projectToDbBody(p: Partial<Project>): Record<string, unknown> {
+  const body: Record<string, unknown> = {
+    name: p.name,
+    customer: p.customer,
+    status: p.status || '未开始',
+    manager: p.manager || '',
+    start_date: p.startDate || '',
+    end_date: p.endDate || null,
+    it_output: p.itOutput ?? 0,
+    business_type: p.businessType || null,
+    description: p.description || null,
+    planned_manpower: p.plannedManpower ?? null,
+    city: p.city || null,
+    assigned_member_ids: p.assignedMemberIds && p.assignedMemberIds.length > 0
+      ? JSON.stringify(p.assignedMemberIds) : null,
+  };
+  for (const k of Object.keys(body)) {
+    if (body[k] === undefined) delete body[k];
+  }
+  return body;
+}
+
+/**
+ * 后端 team_members 行 → 前端 TeamMember
+ */
+export function dbRowToTeamMember(row: Record<string, unknown>): TeamMember {
+  const c = snakeToCamel<Record<string, unknown>>(row);
+  let skills: string[] = [];
+  let currentProjects: string[] = [];
+  try {
+    if (typeof c.skills === 'string') skills = JSON.parse(c.skills);
+  } catch { /* ignore */ }
+  try {
+    if (typeof c.currentProjects === 'string') currentProjects = JSON.parse(c.currentProjects);
+  } catch { /* ignore */ }
+  return {
+    id: String(c.id),
+    name: String(c.name || ''),
+    employeeId: String(c.employeeId || ''),
+    status: (c.status || '在线') as TeamMember['status'],
+    skills,
+    currentProjects,
+    email: c.email ? String(c.email) : undefined,
+    phone: c.phone ? String(c.phone) : undefined,
+  } as TeamMember;
+}
+
+/**
+ * 前端 TeamMember → 后端 body
+ */
+export function teamMemberToDbBody(m: Partial<TeamMember>): Record<string, unknown> {
+  const body: Record<string, unknown> = {
+    name: m.name,
+    employee_id: m.employeeId,
+    status: m.status || '在线',
+    skills: JSON.stringify(m.skills || []),
+    current_projects: JSON.stringify(m.currentProjects || []),
+    email: m.email || null,
+    phone: m.phone || null,
+  };
+  for (const k of Object.keys(body)) {
+    if (body[k] === undefined) delete body[k];
+  }
+  return body;
+}
+
+/**
+ * 后端 historical_projects 行 → 前端 HistoricalProject
+ */
+export function dbRowToHistoryProject(row: Record<string, unknown>): HistoricalProject {
+  const c = snakeToCamel<Record<string, unknown>>(row);
+  return {
+    id: String(c.id),
+    name: String(c.name || ''),
+    itOutput: Number(c.itOutput || 0),
+    startDate: String(c.startDate || ''),
+    endDate: String(c.endDate || ''),
+    customer: String(c.customer || ''),
+    docLink: c.docLink ? String(c.docLink) : undefined,
+  } as HistoricalProject;
+}
+
+/**
+ * 前端 HistoricalProject → 后端 body
+ */
+export function historyProjectToDbBody(p: Partial<HistoricalProject>): Record<string, unknown> {
+  return {
+    name: p.name,
+    it_output: p.itOutput ?? 0,
+    start_date: p.startDate || '',
+    end_date: p.endDate || '',
+    customer: p.customer || '',
+    doc_link: p.docLink || null,
+  };
+}
+
+// ============================================================
+// 业务 API（基于 projectApi 的别名 + 完整 CRUD）
+// ============================================================
+
+/**
+ * Projects 业务 API（含完整 CRUD + 字段转换）
+ * 返回结构与 client.ts 一致：{ success, data?, id? }
+ */
+export const projectsApi = {
+  list: (params?: { page?: number; size?: number }) =>
+    projectApi.getList(params as Record<string, string> | undefined).then((r) => ({
+      success: r.success,
+      data: (r.data?.items || []).map(dbRowToProject),
+      total: r.data?.total,
+    })),
+  get: (id: string) => projectApi.getById(Number(id)).then((r) => ({
+    success: r.success,
+    data: r.data ? dbRowToProject(r.data as unknown as Record<string, unknown>) : undefined,
+  })),
+  create: (body: Partial<Project>) =>
+    projectApi.create(projectToDbBody(body)).then((r) => ({
+      success: r.success,
+      id: (r.data as { id?: number } | undefined)?.id,
+    })),
+  update: (id: string, body: Partial<Project>) =>
+    projectApi.update(Number(id), projectToDbBody(body)).then((r) => ({
+      success: r.success,
+    })),
+  remove: (id: string) =>
+    projectApi.delete(Number(id)).then((r) => ({ success: r.success })),
+};
+
+/**
+ * Team Members 业务 API（GET 已实现，CRUD 走 teamApi 占位）
+ */
+export const teamMembersApi = {
+  list: (params?: { status?: string; search?: string }) => {
+    const query: Record<string, string> = {};
+    if (params?.status) query.status = params.status;
+    if (params?.search) query.search = params.search;
+    return projectApi.getTeamMembers(query).then((r) => ({
+      success: r.success,
+      data: (r.data || []).map(dbRowToTeamMember),
+    }));
+  },
+};
+
+/**
+ * Historical Projects 业务 API
+ */
+export const historyProjectsApi = {
+  list: () => projectApi.getHistoryList().then((r) => ({
+    success: r.success,
+    data: (r.data || []).map(dbRowToHistoryProject),
+  })),
+  create: (body: Partial<HistoricalProject>) =>
+    projectApi.create(historyProjectToDbBody(body)).then((r) => ({
+      success: r.success,
+      id: (r.data as { id?: number } | undefined)?.id,
+    })),
 };

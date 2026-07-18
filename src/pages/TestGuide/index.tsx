@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef } from 'react';
+import dayjs from 'dayjs';
 import {
   Input,
   Tag,
@@ -88,7 +89,7 @@ function TestGuide() {
         id: 'doc_' + Date.now(),
         title: values.title || file.name,
         category: values.category,
-        lastUpdated: new Date().toISOString().split('T')[0],
+        lastUpdated: dayjs().format('YYYY-MM-DD'),
         content: values.description || '',
         fileName: file.name,
         fileSize: formatFileSize(rawFile.size),

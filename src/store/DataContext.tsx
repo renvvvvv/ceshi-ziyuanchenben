@@ -4,10 +4,7 @@ import {
   projectsApi,
   teamMembersApi,
   historyProjectsApi,
-  dbRowToProject,
-  dbRowToTeamMember,
-  dbRowToHistoryProject,
-} from '../api/client';
+} from '../api';
 import {
   mockProjects,
   mockHistoryProjects,
@@ -169,18 +166,15 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
         // Projects：后端有数据 → 用后端；否则用 mock
         if (projRes?.success && projRes.data && projRes.data.length > 0) {
-          const apiProjects = projRes.data.map(dbRowToProject);
-          setProjects(apiProjects);
+          setProjects(projRes.data);
         }
         // Members：后端有数据 → 用后端；否则用 mock（init.sql 已插入 2 个默认）
         if (memRes?.success && memRes.data) {
-          const apiMembers = memRes.data.map(dbRowToTeamMember);
-          setTeamMembers(apiMembers);
+          setTeamMembers(memRes.data);
         }
         // History：后端有数据 → 用后端；否则用 mock
         if (histRes?.success && histRes.data && histRes.data.length > 0) {
-          const apiHistory = histRes.data.map(dbRowToHistoryProject);
-          setHistoryProjects(apiHistory);
+          setHistoryProjects(histRes.data);
         }
 
         // 全部成功 → 数据源 = api；任意失败 → cache（用 localStorage 兜底）
@@ -204,7 +198,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
     });
     if (uniqueHistory.length < historyProjects.length) {
       setHistoryProjects(uniqueHistory);
-      console.log('[DataContext] 历史项目去重：移除', historyProjects.length - uniqueHistory.length, '个重复项');
     }
   }, []); // 只在挂载时执行一次
 

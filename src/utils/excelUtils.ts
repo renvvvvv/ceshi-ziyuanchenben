@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx';
+import dayjs from 'dayjs';
 import { type ResourceInput, type ResourceReport, normalizeReport } from './resourceCalculator';
 
 // ============ 模板列名（匹配 V20 CSV 格式） ============
@@ -299,7 +300,7 @@ export function exportReportToExcel(input: ResourceInput, report: ResourceReport
     XLSX.utils.book_append_sheet(wb, ws, '详细计算数据');
   }
 
-  const filename = `资源规划报告_${input.total_mw}MW_${new Date().toISOString().slice(0, 10)}.xlsx`;
+  const filename = `资源规划报告_${input.total_mw}MW_${dayjs().format('YYYY-MM-DD')}.xlsx`;
   XLSX.writeFile(wb, filename);
 }
 
@@ -582,7 +583,7 @@ export function exportBatchResultsToExcel(batchResults: BatchReportRow[]): void 
     XLSX.utils.book_append_sheet(wb, ws, sheetName.substring(0, 31));
   }
 
-  const filename = `批量资源规划报告_${new Date().toISOString().slice(0, 10)}.xlsx`;
+  const filename = `批量资源规划报告_${dayjs().format('YYYY-MM-DD')}.xlsx`;
   XLSX.writeFile(wb, filename);
 }
 
