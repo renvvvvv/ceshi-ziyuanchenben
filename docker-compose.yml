@@ -31,7 +31,8 @@ services:
       postgres:
         condition: service_healthy
     volumes:
-      - ./scripts:/app/scripts:ro
+      # 不挂载 ./scripts，避免覆盖 Dockerfile COPY 进去的 resource_plan.py
+      # 原来有 - ./scripts:/app/scripts:ro（删掉，会让容器内 scripts 变 deploy.sh/init.sql，缺 resource_plan.py）
       # 学习纠错库持久化（自学习能力）
       - ./data:/app/data
     environment:

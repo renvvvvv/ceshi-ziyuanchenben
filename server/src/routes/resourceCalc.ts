@@ -7,8 +7,12 @@ import { tmpdir } from 'os';
 import db from '../database.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const SCRIPTS_DIR = join(__dirname, '..', '..', 'scripts');
+// 编译后 __dirname = /app/dist/src/routes
+// scripts 在 /app/scripts/（Dockerfile COPY server/scripts ./scripts）
+// 所以从 dist/src/routes 向上 3 层才到 /app/
+const SCRIPTS_DIR = join(__dirname, '..', '..', '..', 'scripts');
 const PY = process.platform === 'win32' ? 'python' : 'python3';
+const PY_TIMEOUT_MS = 30_000; // 30 秒（资源计算正常情况几秒内完成）
 
 const router = Router();
 
@@ -22,11 +26,28 @@ function runPy(jsonInput: Record<string, unknown>): Promise<string> {
     const tmpFile = join(tmpdir(), `rc_${Date.now()}.json`);
     writeFileSync(tmpFile, JSON.stringify(jsonInput), 'utf-8');
     const script = join(SCRIPTS_DIR, 'resource_plan.py');
-    execFile(PY, [script, '--input', tmpFile], { cwd: SCRIPTS_DIR, maxBuffer: 10 * 1024 * 1024, env: { ...process.env, PYTHONIOENCODING: 'utf-8', PATH: process.env.PATH || '' } }, (err, stdout, stderr) => {
-      try { unlinkSync(tmpFile); } catch {}
-      if (err) reject(new Error(stderr || err.message));
-      else resolve(stdout);
-    });
+    execFile(
+      PY,
+      [script, '--input', tmpFile],
+      {
+        cwd: SCRIPTS_DIR,
+        maxBuffer: 10 * 1024 * 1024,
+        timeout: PY_TIMEOUT_MS, // 关键：30s 超时（修复 P1 #2）
+        env: { ...process.env, PYTHONIOENCODING: 'utf-8', PATH: process.env.PATH || '' },
+      },
+      (err, stdout, stderr) => {
+        try { unlinkSync(tmpFile); } catch {} // 兜底清理
+        if (err) {
+          if (err.killed && err.signal === 'SIGTERM') {
+            reject(new Error(`Python 计算超时（${PY_TIMEOUT_MS / 1000}s）`));
+          } else {
+            reject(new Error(stderr || err.message));
+          }
+        } else {
+          resolve(stdout);
+        }
+      },
+    );
   });
 }
 
@@ -95,12 +116,13 @@ router.post('/', asyncHandler(async (req, res) => {
 
 /** POST /api/resource-calc/batch — 群算 */
 router.post('/batch', asyncHandler(async (req, res) => {
-  const body = req.body as { inputs: Record<string, unknown>[]; batch_id?: string };
-  const inputs = body.inputs;
+  // 兼容两种 schema：{ inputs: [...] } (REST 风格) 和 { calculations: [...] } (前端当前使用)
+  const body = req.body as { inputs?: Record<string, unknown>[]; calculations?: Record<string, unknown>[]; batch_id?: string };
+  const inputs = body.inputs || body.calculations;
   const batchId = body.batch_id || Date.now().toString();
 
   if (!Array.isArray(inputs) || inputs.length === 0) {
-    res.status(400).json({ error: '缺少输入数组' });
+    res.status(400).json({ error: '缺少输入数组（需 inputs 或 calculations 字段）' });
     return;
   }
 
@@ -110,6 +132,12 @@ router.post('/batch', asyncHandler(async (req, res) => {
       const input = inputs[i] as Record<string, unknown>;
       if (!input.total_mw || !input.total_duration) {
         results.push({ index: i + 1, error: '缺少必填参数' });
+        continue;
+      }
+      // 范围校验（与单算保持一致，修复 P1 #4）
+      const mw = Number(input.total_mw);
+      if (mw < 1 || mw > 66) {
+        results.push({ index: i + 1, error: `total_mw 必须在 1-66 之间（当前 ${mw}）` });
         continue;
       }
 
@@ -131,6 +159,14 @@ router.post('/batch', asyncHandler(async (req, res) => {
       const stdout = await runPy(pyInput);
       const report = JSON.parse(stdout);
 
+      // 与单算保持一致：取"标准"版本的"汇总"字段
+      let stdReport = report;
+      if (report.多版本对比 && report.详细结果) {
+        const keys = Object.keys(report.详细结果);
+        const stdKey = keys.find((k: string) => k.includes('标准')) || keys[0];
+        stdReport = report.详细结果[stdKey];
+      }
+
       await db.runAsync(
         `INSERT INTO resource_calc_history
           (batch_id, total_mw, total_duration, cabinet_power, it_transformers, power_transformers,
@@ -139,7 +175,7 @@ router.post('/batch', asyncHandler(async (req, res) => {
         batchId, input.total_mw, input.total_duration, cp,
         JSON.stringify(input.it_transformers), JSON.stringify(input.power_transformers),
         tc, input.ac_type,
-        report.汇总.峰值同时在场, report.汇总.总人天,
+        stdReport.汇总.峰值同时在场, stdReport.汇总.总人天,
         JSON.stringify(report),
       );
 
