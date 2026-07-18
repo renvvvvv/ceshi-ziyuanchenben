@@ -32,14 +32,27 @@ router.get('/', asyncHandler(async (req, res) => {
 
 /** POST /api/projects — 创建项目 */
 router.post('/', asyncHandler(async (req, res) => {
-  const { name, customer, status, manager, start_date, end_date, it_output, business_type, description } = req.body;
+  const {
+    name, customer, status, manager,
+    start_date, end_date, it_output,
+    business_type, description,
+    planned_manpower, city, assigned_member_ids,
+  } = req.body;
   if (!name || !customer) { res.status(400).json({ error: '项目名称和客户必填' }); return; }
 
   const result = await db.runAsync(
-    `INSERT INTO test_projects (name, customer, status, manager, start_date, end_date, it_output, business_type, description)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
-    name, customer, status || '未开始', manager || '', start_date || '', end_date || null,
-    it_output || 0, business_type || null, description || null,
+    `INSERT INTO test_projects (
+       name, customer, status, manager,
+       start_date, end_date, it_output,
+       business_type, description,
+       planned_manpower, city, assigned_member_ids
+     )
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id`,
+    name, customer, status || '未开始', manager || '',
+    start_date || '', end_date || null, it_output || 0,
+    business_type || null, description || null,
+    planned_manpower || null, city || null,
+    assigned_member_ids || null,
   );
 
   res.json({ success: true, id: result.lastInsertRowid });
@@ -47,10 +60,25 @@ router.post('/', asyncHandler(async (req, res) => {
 
 /** PUT /api/projects/:id — 更新项目 */
 router.put('/:id', asyncHandler(async (req, res) => {
-  const { name, customer, status, manager, start_date, end_date, it_output, business_type, description } = req.body;
+  const {
+    name, customer, status, manager,
+    start_date, end_date, it_output,
+    business_type, description,
+    planned_manpower, city, assigned_member_ids,
+  } = req.body;
   await db.runAsync(
-    `UPDATE test_projects SET name=$1,customer=$2,status=$3,manager=$4,start_date=$5,end_date=$6,it_output=$7,business_type=$8,description=$9,updated_at=NOW() WHERE id=$10`,
-    name, customer, status, manager, start_date, end_date, it_output, business_type, description, req.params.id,
+    `UPDATE test_projects SET
+       name=$1, customer=$2, status=$3, manager=$4,
+       start_date=$5, end_date=$6, it_output=$7,
+       business_type=$8, description=$9,
+       planned_manpower=$10, city=$11, assigned_member_ids=$12,
+       updated_at=NOW()
+     WHERE id=$13`,
+    name, customer, status, manager,
+    start_date, end_date, it_output,
+    business_type, description,
+    planned_manpower, city, assigned_member_ids,
+    req.params.id,
   );
   res.json({ success: true });
 }));

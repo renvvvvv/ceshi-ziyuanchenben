@@ -1,6 +1,14 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
 import dayjs from 'dayjs';
 import {
+  projectsApi,
+  teamMembersApi,
+  historyProjectsApi,
+  dbRowToProject,
+  dbRowToTeamMember,
+  dbRowToHistoryProject,
+} from '../api/client';
+import {
   mockProjects,
   mockHistoryProjects,
   mockTeamMembers,
@@ -61,6 +69,9 @@ function usePersistentState<T>(key: string, initial: T): [T, (value: T | ((prev:
 // ============================================================
 
 interface DataContextValue {
+  // 数据源（用于 UI 显示）
+  dataSource: 'mock' | 'api' | 'cache' | 'loading';
+
   // 项目管理
   projects: Project[];
   setProjects: (value: Project[] | ((prev: Project[]) => Project[])) => void;
@@ -129,7 +140,7 @@ const mergedHistoryPhases: Record<string, ProjectPhase[]> = {
 };
 
 export function DataProvider({ children }: { children: ReactNode }) {
-  // ====== 持久化状态 ======
+  // ====== 持久化状态（localStorage 兜底，后端是主源） ======
   const [projects, setProjects] = usePersistentState<Project[]>('projects', mockProjects);
   const [historyProjects, setHistoryProjects] = usePersistentState<HistoricalProject[]>('historyProjects', mockHistoryProjects);
   const [teamMembers, setTeamMembers] = usePersistentState<TeamMember[]>('teamMembers', mockTeamMembers);
@@ -137,6 +148,51 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [projectPhases, setProjectPhases] = usePersistentState<Record<string, ProjectPhase[]>>('projectPhases', mockProjectPhases);
   const [historyPhases, setHistoryPhases] = usePersistentState<Record<string, ProjectPhase[]>>('historyPhases', mergedHistoryPhases);
   const [attendanceAdjustments, setAttendanceAdjustments] = usePersistentState<Record<string, { projectStart?: string; projectEnd?: string; leaveDays?: number }>>('attendanceAdjustments', {});
+  // 数据源标记：'mock' | 'api' | 'cache'，用于 UI 显示数据来源
+  const [dataSource, setDataSource] = useState<'mock' | 'api' | 'cache' | 'loading'>('loading');
+
+  // ====== 启动时从后端拉数据 ======
+  // 策略：
+  //   1. 异步 fetch /api/projects + /api/projects/members/list + /api/projects/history/list
+  //   2. 失败/空时降级到 localStorage（mock）
+  //   3. 成功时合并到 state，并写入 localStorage 作为缓存
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [projRes, memRes, histRes] = await Promise.all([
+          projectsApi.list({ page: 1, size: 500 }),
+          teamMembersApi.list(),
+          historyProjectsApi.list(),
+        ]);
+        if (cancelled) return;
+
+        // Projects：后端有数据 → 用后端；否则用 mock
+        if (projRes?.success && projRes.data && projRes.data.length > 0) {
+          const apiProjects = projRes.data.map(dbRowToProject);
+          setProjects(apiProjects);
+        }
+        // Members：后端有数据 → 用后端；否则用 mock（init.sql 已插入 2 个默认）
+        if (memRes?.success && memRes.data) {
+          const apiMembers = memRes.data.map(dbRowToTeamMember);
+          setTeamMembers(apiMembers);
+        }
+        // History：后端有数据 → 用后端；否则用 mock
+        if (histRes?.success && histRes.data && histRes.data.length > 0) {
+          const apiHistory = histRes.data.map(dbRowToHistoryProject);
+          setHistoryProjects(apiHistory);
+        }
+
+        // 全部成功 → 数据源 = api；任意失败 → cache（用 localStorage 兜底）
+        const allOk = projRes && memRes && histRes;
+        setDataSource(allOk ? 'api' : 'cache');
+      } catch (err) {
+        console.warn('[DataContext] 后端拉取失败，使用 localStorage:', err);
+        if (!cancelled) setDataSource('cache');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ====== 初始化：自动去重 historyProjects（修复历史数据污染） ======
   useEffect(() => {
@@ -152,17 +208,34 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
   }, []); // 只在挂载时执行一次
 
-  // ====== 项目 CRUD ======
+  // ====== 项目 CRUD（同时调 API + 本地 state） ======
   const addProject = useCallback((project: Project) => {
     setProjects((prev) => [project, ...prev]);
+    // 异步调后端 API
+    void projectsApi.create(project).then((res) => {
+      if (res?.success && res.id) {
+        // 用后端返回的真实 id 替换本地 id（避免和 DB 自增 id 冲突）
+        const realId = String(res.id);
+        setProjects((prev) => prev.map((p) => (p.id === project.id ? { ...p, id: realId } : p)));
+      }
+    });
   }, [setProjects]);
 
   const updateProject = useCallback((id: string, updates: Partial<Project>) => {
     setProjects((prev) => prev.map((p) => (p.id === id ? { ...p, ...updates } : p)));
+    // 调后端 API（id 是 DB 自增 int）
+    const dbId = parseInt(id, 10);
+    if (!Number.isNaN(dbId)) {
+      void projectsApi.update(String(dbId), updates);
+    }
   }, [setProjects]);
 
   const deleteProject = useCallback((id: string) => {
     setProjects((prev) => prev.filter((p) => p.id !== id));
+    const dbId = parseInt(id, 10);
+    if (!Number.isNaN(dbId)) {
+      void projectsApi.remove(String(dbId));
+    }
   }, [setProjects]);
 
   const getProjectById = useCallback((id: string) => projects.find((p) => p.id === id), [projects]);
@@ -173,29 +246,42 @@ export function DataProvider({ children }: { children: ReactNode }) {
       if (prev.some((p) => p.id === project.id)) return prev;
       return [project, ...prev];
     });
+    // 历史项目目前调 projectsApi.create（同张表），实际应调 historyProjectsApi
+    // 这里先按 history body 调
+    void historyProjectsApi.create(project).then((res) => {
+      if (res?.success && res.id) {
+        const realId = String(res.id);
+        setHistoryProjects((prev) => prev.map((p) => (p.id === project.id ? { ...p, id: realId } : p)));
+      }
+    });
   }, [setHistoryProjects]);
 
   const updateHistoryProject = useCallback((id: string, updates: Partial<HistoricalProject>) => {
     setHistoryProjects((prev) => prev.map((p) => (p.id === id ? { ...p, ...updates } : p)));
+    // TODO: history UPDATE 接口（后端暂未提供 PUT /api/projects/history/:id）
   }, [setHistoryProjects]);
 
   const deleteHistoryProject = useCallback((id: string) => {
     setHistoryProjects((prev) => prev.filter((p) => p.id !== id));
+    // TODO: history DELETE 接口
   }, [setHistoryProjects]);
 
   const getHistoryProjectById = useCallback((id: string) => historyProjects.find((p) => p.id === id), [historyProjects]);
 
-  // ====== 团队成员 CRUD ======
+  // ====== 团队成员 CRUD（后端目前只支持 GET，POST/PUT 走 projects 表，需要扩展） ======
   const addTeamMember = useCallback((member: TeamMember) => {
     setTeamMembers((prev) => [...prev, member]);
+    // TODO: 后端 team_members 暂未提供 POST 端点
   }, [setTeamMembers]);
 
   const updateTeamMember = useCallback((id: string, updates: Partial<TeamMember>) => {
     setTeamMembers((prev) => prev.map((m) => (m.id === id ? { ...m, ...updates } : m)));
+    // TODO: 后端 team_members 暂未提供 PUT 端点
   }, [setTeamMembers]);
 
   const deleteTeamMember = useCallback((id: string) => {
     setTeamMembers((prev) => prev.filter((m) => m.id !== id));
+    // TODO: 后端 team_members 暂未提供 DELETE 端点
   }, [setTeamMembers]);
 
   // ====== 测试文档 CRUD ======
@@ -454,6 +540,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   }, [setProjects, setHistoryProjects, setTeamMembers, setTestDocs, setProjectPhases, setHistoryPhases]);
 
   const value: DataContextValue = {
+    dataSource,
     projects,
     setProjects,
     addProject,
