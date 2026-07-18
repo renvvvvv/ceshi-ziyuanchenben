@@ -1,14 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
-import { Spin, Button, Tooltip, Space, Alert } from 'antd';
+import { Spin, Button, Tooltip, Space } from 'antd';
 import {
-  FileTextOutlined,
-  TableOutlined,
-  FileExcelOutlined,
-  PaperClipOutlined,
   BookOutlined,
   ExportOutlined,
   ReloadOutlined,
-  ExclamationCircleOutlined,
 } from '@ant-design/icons';
 
 // ============================================================
@@ -73,48 +68,22 @@ function KnowledgeBase() {
 }
 
 // ============================================================
-// 全屏 iframe 组件
+// 全屏 iframe 组件（极简版）
 //
-// 设计：把整个知识库页面当成一个"iframe 容器"
-// - 默认加载飞书知识库的根目录（kb/index.json 中第一个顶层节点的链接）
-// - 用户在 iframe 内部自由浏览、点击切换文档（飞书自己带完整目录）
-// - 顶部条提供：刷新 + 在新窗口打开 + 加载状态指示
+// 设计：去掉所有自检逻辑
+// - 直接嵌入飞书 URL，浏览器自己处理登录态
+// - 顶部条只保留：标题 + 刷新 + 在飞书中打开
+// - 没有超时检测、没有 banner、没有状态指示
 // ============================================================
 function FullscreenIframe({ kbData, loading }: { kbData: KBIndex | null; loading: boolean }) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
-  const [iframeState, setIframeState] = useState<'loading' | 'loaded' | 'failed'>('loading');
-  const [bannerVisible, setBannerVisible] = useState(true);
-  const loadTimerRef = useRef<number | null>(null);
-
   // 默认 URL：第一个顶层节点的链接
   const defaultUrl = kbData?.tree?.[0]?.feishuLink || '';
 
-  // 启动超时检测（8 秒）
-  useEffect(() => {
-    if (!defaultUrl) return;
-    setIframeState('loading');
-    if (loadTimerRef.current) window.clearTimeout(loadTimerRef.current);
-    loadTimerRef.current = window.setTimeout(() => {
-      setIframeState('failed');
-    }, 8000);
-    return () => {
-      if (loadTimerRef.current) window.clearTimeout(loadTimerRef.current);
-    };
-  }, [defaultUrl]);
-
-  const handleIframeLoad = () => {
-    setIframeState((s) => (s === 'failed' ? 'failed' : 'loaded'));
-  };
-
   const handleRefresh = () => {
     if (!iframeRef.current || !defaultUrl) return;
-    setBannerVisible(true); // 重新显示 banner 让用户看引导
-    setIframeState('loading');
-    if (loadTimerRef.current) window.clearTimeout(loadTimerRef.current);
-    loadTimerRef.current = window.setTimeout(() => {
-      setIframeState('failed');
-    }, 8000);
-    iframeRef.current.src = defaultUrl;
+    // 强制 reload：用随机参数绕过浏览器缓存
+    iframeRef.current.src = defaultUrl + (defaultUrl.includes('?') ? '&' : '?') + '_t=' + Date.now();
   };
 
   return (
@@ -130,7 +99,7 @@ function FullscreenIframe({ kbData, loading }: { kbData: KBIndex | null; loading
         overflow: 'hidden',
       }}
     >
-      {/* 顶部条：标题 + 状态 + 操作 */}
+      {/* 顶部条：标题 + 操作 */}
       <div
         style={{
           display: 'flex',
@@ -149,16 +118,13 @@ function FullscreenIframe({ kbData, loading }: { kbData: KBIndex | null; loading
           }}>
             智航测试部知识库
           </div>
-          <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 11, marginTop: 2, display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span>飞书知识库 · iframe 实时嵌入</span>
+          <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 11, marginTop: 2 }}>
+            飞书知识库 · iframe 实时嵌入
             {kbData && (
-              <span style={{ color: 'rgba(255,255,255,0.3)' }}>
-                · 共 {kbData.totalNodes} 个文档 · 导出时间 {kbData.exportTime}
+              <span style={{ marginLeft: 8, color: 'rgba(255,255,255,0.3)' }}>
+                · 共 {kbData.totalNodes} 个文档
               </span>
             )}
-            {iframeState === 'loading' && defaultUrl && <span style={{ color: '#4d9fff' }}>· 加载中…</span>}
-            {iframeState === 'loaded' && <span style={{ color: '#52c41a' }}>· 已加载</span>}
-            {iframeState === 'failed' && <span style={{ color: '#faad14' }}>· 加载超时（未登录飞书？）</span>}
           </div>
         </div>
         {defaultUrl && (
@@ -195,42 +161,6 @@ function FullscreenIframe({ kbData, loading }: { kbData: KBIndex | null; loading
         )}
       </div>
 
-      {/* 加载超时引导 banner（可关闭） */}
-      {iframeState === 'failed' && defaultUrl && bannerVisible && (
-        <Alert
-          banner
-          type="warning"
-          showIcon
-          closable
-          onClose={() => setBannerVisible(false)}
-          icon={<ExclamationCircleOutlined />}
-          message={
-            <span>
-              <strong style={{ color: '#faad14' }}>iframe 加载超时</strong>
-              <span style={{ color: 'rgba(255,255,255,0.65)', marginLeft: 8 }}>
-                如果浏览器未登录飞书，iframe 内会显示登录二维码且不会自动跳转
-              </span>
-            </span>
-          }
-          description={
-            <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, lineHeight: 1.7, paddingTop: 4 }}>
-              <div>① 点击右上角「在飞书中打开 ↗」在新标签登录飞书</div>
-              <div>② 登录成功后浏览器会记住飞书 cookie（30 天有效）</div>
-              <div>③ 回到本页，点击 🔄 刷新按钮 → iframe 自动带 cookie → 显示内容</div>
-              <div style={{ marginTop: 4, color: 'rgba(255,255,255,0.5)' }}>
-                iOS Safari 用户：设置 → Safari 浏览器 → 隐私与安全性 → 关闭「阻止跨站跟踪」
-              </div>
-            </div>
-          }
-          style={{
-            background: 'rgba(250,173,20,0.08)',
-            border: '1px solid rgba(250,173,20,0.2)',
-            borderRadius: 0,
-            margin: 0,
-          }}
-        />
-      )}
-
       {/* iframe 全屏 */}
       <div style={{ flex: 1, background: '#fff', minHeight: 0, overflow: 'hidden' }}>
         {loading ? (
@@ -246,10 +176,8 @@ function FullscreenIframe({ kbData, loading }: { kbData: KBIndex | null; loading
         ) : defaultUrl ? (
           <iframe
             ref={iframeRef}
-            key={defaultUrl}
             src={defaultUrl}
             title="智航测试部知识库"
-            onLoad={handleIframeLoad}
             style={{ width: '100%', height: '100%', border: 'none', display: 'block' }}
             sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-top-navigation allow-modals"
             allow="fullscreen"
