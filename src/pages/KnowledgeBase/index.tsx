@@ -1,5 +1,5 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
-import { Tree, Input, Empty, Spin, Tag, Button, Tooltip, Alert, Space } from 'antd';
+import { useState, useMemo, useEffect } from 'react';
+import { Tree, Input, Empty, Spin, Tag, Button, Tooltip, Space } from 'antd';
 import type { DataNode } from 'antd/es/tree';
 import {
   SearchOutlined,
@@ -11,8 +11,10 @@ import {
   BookOutlined,
   ExpandOutlined,
   CompressOutlined,
-  ExclamationCircleOutlined,
-  ReloadOutlined,
+  ExportOutlined,
+  ThunderboltOutlined,
+  ClockCircleOutlined,
+  ApartmentOutlined,
 } from '@ant-design/icons';
 
 // ============================================================
@@ -332,7 +334,7 @@ function KnowledgeBase() {
         )}
       </div>
 
-      {/* ===== 中间：iframe 嵌入区 ===== */}
+      {/* ===== 中间：文档详情卡片区（替代 iframe 嵌入） ===== */}
       <div
         style={{
           flex: 1,
@@ -346,7 +348,7 @@ function KnowledgeBase() {
           overflow: 'hidden',
         }}
       >
-        <IframePane node={selectedNode} />
+        <DocumentCardPane node={selectedNode} />
       </div>
 
       {/* ===== 右边：超链接列表 ===== */}
@@ -375,48 +377,14 @@ function KnowledgeBase() {
 }
 
 // ============================================================
-// 中间：iframe 嵌入面板（带智能加载状态 + 飞书登录引导）
+// 中间：文档详情卡片（替代 iframe 嵌入）
+//
+// 设计原因：浏览器默认禁止第三方 cookie（Safari/FF 全禁，Chrome 即将全禁）
+// iframe 嵌入飞书会导致扫码登录失败（qrPolling API 报"系统繁忙"）
+// 飞书官方建议：使用 window.open() 在新标签打开
 // ============================================================
-function IframePane({ node }: { node: KBNode | null }) {
+function DocumentCardPane({ node }: { node: KBNode | null }) {
   const cfg = node ? (TYPE_CONFIG[node.type] || TYPE_CONFIG.docx) : null;
-  const iframeRef = useRef<HTMLIFrameElement>(null);
-  // iframe 加载状态：'idle' | 'loading' | 'loaded' | 'blocked'
-  // 'blocked' 触发条件：onLoad 超时（说明被 X-Frame-Options 拦截或网络不通）
-  const [loadState, setLoadState] = useState<'idle' | 'loading' | 'loaded' | 'blocked'>('idle');
-  const loadTimerRef = useRef<number | null>(null);
-
-  // 切换节点时重置加载状态 + 启动超时检测
-  useEffect(() => {
-    if (!node) {
-      setLoadState('idle');
-      if (loadTimerRef.current) window.clearTimeout(loadTimerRef.current);
-      return;
-    }
-    setLoadState('loading');
-    // 6 秒后仍未 onLoad → 视为被拦截
-    if (loadTimerRef.current) window.clearTimeout(loadTimerRef.current);
-    loadTimerRef.current = window.setTimeout(() => {
-      setLoadState((s) => (s === 'loading' ? 'blocked' : s));
-    }, 6000);
-    return () => {
-      if (loadTimerRef.current) window.clearTimeout(loadTimerRef.current);
-    };
-  }, [node?.key]);
-
-  const handleIframeLoad = () => {
-    if (loadTimerRef.current) window.clearTimeout(loadTimerRef.current);
-    setLoadState('loaded');
-  };
-
-  const handleManualRefresh = () => {
-    if (!iframeRef.current || !node) return;
-    setLoadState('loading');
-    if (loadTimerRef.current) window.clearTimeout(loadTimerRef.current);
-    loadTimerRef.current = window.setTimeout(() => {
-      setLoadState((s) => (s === 'loading' ? 'blocked' : s));
-    }, 6000);
-    iframeRef.current.src = node.feishuLink;
-  };
 
   return (
     <>
@@ -451,114 +419,312 @@ function IframePane({ node }: { node: KBNode | null }) {
           }}>
             {node ? node.title : '智航测试部知识库'}
           </div>
-          <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 11, marginTop: 2, display: 'flex', alignItems: 'center', gap: 6 }}>
-            {node ? (
-              <>
-                <span>{cfg?.label || ''} · 飞书内嵌预览</span>
-                {loadState === 'loading' && <span style={{ color: '#4d9fff' }}>· 加载中…</span>}
-                {loadState === 'loaded' && <span style={{ color: '#52c41a' }}>· 已加载</span>}
-                {loadState === 'blocked' && <span style={{ color: '#faad14' }}>· 嵌入受限</span>}
-              </>
-            ) : '从左侧目录选择文档以预览'}
+          <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 11, marginTop: 2 }}>
+            {node ? `${cfg?.label || ''} · 飞书知识库` : '从左侧目录选择文档以查看详情'}
           </div>
         </div>
         {node && (
-          <Space>
-            <Tooltip title="刷新 iframe">
-              <Button
-                size="small"
-                icon={<ReloadOutlined />}
-                onClick={handleManualRefresh}
-                style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.7)' }}
-              />
-            </Tooltip>
-            <Button
-              size="small"
-              type="primary"
-              icon={<LinkOutlined />}
-              href={node.feishuLink}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{
-                background: 'linear-gradient(135deg, #4d9fff, #00f0ff)',
-                border: 'none',
-                borderRadius: 6,
-                fontSize: 12,
-              }}
-            >
-              在飞书中打开 ↗
-            </Button>
-          </Space>
+          <Button
+            size="small"
+            type="primary"
+            icon={<ExportOutlined />}
+            href={node.feishuLink}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              background: 'linear-gradient(135deg, #4d9fff, #00f0ff)',
+              border: 'none',
+              borderRadius: 6,
+              fontSize: 12,
+            }}
+          >
+            在飞书中打开 ↗
+          </Button>
         )}
       </div>
 
-      {/* 智能引导 banner：检测到被拦截时显示 */}
-      {loadState === 'blocked' && node && (
-        <Alert
-          banner
-          type="warning"
-          showIcon
-          icon={<ExclamationCircleOutlined />}
-          message={
-            <span>
-              <strong style={{ color: '#faad14' }}>iframe 嵌入受限</strong>
-              <span style={{ color: 'rgba(255,255,255,0.65)', marginLeft: 8 }}>
-                飞书禁止跨域嵌入（X-Frame-Options）。请按下方步骤操作：
-              </span>
-            </span>
-          }
-          description={
-            <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, lineHeight: 1.7, paddingTop: 4 }}>
-              <div>① 点击右上角 <strong style={{ color: '#7cb8ff' }}>「在飞书中打开 ↗」</strong>，在新标签登录飞书</div>
-              <div>② 登录成功后浏览器会记住飞书 cookie（同一域自动生效）</div>
-              <div>③ 回到本页，点 <strong style={{ color: '#7cb8ff' }}>「刷新」</strong> 或重新选择文档</div>
-              <div style={{ marginTop: 4, color: 'rgba(255,255,255,0.45)' }}>
-                提示：只要浏览器在 feishu.cn 有登录态，本页 iframe 就能直接展示和操作。
-              </div>
-            </div>
-          }
-          style={{
-            background: 'rgba(250,173,20,0.08)',
-            border: '1px solid rgba(250,173,20,0.2)',
-            borderRadius: 0,
-            margin: 0,
-          }}
-        />
-      )}
-
-      {/* iframe 区 */}
-      <div style={{ flex: 1, position: 'relative', background: '#fff', minHeight: 0 }}>
+      {/* 主体卡片区 */}
+      <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
         {node ? (
-          <iframe
-            ref={iframeRef}
-            key={node.key}
-            src={node.feishuLink}
-            title={node.title}
-            onLoad={handleIframeLoad}
-            style={{
-              width: '100%', height: '100%', border: 'none', display: 'block',
-            }}
-            sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-top-navigation allow-modals"
-          />
+          <DocumentCard node={node} />
         ) : (
-          <div
-            style={{
-              width: '100%', height: '100%',
-              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-              background: 'linear-gradient(135deg, rgba(77,159,255,0.04), rgba(0,240,255,0.02))',
-              color: 'rgba(255,255,255,0.5)',
-            }}
-          >
-            <BookOutlined style={{ fontSize: 56, color: '#4d9fff', opacity: 0.4, marginBottom: 16 }} />
-            <div style={{ fontSize: 16, fontWeight: 600, color: 'rgba(255,255,255,0.7)', marginBottom: 6 }}>
-              智航测试部知识库
-            </div>
-            <div style={{ fontSize: 12 }}>从左侧目录选择文档，在此处内嵌预览</div>
-          </div>
+          <WelcomeCard />
         )}
       </div>
     </>
   );
+}
+
+// ============================================================
+// 文档详情卡片
+// ============================================================
+function DocumentCard({ node }: { node: KBNode }) {
+  const cfg = TYPE_CONFIG[node.type] || TYPE_CONFIG.docx;
+  const totalSubDocs = countAllDescendants(node);
+  const breadcrumb = buildBreadcrumb(node);
+
+  return (
+    <div style={{ padding: '32px 40px', maxWidth: 720, margin: '0 auto' }}>
+      {/* 顶部大图标 + 标题 */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 20, marginBottom: 28 }}>
+        <div
+          style={{
+            width: 80, height: 80, borderRadius: 18, flexShrink: 0,
+            background: `linear-gradient(135deg, ${cfg.color}25, ${cfg.color}10)`,
+            border: `1px solid ${cfg.color}40`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 36, color: cfg.color,
+            boxShadow: `0 8px 24px ${cfg.color}20`,
+          }}
+        >
+          {cfg.icon}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <h2 style={{
+            margin: 0, marginBottom: 10,
+            color: 'rgba(255,255,255,0.95)', fontSize: 24,
+            fontFamily: 'var(--font-primary)', fontWeight: 600,
+            lineHeight: 1.3,
+          }}>
+            {node.title}
+          </h2>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+            <Tag style={{
+              background: `${cfg.color}18`, color: cfg.color,
+              border: `1px solid ${cfg.color}30`, fontSize: 12,
+              margin: 0, padding: '2px 10px', borderRadius: 4,
+            }}>
+              {cfg.label}
+            </Tag>
+            {totalSubDocs > 0 && (
+              <Tag style={{
+                background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.7)',
+                border: '1px solid rgba(255,255,255,0.1)', fontSize: 12,
+                margin: 0, padding: '2px 10px', borderRadius: 4,
+              }}>
+                {totalSubDocs} 个子文档
+              </Tag>
+            )}
+            <Tag style={{
+              background: 'rgba(82,196,26,0.1)', color: '#52c41a',
+              border: '1px solid rgba(82,196,26,0.2)', fontSize: 12,
+              margin: 0, padding: '2px 10px', borderRadius: 4,
+            }}>
+              飞书知识库
+            </Tag>
+          </div>
+        </div>
+      </div>
+
+      {/* 路径面包屑 */}
+      {breadcrumb.length > 1 && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 6,
+          padding: '10px 14px', marginBottom: 20,
+          background: 'rgba(77,159,255,0.04)',
+          border: '1px solid rgba(77,159,255,0.12)',
+          borderRadius: 8,
+          color: 'rgba(255,255,255,0.6)', fontSize: 12,
+          fontFamily: 'var(--font-primary)',
+        }}>
+          <ApartmentOutlined style={{ color: '#4d9fff' }} />
+          {breadcrumb.map((seg, i) => (
+            <span key={i}>
+              <span style={{ color: i === breadcrumb.length - 1 ? '#fff' : 'rgba(255,255,255,0.7)' }}>
+                {seg}
+              </span>
+              {i < breadcrumb.length - 1 && <span style={{ color: 'rgba(255,255,255,0.3)', margin: '0 6px' }}>›</span>}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* 主操作卡片 */}
+      <div
+        style={{
+          background: 'linear-gradient(135deg, rgba(77,159,255,0.08), rgba(0,240,255,0.04))',
+          border: '1px solid rgba(77,159,255,0.2)',
+          borderRadius: 12,
+          padding: '24px 28px',
+          marginBottom: 20,
+        }}
+      >
+        <div style={{
+          color: 'rgba(255,255,255,0.85)', fontSize: 14, marginBottom: 12,
+          fontFamily: 'var(--font-primary)', fontWeight: 600,
+        }}>
+          <ThunderboltOutlined style={{ color: '#52c41a', marginRight: 8 }} />
+          点击下方按钮在飞书中查看完整内容
+        </div>
+        <div style={{
+          color: 'rgba(255,255,255,0.5)', fontSize: 12, lineHeight: 1.7, marginBottom: 18,
+          fontFamily: 'var(--font-primary)',
+        }}>
+          <div>• 飞书知识库支持文档、多维表格、电子表格、附件等多种格式</div>
+          <div>• 在线版样式更全，图片、表格、附件可正常显示和编辑</div>
+          <div>• 首次打开会提示登录飞书；登录后浏览器自动记忆登录态</div>
+        </div>
+
+        <Button
+          type="primary"
+          size="large"
+          icon={<ExportOutlined />}
+          href={node.feishuLink}
+          target="_blank"
+          rel="noopener noreferrer"
+          block
+          style={{
+            background: 'linear-gradient(135deg, #4d9fff, #00f0ff)',
+            border: 'none', height: 48, fontSize: 15,
+            fontFamily: 'var(--font-primary)', fontWeight: 600,
+            borderRadius: 10,
+            boxShadow: '0 4px 16px rgba(77,159,255,0.3)',
+          }}
+        >
+          在飞书中打开此文档 ↗
+        </Button>
+
+        {/* 飞书链接展示 */}
+        <Tooltip title="点击复制链接">
+          <div
+            onClick={() => {
+              navigator.clipboard?.writeText(node.feishuLink);
+            }}
+            style={{
+              marginTop: 14, padding: '8px 14px',
+              background: 'rgba(0,0,0,0.2)', borderRadius: 8,
+              color: 'rgba(255,255,255,0.35)', fontSize: 11,
+              fontFamily: 'monospace', cursor: 'pointer',
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              textAlign: 'center',
+            }}
+          >
+            {node.feishuLink}
+          </div>
+        </Tooltip>
+      </div>
+
+      {/* 子文档快速预览 */}
+      {node.children.length > 0 && (
+        <div>
+          <div style={{
+            color: 'rgba(255,255,255,0.6)', fontSize: 13, fontWeight: 600,
+            marginBottom: 12, fontFamily: 'var(--font-primary)',
+          }}>
+            子文档（{node.children.length}） · 点击右侧「相关链接」在新窗口打开
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {node.children.slice(0, 5).map((child) => {
+              const cc = TYPE_CONFIG[child.type] || TYPE_CONFIG.docx;
+              return (
+                <a
+                  key={child.key}
+                  href={child.feishuLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    padding: '10px 14px',
+                    background: 'rgba(255,255,255,0.03)',
+                    border: '1px solid rgba(255,255,255,0.06)',
+                    borderRadius: 8, textDecoration: 'none',
+                    transition: 'all 0.2s',
+                  }}
+                  onMouseEnter={(e) => {
+                    (e.currentTarget as HTMLElement).style.background = `${cc.color}15`;
+                    (e.currentTarget as HTMLElement).style.borderColor = `${cc.color}40`;
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.03)';
+                    (e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,255,255,0.06)';
+                  }}
+                >
+                  <span style={{ color: cc.color, fontSize: 14 }}>{cc.icon}</span>
+                  <span style={{
+                    color: 'rgba(255,255,255,0.85)', fontSize: 13,
+                    fontFamily: 'var(--font-primary)', flex: 1,
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  }}>
+                    {child.title}
+                  </span>
+                  <Tag style={{
+                    background: `${cc.color}12`, color: cc.color,
+                    border: `1px solid ${cc.color}25`, fontSize: 10, margin: 0,
+                  }}>
+                    {cc.label}
+                  </Tag>
+                  <LinkOutlined style={{ color: 'rgba(255,255,255,0.3)', fontSize: 12 }} />
+                </a>
+              );
+            })}
+            {node.children.length > 5 && (
+              <div style={{
+                color: 'rgba(255,255,255,0.4)', fontSize: 11, textAlign: 'center', padding: 6,
+                fontFamily: 'var(--font-primary)',
+              }}>
+                还有 {node.children.length - 5} 个子文档，请在右侧「相关链接」查看全部
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 底部说明 */}
+      <div style={{
+        marginTop: 28, padding: '12px 14px',
+        background: 'rgba(255,255,255,0.02)', borderRadius: 8,
+        color: 'rgba(255,255,255,0.35)', fontSize: 11,
+        fontFamily: 'var(--font-primary)', lineHeight: 1.6,
+        textAlign: 'center',
+      }}>
+        <ClockCircleOutlined style={{ marginRight: 6 }} />
+        为何不在本平台内嵌预览？浏览器默认禁止第三方 cookie（Safari/FF 全禁，Chrome 即将全禁），
+        iframe 内飞书扫码登录会失败。采用「在新窗口打开」是飞书官方推荐的方案。
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// 欢迎卡片（未选中节点）
+// ============================================================
+function WelcomeCard() {
+  return (
+    <div style={{
+      textAlign: 'center', padding: '80px 20px',
+      color: 'rgba(255,255,255,0.5)',
+    }}>
+      <BookOutlined style={{ fontSize: 64, color: '#4d9fff', opacity: 0.4, marginBottom: 20 }} />
+      <h2 style={{ color: 'rgba(255,255,255,0.85)', fontSize: 22, marginBottom: 8, fontFamily: 'var(--font-primary)' }}>
+        智航测试部知识库
+      </h2>
+      <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13, fontFamily: 'var(--font-primary)', maxWidth: 400, margin: '0 auto' }}>
+        从左侧目录选择文档，点击后在飞书中查看完整内容
+      </p>
+    </div>
+  );
+}
+
+// ============================================================
+// 辅助：递归统计所有后代
+// ============================================================
+function countAllDescendants(node: KBNode): number {
+  let n = 0;
+  const walk = (kids: KBNode[]) => {
+    for (const c of kids) { n += 1; walk(c.children); }
+  };
+  walk(node.children);
+  return n;
+}
+
+// ============================================================
+// 辅助：构建面包屑（从 flat 找父链）
+// ============================================================
+function buildBreadcrumb(node: KBNode): string[] {
+  // 我们只知道当前节点和它的 feishuLink 路径信息
+  // 简化处理：从 title 反推不可能，我们返回 [当前 title]
+  // 后续可以扩展为全局 flat 索引
+  return [node.title];
 }
 
 // ============================================================
