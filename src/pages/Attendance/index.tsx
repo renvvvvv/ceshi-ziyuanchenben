@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
-import { Table, Select, DatePicker, Button, Modal, Tag, Empty, Radio, message, InputNumber, Form } from 'antd';
+import { Table, Select, DatePicker, Button, Modal, Tag, Empty, Radio, message, InputNumber, Form, Tabs, Input, Space } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { DownloadOutlined, EyeOutlined, CalendarOutlined, PrinterOutlined, FolderOutlined, UserOutlined, EditOutlined } from '@ant-design/icons';
+import { DownloadOutlined, EyeOutlined, CalendarOutlined, PrinterOutlined, FolderOutlined, UserOutlined, EditOutlined, ThunderboltOutlined, ToolOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import * as XLSX from 'xlsx';
 import { useData } from '../../store/DataContext';
@@ -45,7 +45,7 @@ function dutyRange(pStart: string, pEnd: string, cStart: string, cEnd: string, t
 }
 
 function Attendance() {
-  const { teamMembers, attendanceAdjustments, setAttendanceAdjustments } = useData();
+  const { teamMembers, attendanceAdjustments, setAttendanceAdjustments, updateTeamMember } = useData();
   const [monthFilter, setMonthFilter] = useState(() => {
     const t = dayjs();
     return t.date() >= 19 ? t.add(1, 'month') : t;
@@ -58,6 +58,14 @@ function Attendance() {
   const [manualForm] = Form.useForm();
   const [manualMember, setManualMember] = useState<string | undefined>();
   const [manualProject, setManualProject] = useState<string | undefined>();
+
+  // 批量人工校准状态
+  const [batchOpen, setBatchOpen] = useState(false);
+  const [batchTab, setBatchTab] = useState<'attendance' | 'position'>('attendance');
+  // 批量考勤：每行 [memberId, projectName] → { onDutyDays, leaveDays }
+  const [batchAdj, setBatchAdj] = useState<Record<string, { onDutyDays?: number; leaveDays?: number }>>({});
+  // 批量岗位：每行 memberId → position
+  const [batchPos, setBatchPos] = useState<Record<string, string>>({});
 
   const { cycleStart, cycleEnd, cycleLabel } = useMemo(() => {
     if (cycleType === 'cycle19') {
@@ -160,6 +168,75 @@ function Attendance() {
       message.success(`已保存人工校准：${teamMembers.find((m) => m.id === values.memberId)?.name} · ${values.projectName}`);
       setManualOpen(false);
     } catch {}
+  };
+
+  // 打开批量人工校准（用当前 filteredRows 初始化编辑状态）
+  const openBatchAdjust = () => {
+    const initAdj: Record<string, { onDutyDays?: number; leaveDays?: number }> = {};
+    filteredRows.forEach((r) => {
+      initAdj[`${r.memberId}|${r.projectName}`] = { onDutyDays: r.onDutyDays, leaveDays: r.leaveDays };
+    });
+    setBatchAdj(initAdj);
+    const initPos: Record<string, string> = {};
+    teamMembers.forEach((m) => {
+      initPos[m.id] = m.position || POSITION_MAP[m.id] || '测试工程师';
+    });
+    setBatchPos(initPos);
+    setBatchTab('attendance');
+    setBatchOpen(true);
+  };
+
+  // 保存批量校准
+  const handleBatchSave = () => {
+    let adjCount = 0;
+    let posCount = 0;
+
+    // 1) 写入批量考勤
+    Object.entries(batchAdj).forEach(([compositeKey, v]) => {
+      // 仅当用户修改过（原值与当前 allRows 计算值不同时）才落库
+      const [memberId, projectName] = compositeKey.split('|');
+      const original = filteredRows.find((r) => r.memberId === memberId && r.projectName === projectName);
+      if (!original) return;
+      const onDutyChanged = v.onDutyDays !== undefined && v.onDutyDays !== original.onDutyDays;
+      const leaveChanged = v.leaveDays !== undefined && v.leaveDays !== original.leaveDays;
+      if (!onDutyChanged && !leaveChanged) return;
+
+      // 落库 key（与单点校准一致）：{memberId}-{projectName}-{cycleStart}
+      const adjKey = `${memberId}-${projectName}-${cycleStart}`;
+      setAttendanceAdjustments((prev) => {
+        const existing = prev[adjKey];
+        // 应出勤通过 projectStart/projectEnd 推算；这里直接转成"调整 leaveDays / 标记"
+        const projStart = existing?.projectStart ?? original.projectStart;
+        const projEnd = existing?.projectEnd ?? original.projectEnd;
+        return {
+          ...prev,
+          [adjKey]: {
+            projectStart: projStart,
+            projectEnd: projEnd,
+            leaveDays: v.leaveDays ?? existing?.leaveDays ?? original.leaveDays,
+          },
+        };
+      });
+      adjCount++;
+    });
+
+    // 2) 写入批量岗位
+    Object.entries(batchPos).forEach(([memberId, newPos]) => {
+      const m = teamMembers.find((x) => x.id === memberId);
+      if (!m) return;
+      const current = m.position || POSITION_MAP[memberId] || '测试工程师';
+      if (newPos !== current) {
+        updateTeamMember(memberId, { position: newPos });
+        posCount++;
+      }
+    });
+
+    if (adjCount === 0 && posCount === 0) {
+      message.info('未检测到修改');
+    } else {
+      message.success(`批量校准完成：考勤 ${adjCount} 项，岗位 ${posCount} 项`);
+    }
+    setBatchOpen(false);
   };
 
   // 计算全部考勤行（人员级）+ 应用人工校准
@@ -366,6 +443,10 @@ function Attendance() {
             style={{ background: 'rgba(250,173,20,0.1)', border: '1px solid rgba(250,173,20,0.4)', color: '#faad14', borderRadius: 8 }}>
             人工校准
           </Button>
+          <Button icon={<ThunderboltOutlined />} onClick={openBatchAdjust}
+            style={{ background: 'rgba(82,196,26,0.1)', border: '1px solid rgba(82,196,26,0.4)', color: '#52c41a', borderRadius: 8 }}>
+            批量人工校准
+          </Button>
           <Button icon={<EyeOutlined />} onClick={() => setPreviewOpen(true)}
             style={{ background: 'rgba(77,159,255,0.1)', border: '1px solid rgba(77,159,255,0.3)', color: '#7cb8ff', borderRadius: 8 }}>预览</Button>
           <Button type="primary" icon={<DownloadOutlined />} onClick={handleExport}
@@ -499,6 +580,154 @@ function Attendance() {
             提示：选择人员/项目后会自动填入系统计算值（基于项目周期∩考勤周期-休假），可在此基础上微调保存
           </div>
         </Form>
+      </Modal>
+
+      {/* 批量人工校准 Modal */}
+      <Modal
+        title={
+          <span>
+            <ThunderboltOutlined style={{ color: '#52c41a', marginRight: 8 }} />
+            批量人工校准
+            <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginLeft: 12, fontWeight: 'normal' }}>
+              支持校准考勤（请假/应出勤）和岗位 · 仅保存实际修改的项
+            </span>
+          </span>
+        }
+        open={batchOpen}
+        onCancel={() => setBatchOpen(false)}
+        onOk={handleBatchSave}
+        okText="保存全部修改"
+        cancelText="取消"
+        width={960}
+        okButtonProps={{ style: { background: 'linear-gradient(135deg, #52c41a, #73d13d)', border: 'none' } }}
+      >
+        <Tabs
+          activeKey={batchTab}
+          onChange={(k) => setBatchTab(k as 'attendance' | 'position')}
+          items={[
+            {
+              key: 'attendance',
+              label: <span><EditOutlined /> 批量校准考勤（{filteredRows.length} 行）</span>,
+              children: filteredRows.length === 0 ? (
+                <Empty description="当前筛选无考勤数据" />
+              ) : (
+                <div style={{ maxHeight: '55vh', overflowY: 'auto' }}>
+                  <div style={{ background: 'rgba(82,196,26,0.05)', border: '1px solid rgba(82,196,26,0.15)', borderRadius: 6, padding: '8px 12px', marginBottom: 12, color: 'rgba(255,255,255,0.6)', fontSize: 12 }}>
+                    <ToolOutlined style={{ color: '#52c41a', marginRight: 6 }} />
+                    下方表格展示了「当前筛选条件下」的全部考勤行。修改「请假天数」保存后即覆盖自动计算结果。仅当数值与原值不同时才会落库。
+                  </div>
+                  <Table<AttendanceRow>
+                    size="small"
+                    pagination={false}
+                    scroll={{ y: 360 }}
+                    dataSource={filteredRows}
+                    rowKey={(r) => `${r.memberId}|${r.projectName}`}
+                    columns={[
+                      {
+                        title: '人员', dataIndex: 'memberName', width: 90,
+                        render: (name: string, r) => (
+                          <div>
+                            <div style={{ fontSize: 12 }}>{name}</div>
+                            <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)' }}>{r.position}</div>
+                          </div>
+                        ),
+                      },
+                      { title: '项目', dataIndex: 'projectName', width: 200, ellipsis: true },
+                      { title: '应出勤', dataIndex: 'onDutyDays', width: 70, align: 'center' as const,
+                        render: (v: number, r) => (
+                          <InputNumber
+                            size="small"
+                            min={0} max={365}
+                            value={batchAdj[`${r.memberId}|${r.projectName}`]?.onDutyDays ?? v}
+                            onChange={(nv) => setBatchAdj((prev) => ({ ...prev, [`${r.memberId}|${r.projectName}`]: { ...prev[`${r.memberId}|${r.projectName}`], onDutyDays: nv ?? undefined } }))}
+                            style={{ width: 60 }}
+                          />
+                        ),
+                      },
+                      { title: '请假', dataIndex: 'leaveDays', width: 70, align: 'center' as const,
+                        render: (v: number, r) => (
+                          <InputNumber
+                            size="small"
+                            min={0} max={365}
+                            value={batchAdj[`${r.memberId}|${r.projectName}`]?.leaveDays ?? v}
+                            onChange={(nv) => setBatchAdj((prev) => ({ ...prev, [`${r.memberId}|${r.projectName}`]: { ...prev[`${r.memberId}|${r.projectName}`], leaveDays: nv ?? undefined } }))}
+                            style={{ width: 60 }}
+                          />
+                        ),
+                      },
+                      { title: '原值', key: 'orig', width: 100, align: 'center' as const,
+                        render: (_v, r) => (
+                          <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11 }}>
+                            应出 {r.onDutyDays} / 请假 {r.leaveDays}
+                          </span>
+                        ),
+                      },
+                      { title: '状态', key: 'dirty', width: 70, align: 'center' as const,
+                        render: (_v, r) => {
+                          const cur = batchAdj[`${r.memberId}|${r.projectName}`];
+                          const dirty = (cur?.onDutyDays !== undefined && cur.onDutyDays !== r.onDutyDays) || (cur?.leaveDays !== undefined && cur.leaveDays !== r.leaveDays);
+                          return dirty
+                            ? <Tag color="orange" style={{ margin: 0 }}>已修改</Tag>
+                            : <Tag style={{ margin: 0, background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.4)', border: 'none' }}>未变</Tag>;
+                        },
+                      },
+                    ]}
+                  />
+                </div>
+              ),
+            },
+            {
+              key: 'position',
+              label: <span><UserOutlined /> 批量校准岗位（{teamMembers.length} 人）</span>,
+              children: (
+                <div style={{ maxHeight: '55vh', overflowY: 'auto' }}>
+                  <div style={{ background: 'rgba(77,159,255,0.05)', border: '1px solid rgba(77,159,255,0.15)', borderRadius: 6, padding: '8px 12px', marginBottom: 12, color: 'rgba(255,255,255,0.6)', fontSize: 12 }}>
+                    <UserOutlined style={{ color: '#4d9fff', marginRight: 6 }} />
+                    修改岗位后即时保存到团队成员档案（影响所有页面）。仅当与原值不同时才会落库。
+                  </div>
+                  <Table
+                    size="small"
+                    pagination={false}
+                    scroll={{ y: 360 }}
+                    dataSource={teamMembers}
+                    rowKey={(r) => r.id}
+                    columns={[
+                      { title: '人员', dataIndex: 'name', width: 100 },
+                      { title: '工号', dataIndex: 'employeeId', width: 100 },
+                      { title: '当前岗位', key: 'curPos', width: 140,
+                        render: (_v, r) => {
+                          const cur = r.position || POSITION_MAP[r.id] || '测试工程师';
+                          const style = POSITION_STYLES[cur];
+                          return style ? <Tag style={{ background: style.bg, color: style.color, border: 'none', margin: 0 }}>{cur}</Tag> : <span>{cur}</span>;
+                        },
+                      },
+                      { title: '调整岗位', key: 'newPos', width: 180,
+                        render: (_v, r) => (
+                          <Select
+                            size="small"
+                            value={batchPos[r.id] ?? r.position ?? POSITION_MAP[r.id] ?? '测试工程师'}
+                            onChange={(nv) => setBatchPos((prev) => ({ ...prev, [r.id]: nv }))}
+                            style={{ width: '100%' }}
+                            options={['助理测试工程师', '测试工程师', '项目主测', '项目经理'].map((v) => ({ value: v, label: v }))}
+                          />
+                        ),
+                      },
+                      { title: '状态', key: 'dirty', width: 70, align: 'center' as const,
+                        render: (_v, r) => {
+                          const cur = r.position || POSITION_MAP[r.id] || '测试工程师';
+                          const nv = batchPos[r.id] ?? cur;
+                          return nv !== cur
+                            ? <Tag color="orange" style={{ margin: 0 }}>已修改</Tag>
+                            : <Tag style={{ margin: 0, background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.4)', border: 'none' }}>未变</Tag>;
+                        },
+                      },
+                    ]}
+                  />
+                </div>
+              ),
+            },
+          ]}
+        />
       </Modal>
     </div>
   );
