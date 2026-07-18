@@ -330,278 +330,280 @@ function KnowledgeBase() {
         )}
       </div>
 
-      {/* ===== 右侧内容区 ===== */}
+      {/* ===== 中间：iframe 嵌入区 ===== */}
       <div
         style={{
           flex: 1,
+          minWidth: 0,
           height: '100%',
           background: 'rgba(255,255,255,0.04)',
           border: '1px solid rgba(255,255,255,0.1)',
           borderRadius: 12,
-          padding: '24px 32px',
-          overflowY: 'auto',
-          minWidth: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
         }}
       >
-        {selectedNode ? (
-          <SelectedNodeView node={selectedNode} />
-        ) : (
-          <WelcomeView kbData={kbData} />
-        )}
+        <IframePane node={selectedNode} />
+      </div>
+
+      {/* ===== 右边：超链接列表 ===== */}
+      <div
+        style={{
+          width: 300,
+          flexShrink: 0,
+          height: '100%',
+          background: 'rgba(255,255,255,0.04)',
+          border: '1px solid rgba(255,255,255,0.1)',
+          borderRadius: 12,
+          padding: '16px 14px',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+        }}
+      >
+        <LinkListPane
+          node={selectedNode}
+          allNodes={kbData?.tree || []}
+          onSelect={(k) => setSelectedKey(k)}
+        />
       </div>
     </div>
   );
 }
 
 // ============================================================
-// 选中节点的展示视图
+// 中间：iframe 嵌入面板
 // ============================================================
-function SelectedNodeView({ node }: { node: KBNode }) {
-  const cfg = TYPE_CONFIG[node.type] || TYPE_CONFIG.docx;
+function IframePane({ node }: { node: KBNode | null }) {
+  const cfg = node ? (TYPE_CONFIG[node.type] || TYPE_CONFIG.docx) : null;
 
   return (
-    <div>
-      {/* 文档标题 */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
-        <div
-          style={{
-            width: 44,
-            height: 44,
-            borderRadius: 10,
-            background: `${cfg.color}18`,
-            border: `1px solid ${cfg.color}30`,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: 20,
-            color: cfg.color,
-          }}
-        >
-          {cfg.icon}
-        </div>
-        <div>
-          <h3 style={{ margin: 0, color: 'rgba(255,255,255,0.95)', fontSize: 20, fontFamily: 'var(--font-primary)' }}>
-            {node.title}
-          </h3>
-          <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
-            <Tag style={{ background: `${cfg.color}18`, color: cfg.color, border: `1px solid ${cfg.color}30`, fontSize: 11 }}>
-              {cfg.label}
-            </Tag>
-            {node.children.length > 0 && (
-              <Tag style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.5)', border: '1px solid rgba(255,255,255,0.1)', fontSize: 11 }}>
-                {node.children.length} 个子节点
-              </Tag>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* 分隔线 */}
-      <div style={{ height: 1, background: 'rgba(255,255,255,0.08)', margin: '20px 0' }} />
-
-      {/* 飞书跳转卡片 */}
+    <>
+      {/* 顶部条：标题 + 类型 + 外链按钮 */}
       <div
         style={{
-          background: 'linear-gradient(135deg, rgba(77,159,255,0.08), rgba(0,240,255,0.05))',
-          border: '1px solid rgba(77,159,255,0.2)',
-          borderRadius: 12,
-          padding: '24px 28px',
-          textAlign: 'center',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+          padding: '12px 18px',
+          borderBottom: '1px solid rgba(255,255,255,0.08)',
+          background: 'rgba(255,255,255,0.02)',
         }}
       >
-        <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 13, marginBottom: 8, fontFamily: 'var(--font-primary)' }}>
-          此文档来源于飞书知识库
-        </div>
-        <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, marginBottom: 20, fontFamily: 'var(--font-primary)' }}>
-          点击下方按钮在飞书中查看完整内容（在线版样式更全，图片可正常显示）
-        </div>
-
-        <Button
-          type="primary"
-          size="large"
-          icon={<LinkOutlined />}
-          href={node.feishuLink}
-          target="_blank"
-          rel="noopener noreferrer"
-          style={{
-            background: 'linear-gradient(135deg, #4d9fff, #00f0ff)',
-            border: 'none',
-            height: 44,
-            paddingInline: 32,
-            fontSize: 14,
-            fontFamily: 'var(--font-primary)',
-            fontWeight: 600,
-            borderRadius: 10,
-            boxShadow: '0 4px 16px rgba(77,159,255,0.3)',
-          }}
-        >
-          在飞书中查看 ↗
-        </Button>
-
-        {/* 飞书链接展示 */}
-        <Tooltip title="复制链接">
+        {cfg && (
           <div
             style={{
-              marginTop: 16,
-              padding: '8px 14px',
-              background: 'rgba(0,0,0,0.2)',
-              borderRadius: 8,
-              color: 'rgba(255,255,255,0.35)',
-              fontSize: 11,
-              fontFamily: 'monospace',
-              cursor: 'pointer',
-              maxWidth: 500,
-              margin: '16px auto 0',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}
-            onClick={() => {
-              navigator.clipboard?.writeText(node.feishuLink);
+              width: 32, height: 32, borderRadius: 8,
+              background: `${cfg.color}18`, border: `1px solid ${cfg.color}30`,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 15, color: cfg.color, flexShrink: 0,
             }}
           >
-            {node.feishuLink}
+            {cfg.icon}
           </div>
-        </Tooltip>
+        )}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{
+            color: 'rgba(255,255,255,0.95)', fontSize: 15, fontWeight: 600,
+            fontFamily: 'var(--font-primary)',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}>
+            {node ? node.title : '智航测试部知识库'}
+          </div>
+          <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 11, marginTop: 2 }}>
+            {node ? `${cfg?.label || ''} · 飞书内嵌预览` : '从左侧目录选择文档以预览'}
+          </div>
+        </div>
+        {node && (
+          <Button
+            size="small"
+            type="primary"
+            icon={<LinkOutlined />}
+            href={node.feishuLink}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              background: 'linear-gradient(135deg, #4d9fff, #00f0ff)',
+              border: 'none',
+              borderRadius: 6,
+              fontSize: 12,
+            }}
+          >
+            在飞书中打开 ↗
+          </Button>
+        )}
       </div>
 
-      {/* 子节点列表 */}
-      {node.children.length > 0 && (
-        <div style={{ marginTop: 24 }}>
+      {/* iframe 区 */}
+      <div style={{ flex: 1, position: 'relative', background: '#fff', minHeight: 0 }}>
+        {node ? (
+          <>
+            <iframe
+              key={node.key}
+              src={node.feishuLink}
+              title={node.title}
+              style={{
+                width: '100%', height: '100%', border: 'none', display: 'block',
+              }}
+              sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+            />
+            {/* iframe 被 X-Frame-Options 拦截时的兜底提示（叠加在最上层） */}
+            <div
+              style={{
+                position: 'absolute', inset: 0,
+                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                color: 'rgba(255,255,255,0.6)', pointerEvents: 'none',
+              }}
+            >
+              <BookOutlined style={{ fontSize: 36, marginBottom: 8, opacity: 0.5 }} />
+              <div style={{ fontSize: 12, opacity: 0.5 }}>
+                若上方区域空白或显示拒绝访问，请点击右上角"在飞书中打开"
+              </div>
+            </div>
+          </>
+        ) : (
           <div
             style={{
+              width: '100%', height: '100%',
+              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+              background: 'linear-gradient(135deg, rgba(77,159,255,0.04), rgba(0,240,255,0.02))',
               color: 'rgba(255,255,255,0.5)',
-              fontSize: 13,
-              marginBottom: 12,
-              fontFamily: 'var(--font-primary)',
-              fontWeight: 600,
             }}
           >
-            子文档（{node.children.length}）
+            <BookOutlined style={{ fontSize: 56, color: '#4d9fff', opacity: 0.4, marginBottom: 16 }} />
+            <div style={{ fontSize: 16, fontWeight: 600, color: 'rgba(255,255,255,0.7)', marginBottom: 6 }}>
+              智航测试部知识库
+            </div>
+            <div style={{ fontSize: 12 }}>从左侧目录选择文档，在此处内嵌预览</div>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {node.children.map((child) => {
-              const childCfg = TYPE_CONFIG[child.type] || TYPE_CONFIG.docx;
+        )}
+      </div>
+    </>
+  );
+}
+
+// ============================================================
+// 右边：超链接列表面板
+// ============================================================
+function LinkListPane({
+  node, allNodes, onSelect,
+}: {
+  node: KBNode | null;
+  allNodes: KBNode[];
+  onSelect: (key: string) => void;
+}) {
+  // 把树拍平，方便查"同级节点"
+  const flatList = useMemo(() => {
+    const arr: Array<{ node: KBNode; parent: KBNode | null }> = [];
+    const walk = (list: KBNode[], parent: KBNode | null) => {
+      list.forEach((n) => {
+        arr.push({ node: n, parent });
+        if (n.children.length > 0) walk(n.children, n);
+      });
+    };
+    walk(allNodes, null);
+    return arr;
+  }, [allNodes]);
+
+  // 当前节点的同级（不含自己 + 不含子节点）
+  const siblings = useMemo(() => {
+    if (!node) return [];
+    const entry = flatList.find((e) => e.node.key === node.key);
+    if (!entry) return [];
+    return flatList.filter((e) => e.parent?.key === entry.parent?.key && e.node.key !== node.key);
+  }, [flatList, node]);
+
+  if (!node) {
+    return (
+      <div style={{ textAlign: 'center', padding: '40px 8px', color: 'rgba(255,255,255,0.35)', fontSize: 12 }}>
+        <LinkOutlined style={{ fontSize: 24, marginBottom: 8 }} />
+        <div>未选中任何文档</div>
+      </div>
+    );
+  }
+
+  const sections = [
+    { title: '当前文档', items: [node] },
+    ...(node.children.length > 0 ? [{ title: `子文档（${node.children.length}）`, items: node.children }] : []),
+    ...(siblings.length > 0 ? [{ title: `同级文档（${siblings.length}）`, items: siblings.map((s) => s.node) }] : []),
+  ];
+
+  return (
+    <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12,
+        paddingBottom: 10, borderBottom: '1px solid rgba(255,255,255,0.08)',
+      }}>
+        <LinkOutlined style={{ color: '#4d9fff', fontSize: 14 }} />
+        <span style={{ color: 'rgba(255,255,255,0.85)', fontSize: 13, fontWeight: 600, fontFamily: 'var(--font-primary)' }}>
+          相关链接
+        </span>
+        <span style={{ marginLeft: 'auto', color: 'rgba(255,255,255,0.3)', fontSize: 11 }}>
+          共 {sections.reduce((s, sec) => s + sec.items.length, 0)} 项
+        </span>
+      </div>
+      {sections.map((sec) => (
+        <div key={sec.title} style={{ marginBottom: 14 }}>
+          <div style={{
+            color: 'rgba(255,255,255,0.4)', fontSize: 11, fontWeight: 600,
+            marginBottom: 6, fontFamily: 'var(--font-primary)',
+            textTransform: 'uppercase', letterSpacing: 0.5,
+          }}>
+            {sec.title}
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {sec.items.map((item) => {
+              const ic = TYPE_CONFIG[item.type] || TYPE_CONFIG.docx;
+              const isCurrent = sec.title === '当前文档';
               return (
                 <a
-                  key={child.key}
-                  href={child.feishuLink}
+                  key={item.key}
+                  href={item.feishuLink}
                   target="_blank"
                   rel="noopener noreferrer"
+                  onClick={(e) => {
+                    // 当前文档行：拦截默认新窗口，改成"切换中栏 iframe"
+                    if (isCurrent) {
+                      e.preventDefault();
+                      onSelect(item.key);
+                    }
+                  }}
                   style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 10,
-                    padding: '10px 14px',
-                    background: 'rgba(255,255,255,0.03)',
-                    border: '1px solid rgba(255,255,255,0.06)',
-                    borderRadius: 8,
+                    display: 'flex', alignItems: 'center', gap: 8,
+                    padding: '7px 10px',
+                    background: isCurrent ? `${ic.color}18` : 'rgba(255,255,255,0.03)',
+                    border: `1px solid ${isCurrent ? ic.color + '40' : 'rgba(255,255,255,0.06)'}`,
+                    borderRadius: 6,
                     textDecoration: 'none',
-                    transition: 'all 0.2s',
+                    color: 'rgba(255,255,255,0.85)',
+                    fontSize: 12,
+                    fontFamily: 'var(--font-primary)',
+                    transition: 'all 0.15s',
+                    cursor: 'pointer',
                   }}
                   onMouseEnter={(e) => {
-                    (e.currentTarget as HTMLElement).style.background = 'rgba(77,159,255,0.08)';
-                    (e.currentTarget as HTMLElement).style.borderColor = 'rgba(77,159,255,0.2)';
+                    (e.currentTarget as HTMLElement).style.background = `${ic.color}22`;
+                    (e.currentTarget as HTMLElement).style.borderColor = `${ic.color}50`;
                   }}
                   onMouseLeave={(e) => {
-                    (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.03)';
-                    (e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,255,255,0.06)';
+                    (e.currentTarget as HTMLElement).style.background = isCurrent ? `${ic.color}18` : 'rgba(255,255,255,0.03)';
+                    (e.currentTarget as HTMLElement).style.borderColor = isCurrent ? `${ic.color}40` : 'rgba(255,255,255,0.06)';
                   }}
                 >
-                  <span style={{ color: childCfg.color, fontSize: 14 }}>{childCfg.icon}</span>
-                  <span style={{ color: 'rgba(255,255,255,0.8)', fontSize: 13, fontFamily: 'var(--font-primary)', flex: 1 }}>
-                    {child.title}
+                  <span style={{ color: ic.color, fontSize: 12, flexShrink: 0 }}>{ic.icon}</span>
+                  <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {item.title}
                   </span>
-                  <Tag style={{ background: `${childCfg.color}12`, color: childCfg.color, border: `1px solid ${childCfg.color}25`, fontSize: 10 }}>
-                    {childCfg.label}
-                  </Tag>
-                  <LinkOutlined style={{ color: 'rgba(255,255,255,0.3)', fontSize: 12 }} />
+                  <Tooltip title="新窗口打开">
+                    <LinkOutlined style={{ color: 'rgba(255,255,255,0.25)', fontSize: 11, flexShrink: 0 }} />
+                  </Tooltip>
                 </a>
               );
             })}
           </div>
         </div>
-      )}
-    </div>
-  );
-}
-
-// ============================================================
-// 欢迎页（未选中节点时）
-// ============================================================
-function WelcomeView({ kbData }: { kbData: KBIndex | null }) {
-  return (
-    <div style={{ textAlign: 'center', padding: '60px 20px' }}>
-      <div
-        style={{
-          width: 80,
-          height: 80,
-          borderRadius: 20,
-          background: 'linear-gradient(135deg, rgba(77,159,255,0.12), rgba(0,240,255,0.06))',
-          border: '1px solid rgba(77,159,255,0.2)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          margin: '0 auto 24px',
-          fontSize: 36,
-          color: '#4d9fff',
-        }}
-      >
-        <BookOutlined />
-      </div>
-      <h2 style={{ color: 'rgba(255,255,255,0.9)', fontSize: 24, fontFamily: 'var(--font-primary)', marginBottom: 8 }}>
-        智航测试部知识库
-      </h2>
-      <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 14, fontFamily: 'var(--font-primary)', marginBottom: 32 }}>
-        从左侧目录选择文档，点击后在飞书中查看完整内容
-      </p>
-
-      {kbData && (
-        <div style={{ display: 'flex', justifyContent: 'center', gap: 20, flexWrap: 'wrap' }}>
-          {Object.entries(kbData.typeStats).map(([type, count]) => {
-            const cfg = TYPE_CONFIG[type] || TYPE_CONFIG.docx;
-            return (
-              <div
-                key={type}
-                style={{
-                  minWidth: 140,
-                  padding: '16px 24px',
-                  background: 'rgba(255,255,255,0.03)',
-                  border: '1px solid rgba(255,255,255,0.08)',
-                  borderRadius: 12,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 12,
-                }}
-              >
-                <div
-                  style={{
-                    width: 40,
-                    height: 40,
-                    borderRadius: 10,
-                    background: `${cfg.color}15`,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: 18,
-                    color: cfg.color,
-                  }}
-                >
-                  {cfg.icon}
-                </div>
-                <div style={{ textAlign: 'left' }}>
-                  <div style={{ color: cfg.color, fontSize: 22, fontWeight: 700, lineHeight: 1 }}>{count}</div>
-                  <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11, marginTop: 2 }}>{cfg.label}</div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      <div style={{ marginTop: 40, color: 'rgba(255,255,255,0.25)', fontSize: 12, fontFamily: 'var(--font-primary)' }}>
-        导出时间：{kbData?.exportTime} · 空间 ID：{kbData?.spaceId}
-      </div>
+      ))}
     </div>
   );
 }
