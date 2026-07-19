@@ -557,11 +557,12 @@ export const teamMembersApi = {
 /**
  * Historical Projects 业务 API（完整 CRUD）
  * 注意：create 必须 POST /projects/history（写入 historical_projects 表），不是 POST /projects
+ * 2026-07-19：后端 GET /history/list 已直接返回 camelCase，前端无需再 dbRowToHistoryProject
  */
 export const historyProjectsApi = {
   list: () => projectApi.getHistoryList().then((r) => ({
     success: r.success,
-    data: (r.data || []).map(dbRowToHistoryProject),
+    data: (r.data || []) as unknown as HistoricalProject[],
   })),
   create: (body: Partial<HistoricalProject>) =>
     projectApi.createHistory(historyProjectToDbBody(body)).then((r) => ({

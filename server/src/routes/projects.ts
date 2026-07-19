@@ -125,7 +125,17 @@ router.get('/:id', asyncHandler(async (req, res) => {
 /** GET /api/history-projects — 历史项目（注意：必须在 /history/:id 之前，否则会被 :id='list' 拦截）*/
 router.get('/history/list', asyncHandler(async (_req, res) => {
   const rows = await db.allAsync('SELECT * FROM historical_projects ORDER BY end_date DESC');
-  res.json({ success: true, data: rows });
+  // 2026-07-19 直接转 camelCase 返回，前端无需再 snakeToCamel
+  // 兼容：snakeToCamel 对已经是 camelCase 的 key 无副作用
+  const camelRows = rows.map((r) => {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(r)) {
+      const camel = k.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
+      out[camel] = v;
+    }
+    return out;
+  });
+  res.json({ success: true, data: camelRows });
 }));
 
 /** POST /api/projects/history — 创建历史项目（写入 historical_projects 表） */
