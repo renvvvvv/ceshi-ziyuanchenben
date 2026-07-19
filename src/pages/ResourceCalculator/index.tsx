@@ -15,7 +15,7 @@ import {
   exportBatchResultsToExcel, downloadBatchTemplate,
   type ParsedInput, type BatchReportRow,
 } from '../../utils/excelUtils';
-import { apiCalcResource, apiGetHistory, apiDeleteHistory, apiGetBatchDetail, type HistoryItem, type HistoryGroupItem, resourceCalcApi } from '../../api';
+import { apiCalcResource, apiGetHistory, apiDeleteHistory, apiGetBatchDetail, type HistoryItem, type HistoryGroupItem, resourceCalcApi, type PaginatedResponse } from '../../api';
 import BatchResultsView from '../../components/BatchResultsView';
 
 const { Title, Text, Paragraph } = Typography;
@@ -70,10 +70,10 @@ function ResourceCalculator() {
     try {
       const res = await apiGetHistory(page, size, filterType, filterDate);
       if (res.success && res.data) {
-        const items = Array.isArray(res.data) ? res.data : ((res.data as unknown as { items: HistoryGroupItem[] }).items || []);
-        const total = Array.isArray(res.data) ? ((res as unknown as { total: number }).total || 0) : ((res.data as unknown as { total: number }).total || 0);
-        setHistoryData(items);
-        setHistoryTotal(total);
+        // 统一按 PaginatedResponse<HistoryGroupItem> 处理（避免双重断言）
+        const data = res.data as PaginatedResponse<HistoryGroupItem>;
+        setHistoryData(data.items || []);
+        setHistoryTotal(data.total ?? 0);
       } else {
         setHistoryData([]);
         setHistoryTotal(0);

@@ -16,7 +16,7 @@ import {
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { useData } from '../../store/DataContext';
-import type { TeamMember, MemberStatus, MemberProject } from '../../types';
+import type { TeamMember, MemberStatus, MemberProject, Project } from '../../types';
 
 const statusConfig: Record<MemberStatus, { bg: string; color: string; dot: string }> = {
   '空闲': { bg: 'rgba(82, 196, 26, 0.12)', color: '#52c41a', dot: '#52c41a' },
@@ -69,7 +69,7 @@ function detectTimeConflicts(member: TeamMember): TimeConflict[] {
 }
 
 function TeamPool() {
-  const { teamMembers: members, setTeamMembers: setMembers, projects, setProjects, autoProcessProjects, autoProcessMembers, syncMembersFromProjects } = useData();
+  const { teamMembers: members, setTeamMembers: setMembers, projects, setProjects, autoProcessProjects, autoProcessMembers, syncMembersFromProjects, addTeamMember, updateTeamMember, deleteTeamMember, updateProject } = useData();
 
   // ===== 自动化流程：进入人员池时自动处理项目/人员状态 + 同步人员项目数据 =====
   useEffect(() => {
@@ -150,29 +150,23 @@ function TeamPool() {
 
       if (editingMember) {
         const becameIdle = editingMember.status === '测试中' && values.status === '空闲';
-        setMembers((prev) =>
-          prev.map((m) =>
-            m.id === editingMember.id
-              ? {
-                  ...m,
-                  name: values.name,
-                  employeeId: values.employeeId,
-                  status: values.status,
-                  skills: values.skills || [],
-                  email: values.email || '',
-                  phone: values.phone || '',
-                  leaveStartDate,
-                  leaveEndDate,
-                  // 转为空闲时清除所有项目关联（包括 upcomingProjects）
-                  ...(becameIdle ? { projects: [], currentProjects: [], upcomingProjects: [] } : {}),
-                }
-              : m
-          )
-        );
+        const updates: Partial<TeamMember> = {
+          name: values.name,
+          employeeId: values.employeeId,
+          status: values.status,
+          skills: values.skills || [],
+          email: values.email || '',
+          phone: values.phone || '',
+          leaveStartDate,
+          leaveEndDate,
+          // 转为空闲时清除所有项目关联（包括 upcomingProjects）
+          ...(becameIdle ? { projects: [], currentProjects: [], upcomingProjects: [] } : {}),
+        };
+        updateTeamMember(editingMember.id, updates);
         message.success(`成员「${values.name}」更新成功`);
       } else {
-        // 使用时间戳生成唯一 ID，避免删除后添加导致 ID 冲突
         const newMember: TeamMember = {
+          // 用临时 id（DataContext 会在 API 返回真实 id 后替换）
           id: `m${Date.now()}`,
           name: values.name,
           employeeId: values.employeeId,
@@ -184,7 +178,7 @@ function TeamPool() {
           leaveStartDate,
           leaveEndDate,
         };
-        setMembers((prev) => [...prev, newMember]);
+        addTeamMember(newMember);
         message.success(`成员「${values.name}」添加成功`);
       }
       setModalOpen(false);
@@ -287,59 +281,51 @@ function TeamPool() {
         message.warning(`⚠ ${conflictNames.join('、')} 与现有项目时间冲突，请及时调整`);
       }
 
-      setMembers((prev) =>
-        prev.map((m) => {
-          if (!ids.includes(m.id)) return m;
-          const newProject: MemberProject = { projectName: project, startDate, endDate };
+      // 用 DataContext 的 updateTeamMember/updateProject（确保写入后端）
+      let firstAffectedProject: Project | undefined;
+      members.forEach((m) => {
+        if (!ids.includes(m.id)) return;
+        const newProject: MemberProject = { projectName: project, startDate, endDate };
+        const safeCurrent = m.currentProjects || [];
+        const safeProjects = m.projects || [];
+        const safeUpcoming = m.upcomingProjects || [];
 
-          if (isActive) {
-            // 项目进行中 → 状态转为「测试中」，写入 projects + currentProjects
-            const existingProjects = m.projects || [];
-            const projectExists = existingProjects.find((p) => p.projectName === project);
-            const updatedProjects = projectExists
-              ? existingProjects.map((p) => (p.projectName === project ? newProject : p))
-              : [...existingProjects, newProject];
-            const newCurrentProjects = m.currentProjects.includes(project)
-              ? m.currentProjects
-              : [...m.currentProjects, project];
-            // 同步移除 upcomingProjects 中的同名项目（避免重复）
-            const cleanedUpcoming = (m.upcomingProjects || []).filter(
-              (p) => p.projectName !== project
-            );
-            return {
-              ...m,
-              status: '测试中',
-              currentProjects: newCurrentProjects,
-              projects: updatedProjects,
-              upcomingProjects: cleanedUpcoming,
-            };
-          }
+        if (isActive) {
+          const projectExists = safeProjects.find((p) => p.projectName === project);
+          const updatedProjects = projectExists
+            ? safeProjects.map((p) => (p.projectName === project ? newProject : p))
+            : [...safeProjects, newProject];
+          const newCurrentProjects = safeCurrent.includes(project)
+            ? safeCurrent
+            : [...safeCurrent, project];
+          const cleanedUpcoming = safeUpcoming.filter((p) => p.projectName !== project);
+          updateTeamMember(m.id, {
+            status: '测试中',
+            currentProjects: newCurrentProjects,
+            projects: updatedProjects,
+            upcomingProjects: cleanedUpcoming,
+          });
+        } else if (isUpcoming) {
+          const upcomingExists = safeUpcoming.find((p) => p.projectName === project);
+          const updatedUpcoming = upcomingExists
+            ? safeUpcoming.map((p) => (p.projectName === project ? newProject : p))
+            : [...safeUpcoming, newProject];
+          updateTeamMember(m.id, {
+            upcomingProjects: updatedUpcoming,
+          });
+        }
+      });
 
-          if (isUpcoming) {
-            // 项目未开始 → 写入 upcomingProjects，状态保持不变
-            const existingUpcoming = m.upcomingProjects || [];
-            const upcomingExists = existingUpcoming.find((p) => p.projectName === project);
-            const updatedUpcoming = upcomingExists
-              ? existingUpcoming.map((p) => (p.projectName === project ? newProject : p))
-              : [...existingUpcoming, newProject];
-            return {
-              ...m,
-              upcomingProjects: updatedUpcoming,
-            };
-          }
-
-          // 兜底（项目已结束）：allProjects 理论上不会包含已结束项目，但保险起见处理
-          return m;
-        })
-      );
-
-      // 同步更新项目的 assignedMemberIds（避免 syncMembersFromProjects 覆盖手动指派）
-      setProjects((prev) => prev.map((p) => {
-        if (p.name !== project) return p;
-        const existing = p.assignedMemberIds || [];
+      // 同步更新项目的 assignedMemberIds
+      const targetProj = projects.find((p) => p.name === project);
+      if (targetProj) {
+        firstAffectedProject = targetProj;
+        const existing = targetProj.assignedMemberIds || [];
         const merged = Array.from(new Set([...existing, ...ids]));
-        return { ...p, assignedMemberIds: merged };
-      }));
+        updateProject(targetProj.id, { assignedMemberIds: merged });
+      }
+      // suppress unused warning
+      void firstAffectedProject;
 
       const statusHint = isActive
         ? '，项目进行中已自动转为测试中'
@@ -916,13 +902,12 @@ function TeamPool() {
                 block
                 onClick={() => {
                   if (!editingMember) return;
-                  setMembers((prev) =>
-                    prev.map((m) =>
-                      m.id === editingMember.id
-                        ? { ...m, status: '空闲', projects: [], currentProjects: [], upcomingProjects: [] }
-                        : m
-                    )
-                  );
+                  updateTeamMember(editingMember.id, {
+                    status: '空闲',
+                    projects: [],
+                    currentProjects: [],
+                    upcomingProjects: [],
+                  });
                   message.success(`「${editingMember.name}」已转为空闲状态，项目信息已清除`);
                   setModalOpen(false);
                   form.resetFields();

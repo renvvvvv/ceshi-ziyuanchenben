@@ -2,9 +2,18 @@ import { Router } from 'express';
 
 const router = Router();
 
-// 飞书应用配置
-const FEISHU_APP_ID = process.env.FEISHU_APP_ID || 'cli_aac2dd6c68385cca';
-const FEISHU_APP_SECRET = process.env.FEISHU_APP_SECRET || 'ydpeT1McFwNhjlI3nfX8TWSChvOg81bC';
+// 飞书应用配置（必须从环境变量读取，绝不在源码硬编码）
+function getFeishuConfig(): { appId: string; appSecret: string } {
+  const appId = process.env.FEISHU_APP_ID;
+  const appSecret = process.env.FEISHU_APP_SECRET;
+  if (!appId || !appSecret) {
+    throw new Error(
+      '缺少 FEISHU_APP_ID 或 FEISHU_APP_SECRET 环境变量。请在 .env 中配置。'
+    );
+  }
+  return { appId, appSecret };
+}
+
 const FEISHU_BASE = 'https://open.feishu.cn/open-apis';
 
 // 角色映射表（飞书 union_id → 平台角色）
@@ -17,12 +26,13 @@ const FEISHU_ROLE_MAP: Record<string, '管理者' | '编辑者' | '阅读者'> =
  * 获取 app_access_token
  */
 async function getAppAccessToken(): Promise<string> {
+  const { appId, appSecret } = getFeishuConfig();
   const res = await fetch(`${FEISHU_BASE}/auth/v3/app_access_token/internal`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      app_id: FEISHU_APP_ID,
-      app_secret: FEISHU_APP_SECRET,
+      app_id: appId,
+      app_secret: appSecret,
     }),
   });
   const data = await res.json() as any;
@@ -76,10 +86,15 @@ async function getUserInfo(userAccessToken: string): Promise<any> {
  * 返回飞书 OAuth 授权 URL
  */
 router.get('/feishu/login', (req, res) => {
-  const redirectUri = req.query.redirect_uri as string || `${req.headers.origin || ''}/login`;
-  const state = Math.random().toString(36).slice(2);
-  const authUrl = `https://open.feishu.cn/open-apis/authen/v1/authorize?app_id=${FEISHU_APP_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}`;
-  res.json({ authUrl, state });
+  try {
+    const { appId } = getFeishuConfig();
+    const redirectUri = req.query.redirect_uri as string || `${req.headers.origin || ''}/login`;
+    const state = Math.random().toString(36).slice(2);
+    const authUrl = `https://open.feishu.cn/open-apis/authen/v1/authorize?app_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}`;
+    res.json({ authUrl, state });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
 });
 
 /**

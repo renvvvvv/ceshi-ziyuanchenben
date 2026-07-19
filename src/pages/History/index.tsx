@@ -12,7 +12,7 @@ import type { HistoricalProject } from '../../types';
 
 function History() {
   const navigate = useNavigate();
-  const { historyProjects, setHistoryProjects } = useData();
+  const { historyProjects, setHistoryProjects, addHistoryProject, updateHistoryProject, deleteHistoryProject } = useData();
   const [yearFilter, setYearFilter] = useState<string>('全部');
   const [cityFilter, setCityFilter] = useState<string>('全部');
   const [customerFilter, setCustomerFilter] = useState<string>('全部');
@@ -100,7 +100,7 @@ function History() {
   };
 
   const handleDelete = (id: string) => {
-    setHistoryProjects((prev) => prev.filter((p) => p.id !== id));
+    deleteHistoryProject(id);
     message.success('历史项目已删除');
   };
 
@@ -126,7 +126,7 @@ function History() {
           docLink: values.docLink || '',
           updatedAt: dayjs().format('YYYY-MM-DD HH:mm:ss'),
         };
-        setHistoryProjects((prev) => prev.map((p) => (p.id === editingProject.id ? updated : p)));
+        updateHistoryProject(editingProject.id, updated);
         message.success('历史项目已更新');
       } else {
         const newProject: HistoricalProject = {
@@ -147,7 +147,7 @@ function History() {
           docLink: values.docLink || '',
           updatedAt: dayjs().format('YYYY-MM-DD HH:mm:ss'),
         };
-        setHistoryProjects((prev) => [newProject, ...prev]);
+        addHistoryProject(newProject);
         message.success('历史项目记录添加成功');
       }
       setModalOpen(false);

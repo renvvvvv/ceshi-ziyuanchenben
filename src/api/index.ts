@@ -11,7 +11,11 @@
  *  - 业务转换函数：dbRowToProject / projectToDbBody / 等
  */
 
-import type { ApiResponse, PaginatedResponse, Project, HistoricalProject, TeamMember } from '../types';
+import type { ApiResponse, Project, HistoricalProject, TeamMember } from '../types';
+import type { PaginatedResponse } from '../types';
+
+// Re-export 让前端页面可以直接从 api 导入
+export type { PaginatedResponse };
 
 // -------------------- 配置 --------------------
 const BASE = '/api';
@@ -236,6 +240,14 @@ export const projectApi = {
   /** 获取历史项目列表 */
   getHistoryList: (): Promise<ApiResponse<Record<string, unknown>[]>> => {
     return request('/projects/history/list');
+  },
+
+  /** 创建历史项目（写入 historical_projects 表） */
+  createHistory: (data: Record<string, unknown>): Promise<ApiResponse<{ id: number }>> => {
+    return request('/projects/history', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
   },
 
   /** 更新历史项目 */
@@ -525,6 +537,7 @@ export const teamMembersApi = {
 
 /**
  * Historical Projects 业务 API（完整 CRUD）
+ * 注意：create 必须 POST /projects/history（写入 historical_projects 表），不是 POST /projects
  */
 export const historyProjectsApi = {
   list: () => projectApi.getHistoryList().then((r) => ({
@@ -532,7 +545,7 @@ export const historyProjectsApi = {
     data: (r.data || []).map(dbRowToHistoryProject),
   })),
   create: (body: Partial<HistoricalProject>) =>
-    projectApi.create(historyProjectToDbBody(body)).then((r) => ({
+    projectApi.createHistory(historyProjectToDbBody(body)).then((r) => ({
       success: r.success,
       id: (r.data as { id?: number } | undefined)?.id,
     })),

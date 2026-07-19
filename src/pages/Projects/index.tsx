@@ -8,10 +8,10 @@ import StatusTag from '../../components/StatusTag';
 import ProjectModal from '../../components/ProjectModal';
 import ComparisonReportModal from '../../components/ComparisonReportModal';
 import { useData } from '../../store/DataContext';
-import type { Project, HistoricalProject } from '../../types';
+import type { Project, HistoricalProject, TeamMember } from '../../types';
 
 function Projects() {
-  const { projects, setProjects, historyProjects, setHistoryProjects, teamMembers, setTeamMembers, autoProcessProjects, autoProcessMembers } = useData();
+  const { projects, setProjects, historyProjects, setHistoryProjects, teamMembers, setTeamMembers, autoProcessProjects, autoProcessMembers, addProject, updateProject, deleteProject, addHistoryProject, updateTeamMember } = useData();
 
   // ===== 自动化流程：进入项目管理页时也自动处理项目状态 =====
   useEffect(() => {
@@ -58,45 +58,52 @@ function Projects() {
   const handleDelete = useCallback((id: string) => {
     const project = projects.find((p) => p.id === id);
     const projectName = project?.name;
-    setProjects((prev) => prev.filter((p) => p.id !== id));
+    // 通过 DataContext 删项目（同步本地 + 调后端 API）
+    deleteProject(id);
     // 同步清理成员的项目关联
     if (projectName) {
-      setTeamMembers((prev) => prev.map((m) => ({
-        ...m,
-        projects: (m.projects || []).filter((p) => p.projectName !== projectName),
-        currentProjects: (m.currentProjects || []).filter((p) => p !== projectName),
-        upcomingProjects: (m.upcomingProjects || []).filter((up) => up.projectName !== projectName),
-      })));
+      teamMembers.forEach((m) => {
+        const cur = m.currentProjects || [];
+        const proj = m.projects || [];
+        const upc = m.upcomingProjects || [];
+        const newCur = cur.filter((p) => p !== projectName);
+        const newProj = proj.filter((p) => p.projectName !== projectName);
+        const newUpc = upc.filter((p) => p.projectName !== projectName);
+        if (newCur.length !== cur.length || newProj.length !== proj.length || newUpc.length !== upc.length) {
+          updateTeamMember(m.id, {
+            projects: newProj,
+            currentProjects: newCur,
+            upcomingProjects: newUpc,
+          });
+        }
+      });
     }
     message.success('项目删除成功');
-  }, [projects, setProjects, setTeamMembers]);
+  }, [projects, deleteProject, teamMembers, updateTeamMember]);
 
   // 提交（新建或编辑）
   const handleSubmit = useCallback((values: Project) => {
     // 同步更新指派人员的 upcomingProjects
-    const syncMemberAssignments = (projectId: string, projectName: string, startDate: string, endDate: string, memberIds: string[]) => {
-      setTeamMembers((prevMembers) =>
-        prevMembers.map((m) => {
-          if (!memberIds.includes(m.id)) {
-            // 如果该人员不在新的指派列表中，但之前被指派过这个项目，需要移除
-            const newUpcoming = (m.upcomingProjects || []).filter((up) => up.projectName !== projectName);
-            const newProjects = (m.projects || []).filter((p) => p.projectName !== projectName);
-            const newCurrent = (m.currentProjects || []).filter((p) => p !== projectName);
-            if (newUpcoming.length !== (m.upcomingProjects || []).length || newProjects.length !== (m.projects || []).length) {
-              return { ...m, upcomingProjects: newUpcoming, projects: newProjects, currentProjects: newCurrent };
-            }
-            return m;
+    const syncMemberAssignments = (projectName: string, startDate: string, endDate: string, memberIds: string[]) => {
+      teamMembers.forEach((m) => {
+        if (!memberIds.includes(m.id)) {
+          // 移除旧指派
+          const newUpcoming = (m.upcomingProjects || []).filter((up) => up.projectName !== projectName);
+          const newProjects = (m.projects || []).filter((p) => p.projectName !== projectName);
+          const newCurrent = (m.currentProjects || []).filter((p) => p !== projectName);
+          if (newUpcoming.length !== (m.upcomingProjects || []).length || newProjects.length !== (m.projects || []).length) {
+            updateTeamMember(m.id, { upcomingProjects: newUpcoming, projects: newProjects, currentProjects: newCurrent });
           }
-          // 添加到 upcomingProjects（如果项目还未开始）
-          // 用本地日期比较（避免时区错位）
-          const todayStr = dayjs().format('YYYY-MM-DD');
-          const isFuture = startDate > todayStr;
-          const newUpcoming = isFuture
-            ? [...(m.upcomingProjects || []).filter((up) => up.projectName !== projectName), { projectName, startDate, endDate }]
-            : (m.upcomingProjects || []).filter((up) => up.projectName !== projectName);
-          return { ...m, upcomingProjects: newUpcoming };
-        })
-      );
+          return;
+        }
+        // 添加到 upcomingProjects（如果项目还未开始）
+        const todayStr = dayjs().format('YYYY-MM-DD');
+        const isFuture = startDate > todayStr;
+        const newUpcoming = isFuture
+          ? [...(m.upcomingProjects || []).filter((up) => up.projectName !== projectName), { projectName, startDate, endDate }]
+          : (m.upcomingProjects || []).filter((up) => up.projectName !== projectName);
+        updateTeamMember(m.id, { upcomingProjects: newUpcoming });
+      });
     };
 
     if (editingProject) {
@@ -105,55 +112,45 @@ function Projects() {
       const allRelatedIds = Array.from(new Set([...oldMemberIds, ...newMemberIds]));
 
       if (values.status === '已完成') {
-        setProjects((prev) => prev.filter((p) => p.id !== editingProject.id));
+        // 删除项目 + 添加到历史项目
+        deleteProject(editingProject.id);
         const archived: HistoricalProject = {
           ...values,
           id: editingProject.id,
           updatedAt: dayjs().format('YYYY-MM-DD'),
         };
-        setHistoryProjects((prev) => prev.some((p) => p.id === archived.id) ? prev : [archived, ...prev]);
-        // 已完成时清除相关人员的项目关联，并检查是否需要转为空闲
-        // 同时考虑旧名称和新名称（项目改名场景）
+        addHistoryProject(archived);
+        // 清理成员关联
         const oldName = editingProject.name;
         const newName = values.name;
         const nameMatch = (n: string) => n === oldName || n === newName;
-        setTeamMembers((prevMembers) =>
-          prevMembers.map((m) => {
-            if (!allRelatedIds.includes(m.id)) return m;
-            const newProjects = (m.projects || []).filter((p) => !nameMatch(p.projectName));
-            const newCurrent = (m.currentProjects || []).filter((p) => !nameMatch(p));
-            const newUpcoming = (m.upcomingProjects || []).filter((up) => !nameMatch(up.projectName));
-            // 如果人员之前是「测试中」，且清除后没有其他进行中的项目，转为空闲
-            if (m.status === '测试中' && newCurrent.length === 0) {
-              return {
-                ...m,
-                status: '空闲' as const,
-                projects: newProjects,
-                currentProjects: newCurrent,
-                upcomingProjects: newUpcoming,
-              };
-            }
-            return {
-              ...m,
-              projects: newProjects,
-              currentProjects: newCurrent,
-              upcomingProjects: newUpcoming,
-            };
-          })
-        );
+        teamMembers.forEach((m) => {
+          if (!allRelatedIds.includes(m.id)) return;
+          const newProjects = (m.projects || []).filter((p) => !nameMatch(p.projectName));
+          const newCurrent = (m.currentProjects || []).filter((p) => !nameMatch(p));
+          const newUpcoming = (m.upcomingProjects || []).filter((up) => !nameMatch(up.projectName));
+          const updates: Partial<TeamMember> = {
+            projects: newProjects,
+            currentProjects: newCurrent,
+            upcomingProjects: newUpcoming,
+          };
+          if (m.status === '测试中' && newCurrent.length === 0) {
+            updates.status = '空闲';
+          }
+          updateTeamMember(m.id, updates);
+        });
         message.info('项目状态已标记为「已完成」，已自动归档至历史项目板块');
       } else {
-        setProjects((prev) => prev.map((p) =>
-          (p.id === editingProject.id
-            ? { ...values, id: editingProject.id, updatedAt: dayjs().format('YYYY-MM-DD') }
-            : p)
-        ));
-        syncMemberAssignments(editingProject.id, values.name, values.startDate, values.endDate, newMemberIds);
+        updateProject(editingProject.id, {
+          ...values,
+          id: editingProject.id,
+          updatedAt: dayjs().format('YYYY-MM-DD'),
+        });
+        syncMemberAssignments(values.name, values.startDate, values.endDate || '', newMemberIds);
       }
       setModalOpen(false);
       setEditingProject(null);
       message.success('项目更新成功');
-      // 保存后立即触发自动化流程：检查日期是否需要变更状态（如已过期→已完成归档）
       setTimeout(() => {
         autoProcessProjects();
         autoProcessMembers();
@@ -161,20 +158,19 @@ function Projects() {
     } else {
       const newProject: Project = {
         ...values,
-        id: Date.now().toString(),
+        id: `temp-${Date.now()}`,
         updatedAt: dayjs().format('YYYY-MM-DD'),
       };
-      setProjects((prev) => [newProject, ...prev]);
-      syncMemberAssignments(newProject.id, newProject.name, newProject.startDate, newProject.endDate, newProject.assignedMemberIds || []);
+      addProject(newProject);
+      syncMemberAssignments(newProject.name, newProject.startDate, newProject.endDate || '', newProject.assignedMemberIds || []);
       setModalOpen(false);
       message.success('项目创建成功');
-      // 新建后也触发自动化流程
       setTimeout(() => {
         autoProcessProjects();
         autoProcessMembers();
       }, 0);
     }
-  }, [editingProject, projects, historyProjects, setProjects, setHistoryProjects, setTeamMembers, autoProcessProjects, autoProcessMembers]);
+  }, [editingProject, projects, teamMembers, addProject, updateProject, deleteProject, addHistoryProject, updateTeamMember, autoProcessProjects, autoProcessMembers]);
 
   const columns: ColumnsType<Project> = useMemo(() => [
     {

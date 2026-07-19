@@ -22,6 +22,40 @@ app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// ============================================================
+// 全局错误处理 middleware（必须 4 参数，否则 Express 不识别）
+// 捕获所有路由漏出来的异常，统一返回 JSON（避免前端 fetch 拿到 HTML）
+// ============================================================
+app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  console.error('[Server] Unhandled error:', err);
+  // PG 错误码 → 友好状态码
+  if (err?.code === '23505') {
+    res.status(409).json({ success: false, error: '数据已存在（唯一约束冲突）' });
+    return;
+  }
+  if (err?.code === '23503') {
+    res.status(409).json({ success: false, error: '存在外键引用，无法操作' });
+    return;
+  }
+  if (err?.code === '22P02' || err?.code === '23502') {
+    res.status(400).json({ success: false, error: '参数类型错误或必填字段缺失' });
+    return;
+  }
+  if (err?.code?.startsWith?.('23')) {
+    res.status(409).json({ success: false, error: '数据完整性约束违反' });
+    return;
+  }
+  res.status(500).json({
+    success: false,
+    error: err?.message || 'Internal Server Error',
+  });
+});
+
+// 404 fallback：所有未匹配的 /api/* 返回 JSON 而非 HTML
+app.use('/api/*', (_req, res) => {
+  res.status(404).json({ success: false, error: 'API 端点不存在' });
+});
+
 // 等待数据库初始化后启动
 initDatabase().then(() => {
   app.listen(PORT, () => {
