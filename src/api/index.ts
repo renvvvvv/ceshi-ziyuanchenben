@@ -292,6 +292,36 @@ export const projectApi = {
   },
 };
 
+/**
+ * Attendance Adjustments 业务 API（2026-07-19 新增）
+ * 把人工校准持久化到后端，避免 localStorage 清理后丢失
+ */
+export const attendanceAdjustmentsApi = {
+  list: (params?: { memberId?: string; cycleStart?: string }) => {
+    const query: Record<string, string> = {};
+    if (params?.memberId) query.member_id = params.memberId;
+    if (params?.cycleStart) query.cycle_start = params.cycleStart;
+    const qs = Object.keys(query).length ? '?' + new URLSearchParams(query).toString() : '';
+    return request<ApiResponse<unknown[]>>('/attendance-adjustments' + qs).then((r) => ({
+      success: r.success,
+      data: r.data || [],
+    }));
+  },
+  /** upsert by (memberId, projectName, cycleStart) */
+  upsert: (body: { memberId: string; projectName: string; cycleStart: string; projectStart?: string; projectEnd?: string; leaveDays?: number }) =>
+    request<ApiResponse<{ id?: number }>>('/attendance-adjustments', {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }).then((r) => ({
+      success: r.success,
+      id: r.data?.id,
+    })),
+  remove: (id: number) =>
+    request<ApiResponse<void>>('/attendance-adjustments/' + id, { method: 'DELETE' }).then((r) => ({
+      success: r.success,
+    })),
+};
+
 // ============================================================
 // 字段名转换工具（snake_case ↔ camelCase）
 // ============================================================
@@ -508,8 +538,12 @@ export const projectsApi = {
   list: (params?: { page?: number; size?: number }) =>
     projectApi.getList(params as Record<string, string> | undefined).then((r) => ({
       success: r.success,
-      data: (r.data?.items || []).map(dbRowToProject),
-      total: r.data?.total,
+      // 后端 GET /api/projects 直接返回 data: [...]（数组），不是 {items, total}
+      // 兼容两种格式：数组 或 {items, total}
+      data: Array.isArray(r.data)
+        ? r.data.map(dbRowToProject)
+        : ((r.data?.items || []).map(dbRowToProject)),
+      total: r.data?.total ?? (Array.isArray(r.data) ? r.data.length : 0),
     })),
   get: (id: string) => projectApi.getById(Number(id)).then((r) => ({
     success: r.success,

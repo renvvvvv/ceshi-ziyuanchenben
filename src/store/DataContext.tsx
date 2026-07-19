@@ -4,6 +4,7 @@ import {
   projectsApi,
   teamMembersApi,
   historyProjectsApi,
+  attendanceAdjustmentsApi,
 } from '../api';
 import {
   mockProjects,
@@ -146,7 +147,36 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [testDocs, setTestDocs] = usePersistentState<TestDoc[]>('testDocs', mockTestDocs);
   const [projectPhases, setProjectPhases] = usePersistentState<Record<string, ProjectPhase[]>>('projectPhases', mockProjectPhases);
   const [historyPhases, setHistoryPhases] = usePersistentState<Record<string, ProjectPhase[]>>('historyPhases', mergedHistoryPhases);
-  const [attendanceAdjustments, setAttendanceAdjustments] = usePersistentState<Record<string, { projectStart?: string; projectEnd?: string; leaveDays?: number }>>('attendanceAdjustments', {});
+  const [attendanceAdjustments, setAttendanceAdjustmentsRaw] = usePersistentState<Record<string, { projectStart?: string; projectEnd?: string; leaveDays?: number }>>('attendanceAdjustments', {});
+
+  /**
+   * 包一层 setAttendanceAdjustments：
+   * 1. 立即更新本地 state + localStorage（响应快）
+   * 2. 异步同步到后端 attendance_adjustments 表（持久化）
+   */
+  const setAttendanceAdjustments = useCallback((
+    updater: Record<string, { projectStart?: string; projectEnd?: string; leaveDays?: number }>
+      | ((prev: Record<string, { projectStart?: string; projectEnd?: string; leaveDays?: number }>) => Record<string, { projectStart?: string; projectEnd?: string; leaveDays?: number }>)
+  ) => {
+    setAttendanceAdjustmentsRaw((prev) => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      // 同步每个 key 到后端（best-effort，失败不阻塞 UI）
+      for (const [key, value] of Object.entries(next)) {
+        if (prev[key] && JSON.stringify(prev[key]) === JSON.stringify(value)) continue; // 未变
+        const [memberId, projectName, cycleStart] = key.split('-');
+        if (!memberId || !projectName || !cycleStart) continue;
+        void attendanceAdjustmentsApi.upsert({
+          memberId,
+          projectName,
+          cycleStart,
+          projectStart: value.projectStart,
+          projectEnd: value.projectEnd,
+          leaveDays: value.leaveDays,
+        }).catch((err) => console.warn('[DataContext] 考勤校准同步失败', key, err));
+      }
+      return next;
+    });
+  }, []);
   // 数据源标记：'mock' | 'api' | 'cache'，用于 UI 显示数据来源
   const [dataSource, setDataSource] = useState<'mock' | 'api' | 'cache' | 'loading'>('loading');
 
@@ -160,10 +190,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     (async () => {
       try {
-        const [projRes, memRes, histRes] = await Promise.all([
+        const [projRes, memRes, histRes, attRes] = await Promise.all([
           projectsApi.list({ page: 1, size: 500 }),
           teamMembersApi.list(),
           historyProjectsApi.list(),
+          attendanceAdjustmentsApi.list(),
         ]);
         if (cancelled) return;
 
@@ -180,8 +211,25 @@ export function DataProvider({ children }: { children: ReactNode }) {
           setHistoryProjects(histRes.data);
         }
 
+        // Attendance Adjustments：从后端加载并合并到本地（key 形式：memberId-projectName-cycleStart）
+        if (attRes?.success && Array.isArray(attRes.data)) {
+          const map: Record<string, { projectStart?: string; projectEnd?: string; leaveDays?: number }> = {};
+          for (const row of attRes.data as Array<Record<string, unknown>>) {
+            const key = `${row.memberId}-${row.projectName}-${row.cycleStart}`;
+            map[key] = {
+              projectStart: row.projectStart as string | undefined,
+              projectEnd: row.projectEnd as string | undefined,
+              leaveDays: row.leaveDays as number | undefined,
+            };
+          }
+          // 仅在后端有数据时覆盖本地，避免清掉 localStorage
+          if (Object.keys(map).length > 0) {
+            setAttendanceAdjustments(map);
+          }
+        }
+
         // 全部成功 → 数据源 = api；任意失败 → cache（用 localStorage 兜底）
-        const allOk = projRes && memRes && histRes;
+        const allOk = projRes && memRes && histRes && attRes;
         setDataSource(allOk ? 'api' : 'cache');
       } catch (err) {
         console.warn('[DataContext] 后端拉取失败，使用 localStorage:', err);

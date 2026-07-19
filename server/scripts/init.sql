@@ -132,3 +132,21 @@ WHERE NOT EXISTS (SELECT 1 FROM kb_documents WHERE parent_id = 1 AND title = '�
 
 -- 如果之前已有数据，把 sequence 同步到 MAX(id) 之后
 SELECT setval('kb_documents_id_seq', GREATEST(100, (SELECT COALESCE(MAX(id), 100) FROM kb_documents)));
+
+-- 考勤人工校准表（2026-07-19 新增）
+-- key = {member_id, project_name, cycle_start}
+-- 支持一人多项目一周期
+CREATE TABLE IF NOT EXISTS attendance_adjustments (
+    id              SERIAL PRIMARY KEY,
+    member_id       TEXT    NOT NULL,
+    project_name    TEXT    NOT NULL,
+    cycle_start     TEXT    NOT NULL,        -- YYYY-MM-DD，19 日周期起点
+    project_start   TEXT,                    -- 人工覆盖的项目起始日（YYYY-MM-DD）
+    project_end     TEXT,                    -- 人工覆盖的项目结束日
+    leave_days      INTEGER,                 -- 人工校准请假天数
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(member_id, project_name, cycle_start)
+);
+
+CREATE INDEX IF NOT EXISTS idx_attendance_adj_member
+    ON attendance_adjustments(member_id, cycle_start);
