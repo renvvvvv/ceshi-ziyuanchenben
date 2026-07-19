@@ -43,9 +43,12 @@ function PageLoading() {
 
 // 路由守卫：未登录跳转登录页
 function RequireAuth({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, authReady } = useAuth();
   const location = useLocation();
 
+  if (!authReady) {
+    return <PageLoading />;
+  }
   if (!isAuthenticated) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
@@ -62,7 +65,11 @@ function RequirePermission({ module, children }: { module: import('./types').App
 }
 
 function AppRoutes() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, authReady } = useAuth();
+
+  if (!authReady) {
+    return <PageLoading />;
+  }
 
   return (
     <Suspense fallback={<PageLoading />}>

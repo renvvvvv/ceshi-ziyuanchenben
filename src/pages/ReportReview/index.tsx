@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { Upload, Button, Spin, message, Tooltip, Modal, List, Empty, Popconfirm, Input } from 'antd';
 import type { UploadProps } from 'antd';
+import { useAuth } from '../../store/AuthContext';
 import {
   InboxOutlined,
   DownloadOutlined,
@@ -24,6 +25,7 @@ interface TypoError {
 }
 
 function ReportReview() {
+  const { logout } = useAuth();
   const [fileName, setFileName] = useState('');
   const [fileSize, setFileSize] = useState('');
   const [rawText, setRawText] = useState('');
@@ -70,6 +72,7 @@ function ReportReview() {
           const r = await fetch('/api/report-review/learn', {
             method: 'DELETE',
             headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
             body: JSON.stringify({ original }),
           });
           const d = await r.json();
@@ -78,14 +81,14 @@ function ReportReview() {
             setLearnedSize(d.remaining);
             message.success(`已移除："${original}"（剩余 ${d.remaining} 条）`);
           } else {
-          message.error(d.message || '移除失败');
+            message.error(d.message || d.error || '移除失败');
+          }
+        } catch {
+          message.error('网络异常');
         }
-      } catch {
-        message.error('网络异常');
-      }
-    },
-  });
-};
+      },
+    });
+  };
 
   // 提交采纳纠错到后端学习库
   const submitLearning = useCallback(async (original: string, suggestion: string) => {
@@ -93,6 +96,7 @@ function ReportReview() {
       const res = await fetch('/api/report-review/learn', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ original, suggestion }),
       });
       const data = await res.json();
@@ -100,7 +104,7 @@ function ReportReview() {
         setLearnedSize((s) => s + 1);
       } else {
         // 后端校验失败（如"原词=推荐词"），给出友好提示
-        message.warning(data.message || '该纠错未能加入学习库');
+        message.warning(data.message || data.error || '该纠错未能加入学习库');
       }
     } catch {
       // 静默失败，不打扰主流程
@@ -137,23 +141,32 @@ function ReportReview() {
       const res = await fetch('/api/report-review', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ text }),
       });
-      const data = await res.json();
-      if (data.success) {
+      const data = await res.json().catch(() => ({}));
+
+      if (res.status === 401) {
+        message.error(data.message || data.error || '登录状态已失效，请重新登录');
+        logout();
+        return;
+      }
+
+      if (res.ok && data.success && Array.isArray(data.errors)) {
         setErrors(data.errors.map((e: TypoError, i: number) => ({ ...e, fixed: false, id: i + 1 })));
         setReviewed(true);
         if (data.stats) setReviewStats(data.stats);
         message.success(`AI 审核完成，发现 ${data.errors.length} 处错别字`);
       } else {
-        message.error(data.message || 'AI 审核失败');
+        message.error(data.message || data.error || `AI 审核失败（HTTP ${res.status}）`);
       }
-    } catch {
-      message.error('审核请求失败，请确认后端服务已启动');
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : '';
+      message.error(detail ? `审核请求失败：${detail}` : '审核请求失败，请确认后端服务已启动');
     } finally {
       setReviewing(false);
     }
-  }, []);
+  }, [logout]);
 
   const formatFileSize = (bytes: number) => {
     if (bytes < 1024) return bytes + ' B';

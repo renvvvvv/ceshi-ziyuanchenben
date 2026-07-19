@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, useMemo, type ReactNode } from 'react';
+import { createContext, useContext, useState, useCallback, useMemo, useEffect, type ReactNode } from 'react';
 import type { User, UserRole, AppModule, ModulePermission, PermissionConfig } from '../types';
 
 // ============================================================
@@ -75,6 +75,7 @@ const DEFAULT_PERMISSIONS: PermissionConfig[] = [
 interface AuthContextValue {
   // 登录状态
   isAuthenticated: boolean;
+  authReady: boolean;
   user: User | null;
 
   // 权限检查
@@ -118,10 +119,50 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const saved = loadFromStorage<{ user: User | null }>(AUTH_KEY, { user: null });
     return saved;
   });
+  const [authReady, setAuthReady] = useState(false);
 
   const [permissionConfigs, setPermissionConfigs] = useState<PermissionConfig[]>(() => {
     return loadFromStorage<PermissionConfig[]>(PERMISSION_KEY, DEFAULT_PERMISSIONS);
   });
+
+  // 启动时以后端 session 为准，避免 localStorage 仍显示已登录、实际 cookie 已失效。
+  useEffect(() => {
+    let cancelled = false;
+
+    const validateSession = async () => {
+      try {
+        const res = await fetch('/api/auth/me', { credentials: 'include' });
+        const data = await res.json().catch(() => ({}));
+        if (cancelled) return;
+
+        if (res.ok && data.success && data.user) {
+          const presetUser = PRESET_USERS[data.user.username]?.user;
+          const validatedUser: User = {
+            id: String(data.user.id || data.user.userId || presetUser?.id || authState.user?.id || ''),
+            username: String(data.user.username || presetUser?.username || authState.user?.username || ''),
+            name: String(data.user.name || presetUser?.name || authState.user?.name || data.user.username || ''),
+            role: data.user.role,
+          };
+          const newState = { user: validatedUser };
+          setAuthState(newState);
+          saveToStorage(AUTH_KEY, newState);
+        } else if (res.status === 401) {
+          const newState = { user: null };
+          setAuthState(newState);
+          saveToStorage(AUTH_KEY, newState);
+        }
+      } catch {
+        // 后端暂时不可达时保留本地状态；业务请求会展示具体网络错误。
+      } finally {
+        if (!cancelled) setAuthReady(true);
+      }
+    };
+
+    void validateSession();
+    return () => { cancelled = true; };
+    // 只在应用启动时校验一次；authState 此处是 localStorage 初始化快照。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const isAuthenticated = !!authState.user;
 
@@ -187,11 +228,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     []
   );
 
-  // 退出
+  // 退出：先清本地状态，再通知后端销毁 session/cookie。
   const logout = useCallback(() => {
     const newState = { user: null };
     setAuthState(newState);
     saveToStorage(AUTH_KEY, newState);
+    void fetch('/api/auth/logout', {
+      method: 'POST',
+      credentials: 'include',
+    }).catch(() => {});
   }, []);
 
   // 更新权限配置
@@ -214,6 +259,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const value: AuthContextValue = {
     isAuthenticated,
+    authReady,
     user: authState.user,
     canView,
     canEdit,

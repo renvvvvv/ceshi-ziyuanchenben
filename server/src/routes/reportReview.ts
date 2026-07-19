@@ -116,7 +116,7 @@ router.post('/', requireAuth, async (req, res) => {
  *  3. original !== suggestion（无意义学习直接拒）
  *  4. trim 处理
  */
-router.post('/learn', (req, res) => {
+router.post('/learn', requireAuth, (req, res) => {
   const rawOriginal = (req.body?.original ?? '').toString().trim();
   const rawSuggestion = (req.body?.suggestion ?? '').toString().trim();
   if (!rawOriginal || !rawSuggestion) {

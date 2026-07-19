@@ -124,7 +124,8 @@ export function authMiddleware(req: Request, _res: Response, next: NextFunction)
 // ============================================================
 export function requireAuth(req: Request, res: Response, next: NextFunction) {
   if (!(req as any).user) {
-    res.status(401).json({ success: false, error: '未登录或会话已过期' });
+    const message = '未登录或会话已过期';
+    res.status(401).json({ success: false, error: message, message });
     return;
   }
   next();
@@ -137,11 +138,13 @@ export function requireRole(roles: SessionData['role'][]) {
   return (req: Request, res: Response, next: NextFunction) => {
     const user = (req as any).user;
     if (!user) {
-      res.status(401).json({ success: false, error: '未登录' });
+      const message = '未登录';
+      res.status(401).json({ success: false, error: message, message });
       return;
     }
     if (!roles.includes(user.role)) {
-      res.status(403).json({ success: false, error: `权限不足，需要角色：${roles.join('/')}` });
+      const message = `权限不足，需要角色：${roles.join('/')}`;
+      res.status(403).json({ success: false, error: message, message });
       return;
     }
     next();
@@ -205,7 +208,17 @@ router.post('/logout', asyncHandler(async (req, res) => {
 // ============================================================
 router.get('/me', requireAuth, (req, res) => {
   const user = (req as any).user;
-  res.json({ success: true, user });
+  const preset = PRESET_USERS[user.username];
+  res.json({
+    success: true,
+    user: {
+      id: user.userId,
+      userId: user.userId,
+      username: user.username,
+      name: preset?.name || user.username,
+      role: user.role,
+    },
+  });
 });
 
 // ============================================================
