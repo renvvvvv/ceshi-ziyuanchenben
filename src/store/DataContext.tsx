@@ -204,6 +204,56 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
   }, []); // 只在挂载时执行一次
 
+  // ====== 数据健康检查：清理孤儿数据（启动时跑一次） ======
+  // 孤儿类型：
+  //   1. projectPhases[id] 中 id 不存在于 projects + historyProjects（已删项目残留的 phases）
+  //   2. teamMembers.currentProjects / projects / upcomingProjects 中包含已不存在的项目名
+  useEffect(() => {
+    const validIds = new Set([
+      ...projects.map((p) => p.id),
+      ...historyProjects.map((p) => p.id),
+    ]);
+    const validNames = new Set([
+      ...projects.map((p) => p.name),
+      ...historyProjects.map((p) => p.name),
+    ]);
+
+    // 1. 清理孤儿 phases
+    const orphanPhaseIds: string[] = [];
+    for (const id of Object.keys(projectPhases)) {
+      if (!validIds.has(id)) orphanPhaseIds.push(id);
+    }
+    if (orphanPhaseIds.length > 0) {
+      setProjectPhases((prev) => {
+        const next = { ...prev };
+        for (const id of orphanPhaseIds) delete next[id];
+        return next;
+      });
+      console.info(`[DataContext] data_health: 清理 ${orphanPhaseIds.length} 个孤儿 phases`);
+    }
+
+    // 2. 清理 teamMembers 中不存在的项目关联
+    let memberCleanCount = 0;
+    setTeamMembers((prevMembers) =>
+      prevMembers.map((m) => {
+        const newProjects = (m.projects || []).filter((p) => validNames.has(p.projectName));
+        const newCurrent = (m.currentProjects || []).filter((n) => validNames.has(n));
+        const newUpcoming = (m.upcomingProjects || []).filter((up) => validNames.has(up.projectName));
+        const changed =
+          newProjects.length !== (m.projects || []).length ||
+          newCurrent.length !== (m.currentProjects || []).length ||
+          newUpcoming.length !== (m.upcomingProjects || []).length;
+        if (changed) memberCleanCount += 1;
+        return changed
+          ? { ...m, projects: newProjects, currentProjects: newCurrent, upcomingProjects: newUpcoming }
+          : m;
+      })
+    );
+    if (memberCleanCount > 0) {
+      console.info(`[DataContext] data_health: 清理 ${memberCleanCount} 个成员的孤儿项目关联`);
+    }
+  }, []); // 只在挂载时执行一次（projects + historyProjects + projectPhases 通过 setTeamMembers 链式更新）
+
   // ====== 项目 CRUD（同时调 API + 本地 state） ======
   const addProject = useCallback((project: Project) => {
     setProjects((prev) => [project, ...prev]);
@@ -227,12 +277,40 @@ export function DataProvider({ children }: { children: ReactNode }) {
   }, [setProjects]);
 
   const deleteProject = useCallback((id: string) => {
+    // 删除前先找到项目信息（用于清理 teamMembers 关联）
+    const project = projects.find((p) => p.id === id);
     setProjects((prev) => prev.filter((p) => p.id !== id));
+    // 清理阶段数据（孤儿数据）
+    setProjectPhases((prev) => {
+      if (!(id in prev)) return prev;
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+    // 清理相关人员的项目关联
+    if (project) {
+      const projectName = project.name;
+      const assignedIds = project.assignedMemberIds || [];
+      setTeamMembers((prevMembers) =>
+        prevMembers.map((m) => {
+          if (!assignedIds.includes(m.id)) return m;
+          const newProjects = (m.projects || []).filter((p) => p.projectName !== projectName);
+          const newCurrent = (m.currentProjects || []).filter((p) => p !== projectName);
+          const newUpcoming = (m.upcomingProjects || []).filter((up) => up.projectName !== projectName);
+          return {
+            ...m,
+            projects: newProjects,
+            currentProjects: newCurrent,
+            upcomingProjects: newUpcoming,
+          };
+        })
+      );
+    }
     const dbId = parseInt(id, 10);
     if (!Number.isNaN(dbId)) {
       void projectsApi.remove(String(dbId));
     }
-  }, [setProjects]);
+  }, [projects, setProjects, setProjectPhases, setTeamMembers]);
 
   const getProjectById = useCallback((id: string) => projects.find((p) => p.id === id), [projects]);
 
