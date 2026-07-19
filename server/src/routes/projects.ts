@@ -128,22 +128,37 @@ router.get('/history/list', asyncHandler(async (_req, res) => {
   res.json({ success: true, data: rows });
 }));
 
-/** POST /api/projects/history — 创建历史项目（写入 historical_projects 表，而非 test_projects） */
+/** POST /api/projects/history — 创建历史项目（写入 historical_projects 表） */
 router.post('/history', asyncHandler(async (req, res) => {
-  const { name, customer, it_output, start_date, end_date, doc_link } = req.body;
+  const {
+    name, customer, it_output, start_date, end_date, doc_link,
+    city, manager, status, planned_delivery_date, actual_delivery_date,
+    planned_manpower, business_type, description,
+  } = req.body;
   if (!name || !customer) {
     res.status(400).json({ error: '项目名称和客户必填' });
     return;
   }
   const result = await db.runAsync(
-    `INSERT INTO historical_projects (name, customer, it_output, start_date, end_date, doc_link)
-     VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+    `INSERT INTO historical_projects
+       (name, customer, it_output, start_date, end_date, doc_link,
+        city, manager, status, planned_delivery_date, actual_delivery_date,
+        planned_manpower, business_type, description)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id`,
     name,
     customer,
     it_output ?? 0,
     start_date || '',
     end_date || '',
     doc_link || null,
+    city || null,
+    manager || null,
+    status || '已完成',
+    planned_delivery_date || null,
+    actual_delivery_date || null,
+    planned_manpower ?? null,
+    business_type || null,
+    description || null,
   );
   res.json({ success: true, id: result.lastInsertRowid });
 }));
@@ -224,22 +239,37 @@ router.delete('/members/:id', requireRole(['管理者']), asyncHandler(async (re
   res.json({ success: true });
 }));
 
-/** PUT /api/projects/history/:id — 更新历史项目 */
+/** PUT /api/projects/history/:id — 更新历史项目（2026-07-19 补全字段） */
 router.put('/history/:id', asyncHandler(async (req, res) => {
   const id = parseIdOrNull(req.params.id);
   if (id === null) { res.status(400).json({ error: 'id 必须为正整数' }); return; }
-  const { name, it_output, start_date, end_date, customer, doc_link } = req.body;
+  const {
+    name, it_output, start_date, end_date, customer, doc_link,
+    city, manager, status, planned_delivery_date, actual_delivery_date,
+    planned_manpower, business_type, description,
+  } = req.body;
   const result = await db.runAsync(
     `UPDATE historical_projects SET
        name=$1, it_output=$2, start_date=$3,
-       end_date=$4, customer=$5, doc_link=$6
-     WHERE id=$7 RETURNING id`,
+       end_date=$4, customer=$5, doc_link=$6,
+       city=$7, manager=$8, status=$9,
+       planned_delivery_date=$10, actual_delivery_date=$11,
+       planned_manpower=$12, business_type=$13, description=$14
+     WHERE id=$15 RETURNING id`,
     name,
     it_output ?? 0,
     start_date || '',
     end_date || '',
     customer || '',
     doc_link || null,
+    city || null,
+    manager || null,
+    status || '已完成',
+    planned_delivery_date || null,
+    actual_delivery_date || null,
+    planned_manpower ?? null,
+    business_type || null,
+    description || null,
     id,
   );
   if (result.changes === 0) { res.status(404).json({ error: '历史项目不存在' }); return; }

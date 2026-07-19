@@ -450,22 +450,32 @@ export function teamMemberToDbBody(m: Partial<TeamMember>): Record<string, unkno
 
 /**
  * 后端 historical_projects 行 → 前端 HistoricalProject
+ * 2026-07-19 修复：补全 city/manager/plannedDeliveryDate/actualDeliveryDate/status/plannedManpower/businessType/description 字段
  */
 export function dbRowToHistoryProject(row: Record<string, unknown>): HistoricalProject {
   const c = snakeToCamel<Record<string, unknown>>(row);
   return {
     id: String(c.id),
     name: String(c.name || ''),
-    itOutput: Number(c.itOutput || 0),
+    city: c.city ? String(c.city) : undefined,
+    customer: String(c.customer || ''),
+    status: c.status ? String(c.status) : '已完成',
+    manager: c.manager ? String(c.manager) : undefined,
     startDate: String(c.startDate || ''),
     endDate: String(c.endDate || ''),
-    customer: String(c.customer || ''),
+    plannedDeliveryDate: c.plannedDeliveryDate ? String(c.plannedDeliveryDate) : undefined,
+    actualDeliveryDate: c.actualDeliveryDate ? String(c.actualDeliveryDate) : undefined,
+    itOutput: Number(c.itOutput || 0),
+    plannedManpower: c.plannedManpower != null ? Number(c.plannedManpower) : undefined,
+    businessType: c.businessType ? String(c.businessType) : undefined,
+    description: c.description ? String(c.description) : undefined,
     docLink: c.docLink ? String(c.docLink) : undefined,
   } as HistoricalProject;
 }
 
 /**
  * 前端 HistoricalProject → 后端 body
+ * 2026-07-19 修复：补全 city/manager/plannedDeliveryDate/actualDeliveryDate/status/plannedManpower/businessType/description
  */
 export function historyProjectToDbBody(p: Partial<HistoricalProject>): Record<string, unknown> {
   return {
@@ -474,6 +484,14 @@ export function historyProjectToDbBody(p: Partial<HistoricalProject>): Record<st
     start_date: p.startDate || '',
     end_date: p.endDate || '',
     customer: p.customer || '',
+    city: p.city || null,
+    manager: p.manager || null,
+    status: p.status || '已完成',
+    planned_delivery_date: p.plannedDeliveryDate || null,
+    actual_delivery_date: p.actualDeliveryDate || null,
+    planned_manpower: p.plannedManpower ?? null,
+    business_type: p.businessType || null,
+    description: p.description || null,
     doc_link: p.docLink || null,
   };
 }

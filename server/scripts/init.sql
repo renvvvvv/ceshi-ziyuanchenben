@@ -63,6 +63,16 @@ CREATE TABLE IF NOT EXISTS historical_projects (
     created_at      TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
+-- 2026-07-19 兼容升级：补充前端显示所需的列
+ALTER TABLE historical_projects ADD COLUMN IF NOT EXISTS city TEXT;
+ALTER TABLE historical_projects ADD COLUMN IF NOT EXISTS manager TEXT;
+ALTER TABLE historical_projects ADD COLUMN IF NOT EXISTS planned_delivery_date TEXT;
+ALTER TABLE historical_projects ADD COLUMN IF NOT EXISTS actual_delivery_date TEXT;
+ALTER TABLE historical_projects ADD COLUMN IF NOT EXISTS status TEXT DEFAULT '已完成';
+ALTER TABLE historical_projects ADD COLUMN IF NOT EXISTS planned_manpower INTEGER;
+ALTER TABLE historical_projects ADD COLUMN IF NOT EXISTS business_type TEXT;
+ALTER TABLE historical_projects ADD COLUMN IF NOT EXISTS description TEXT;
+
 -- 团队成员表
 CREATE TABLE IF NOT EXISTS team_members (
     id              SERIAL PRIMARY KEY,
