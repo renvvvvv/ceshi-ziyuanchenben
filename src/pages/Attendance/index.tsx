@@ -47,8 +47,17 @@ function dutyRange(pStart: string, pEnd: string, cStart: string, cEnd: string, t
 function Attendance() {
   const { teamMembers, attendanceAdjustments, setAttendanceAdjustments, updateTeamMember } = useData();
   const [monthFilter, setMonthFilter] = useState(() => {
-    const t = dayjs();
-    return t.date() >= 19 ? t.add(1, 'month') : t;
+    // 反推今天属于哪个"19日~次月18日"的考勤周期
+    // 周期定义：[上月19日, 本月18日]，monthFilter 应为"本月"（cycleEnd 所在月）
+    // 公式：把今天往前推 18 天，再加 1 月再取月初
+    // 验证：
+    //   - 6.18 → 5.31 → +1月 → 6.30 → startOf=6.1 → cycleEnd=6.18 ✓
+    //   - 6.19 → 6.01 → +1月 → 7.01 → startOf=7.1 → cycleEnd=7.18 ✓
+    //   - 7.05 → 6.17 → +1月 → 7.17 → startOf=7.1 → cycleEnd=7.18 ✓
+    //   - 7.20 → 7.02 → +1月 → 8.02 → startOf=8.1 → cycleEnd=8.18 ✓
+    //   - 8.05 → 7.18 → +1月 → 8.18 → startOf=8.1 → cycleEnd=8.18 ✓
+    //   - 8.19 → 8.01 → +1月 → 9.01 → startOf=9.1 → cycleEnd=9.18 ✓
+    return dayjs().subtract(18, 'day').add(1, 'month').startOf('month');
   });
   const [cycleType, setCycleType] = useState<CycleType>('cycle19');
   const [memberFilter, setMemberFilter] = useState('全部');
