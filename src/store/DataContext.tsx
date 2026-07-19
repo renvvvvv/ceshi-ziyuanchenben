@@ -151,8 +151,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
   // ====== 启动时从后端拉数据 ======
   // 策略：
   //   1. 异步 fetch /api/projects + /api/projects/members/list + /api/projects/history/list
-  //   2. 失败/空时降级到 localStorage（mock）
-  //   3. 成功时合并到 state，并写入 localStorage 作为缓存
+  //   2. 失败时降级到 localStorage（mock）
+  //   3. 成功时**完全覆盖**本地 → 实现多用户共享 + 让所有 id 同步成 DB 主键
+  //      （避免"前端有 uuid id 但后端无对应记录，导致 update 失败"的问题）
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -164,15 +165,15 @@ export function DataProvider({ children }: { children: ReactNode }) {
         ]);
         if (cancelled) return;
 
-        // Projects：后端有数据 → 用后端；否则用 mock
+        // Projects：后端有数据 → 用后端覆盖本地（让 id 同步成 DB 主键）
         if (projRes?.success && projRes.data && projRes.data.length > 0) {
           setProjects(projRes.data);
         }
-        // Members：后端有数据 → 用后端；否则用 mock（init.sql 已插入 2 个默认）
-        if (memRes?.success && memRes.data) {
+        // Members：后端有数据 → 用后端覆盖本地
+        if (memRes?.success && memRes.data && memRes.data.length > 0) {
           setTeamMembers(memRes.data);
         }
-        // History：后端有数据 → 用后端；否则用 mock
+        // History：后端有数据 → 用后端覆盖本地
         if (histRes?.success && histRes.data && histRes.data.length > 0) {
           setHistoryProjects(histRes.data);
         }
@@ -240,7 +241,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
       return [project, ...prev];
     });
     // 历史项目目前调 projectsApi.create（同张表），实际应调 historyProjectsApi
-    // 这里先按 history body 调
     void historyProjectsApi.create(project).then((res) => {
       if (res?.success && res.id) {
         const realId = String(res.id);
@@ -251,30 +251,51 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const updateHistoryProject = useCallback((id: string, updates: Partial<HistoricalProject>) => {
     setHistoryProjects((prev) => prev.map((p) => (p.id === id ? { ...p, ...updates } : p)));
-    // TODO: history UPDATE 接口（后端暂未提供 PUT /api/projects/history/:id）
+    // 调后端 API（id 是 DB 主键 int）
+    const dbId = parseInt(id, 10);
+    if (!Number.isNaN(dbId)) {
+      void historyProjectsApi.update(String(dbId), updates);
+    }
   }, [setHistoryProjects]);
 
   const deleteHistoryProject = useCallback((id: string) => {
     setHistoryProjects((prev) => prev.filter((p) => p.id !== id));
-    // TODO: history DELETE 接口
+    const dbId = parseInt(id, 10);
+    if (!Number.isNaN(dbId)) {
+      void historyProjectsApi.remove(String(dbId));
+    }
   }, [setHistoryProjects]);
 
   const getHistoryProjectById = useCallback((id: string) => historyProjects.find((p) => p.id === id), [historyProjects]);
 
-  // ====== 团队成员 CRUD（后端目前只支持 GET，POST/PUT 走 projects 表，需要扩展） ======
+  // ====== 团队成员 CRUD ======
   const addTeamMember = useCallback((member: TeamMember) => {
+    // 乐观更新本地（用传入的 id 作为临时 id）
     setTeamMembers((prev) => [...prev, member]);
-    // TODO: 后端 team_members 暂未提供 POST 端点
+    // 调后端 API
+    void teamMembersApi.create(member).then((res) => {
+      if (res?.success && res.id) {
+        const realId = String(res.id);
+        setTeamMembers((prev) => prev.map((m) => (m.id === member.id ? { ...m, id: realId } : m)));
+      }
+    });
   }, [setTeamMembers]);
 
   const updateTeamMember = useCallback((id: string, updates: Partial<TeamMember>) => {
     setTeamMembers((prev) => prev.map((m) => (m.id === id ? { ...m, ...updates } : m)));
-    // TODO: 后端 team_members 暂未提供 PUT 端点
+    // id 是 DB 主键 int 时才更新后端
+    const dbId = parseInt(id, 10);
+    if (!Number.isNaN(dbId)) {
+      void teamMembersApi.update(String(dbId), updates);
+    }
   }, [setTeamMembers]);
 
   const deleteTeamMember = useCallback((id: string) => {
     setTeamMembers((prev) => prev.filter((m) => m.id !== id));
-    // TODO: 后端 team_members 暂未提供 DELETE 端点
+    const dbId = parseInt(id, 10);
+    if (!Number.isNaN(dbId)) {
+      void teamMembersApi.remove(String(dbId));
+    }
   }, [setTeamMembers]);
 
   // ====== 测试文档 CRUD ======

@@ -238,10 +238,44 @@ export const projectApi = {
     return request('/projects/history/list');
   },
 
+  /** 更新历史项目 */
+  updateHistory: (id: number | string, data: Record<string, unknown>): Promise<ApiResponse<void>> => {
+    return request('/projects/history/' + id, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+
+  /** 删除历史项目 */
+  deleteHistory: (id: number | string): Promise<ApiResponse<void>> => {
+    return request('/projects/history/' + id, { method: 'DELETE' });
+  },
+
   /** 获取团队成员列表 */
   getTeamMembers: (params?: Record<string, string>): Promise<ApiResponse<Record<string, unknown>[]>> => {
     const qs = params ? '?' + new URLSearchParams(params).toString() : '';
     return request('/projects/members/list' + qs);
+  },
+
+  /** 创建团队成员 */
+  createTeamMember: (data: Record<string, unknown>): Promise<ApiResponse<{ id: number }>> => {
+    return request('/projects/members', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  /** 更新团队成员 */
+  updateTeamMember: (id: number | string, data: Record<string, unknown>): Promise<ApiResponse<void>> => {
+    return request('/projects/members/' + id, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+
+  /** 删除团队成员 */
+  deleteTeamMember: (id: number | string): Promise<ApiResponse<void>> => {
+    return request('/projects/members/' + id, { method: 'DELETE' });
   },
 };
 
@@ -464,7 +498,7 @@ export const projectsApi = {
 };
 
 /**
- * Team Members 业务 API（GET 已实现，CRUD 走 teamApi 占位）
+ * Team Members 业务 API（完整 CRUD）
  */
 export const teamMembersApi = {
   list: (params?: { status?: string; search?: string }) => {
@@ -476,10 +510,21 @@ export const teamMembersApi = {
       data: (r.data || []).map(dbRowToTeamMember),
     }));
   },
+  create: (body: Partial<TeamMember>) =>
+    projectApi.createTeamMember(teamMemberToDbBody(body)).then((r) => ({
+      success: r.success,
+      id: (r.data as { id?: number } | undefined)?.id,
+    })),
+  update: (id: string, body: Partial<TeamMember>) =>
+    projectApi.updateTeamMember(id, teamMemberToDbBody(body)).then((r) => ({
+      success: r.success,
+    })),
+  remove: (id: string) =>
+    projectApi.deleteTeamMember(id).then((r) => ({ success: r.success })),
 };
 
 /**
- * Historical Projects 业务 API
+ * Historical Projects 业务 API（完整 CRUD）
  */
 export const historyProjectsApi = {
   list: () => projectApi.getHistoryList().then((r) => ({
@@ -491,4 +536,10 @@ export const historyProjectsApi = {
       success: r.success,
       id: (r.data as { id?: number } | undefined)?.id,
     })),
+  update: (id: string, body: Partial<HistoricalProject>) =>
+    projectApi.updateHistory(id, historyProjectToDbBody(body)).then((r) => ({
+      success: r.success,
+    })),
+  remove: (id: string) =>
+    projectApi.deleteHistory(id).then((r) => ({ success: r.success })),
 };

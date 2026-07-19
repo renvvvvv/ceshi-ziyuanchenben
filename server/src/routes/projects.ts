@@ -115,4 +115,86 @@ router.get('/members/list', asyncHandler(async (req, res) => {
   res.json({ success: true, data: rows });
 }));
 
+/** POST /api/projects/members — 创建团队成员 */
+router.post('/members', asyncHandler(async (req, res) => {
+  const { name, employee_id, status, skills, current_projects, email, phone } = req.body;
+  if (!name || !employee_id) {
+    res.status(400).json({ error: '姓名和工号必填' });
+    return;
+  }
+  try {
+    const result = await db.runAsync(
+      `INSERT INTO team_members (name, employee_id, status, skills, current_projects, email, phone)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
+      name,
+      employee_id,
+      status || '空闲',
+      JSON.stringify(skills || []),
+      JSON.stringify(current_projects || []),
+      email || null,
+      phone || null,
+    );
+    res.json({ success: true, id: result.lastInsertRowid });
+  } catch (err: any) {
+    if (err?.code === '23505') {
+      // unique_violation — employee_id 已存在
+      res.status(409).json({ success: false, error: '工号已存在' });
+      return;
+    }
+    throw err;
+  }
+}));
+
+/** PUT /api/projects/members/:id — 更新团队成员 */
+router.put('/members/:id', asyncHandler(async (req, res) => {
+  const { name, employee_id, status, skills, current_projects, email, phone } = req.body;
+  const result = await db.runAsync(
+    `UPDATE team_members SET
+       name=$1, employee_id=$2, status=$3,
+       skills=$4, current_projects=$5,
+       email=$6, phone=$7
+     WHERE id=$8`,
+    name,
+    employee_id,
+    status || '空闲',
+    JSON.stringify(skills || []),
+    JSON.stringify(current_projects || []),
+    email || null,
+    phone || null,
+    req.params.id,
+  );
+  res.json({ success: true, changes: result.changes });
+}));
+
+/** DELETE /api/projects/members/:id — 删除团队成员 */
+router.delete('/members/:id', asyncHandler(async (req, res) => {
+  await db.runAsync('DELETE FROM team_members WHERE id=$1', req.params.id);
+  res.json({ success: true });
+}));
+
+/** PUT /api/projects/history/:id — 更新历史项目 */
+router.put('/history/:id', asyncHandler(async (req, res) => {
+  const { name, it_output, start_date, end_date, customer, doc_link } = req.body;
+  const result = await db.runAsync(
+    `UPDATE historical_projects SET
+       name=$1, it_output=$2, start_date=$3,
+       end_date=$4, customer=$5, doc_link=$6
+     WHERE id=$7`,
+    name,
+    it_output ?? 0,
+    start_date || '',
+    end_date || '',
+    customer || '',
+    doc_link || null,
+    req.params.id,
+  );
+  res.json({ success: true, changes: result.changes });
+}));
+
+/** DELETE /api/projects/history/:id — 删除历史项目 */
+router.delete('/history/:id', asyncHandler(async (req, res) => {
+  await db.runAsync('DELETE FROM historical_projects WHERE id=$1', req.params.id);
+  res.json({ success: true });
+}));
+
 export default router;
