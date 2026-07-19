@@ -48,10 +48,17 @@ class PgDbWrapper {
     }
   }
 
-  /** 执行多条 SQL（用于初始化） */
+  /** 执行多条 SQL（用于初始化）
+   *  pg-driver 的 client.query(sql) 默认是 prepared statement，只支持单条语句
+   *  这里用 simpleQuery（pg 默认 fallback）以支持 init.sql 里的多条 DDL + INSERT
+   *  注意：simpleQuery 模式下整段 SQL 在一个隐式事务里，某条语句失败会全部 rollback
+   *  init.sql 里的所有 CREATE 都用 IF NOT EXISTS，INSERT 用 WHERE NOT EXISTS，所以应该是幂等的
+   */
   async exec(sql: string): Promise<void> {
     const client = await this.pool.connect();
     try {
+      // 把整段 SQL 当作 simple query 执行（支持多条语句）
+      // pg-driver 检测到非参数化 SQL 时会自动用 simple query 协议
       await client.query(sql);
     } finally {
       client.release();
