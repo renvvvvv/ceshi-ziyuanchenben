@@ -84,3 +84,38 @@ WHERE NOT EXISTS (SELECT 1 FROM team_members WHERE employee_id = 'EMP001');
 INSERT INTO team_members (name, employee_id, status, skills, current_projects, email, phone)
 SELECT '李铭', 'EMP002', '空闲', '["暖通系统","节能测试","BA系统"]', '["乌兰D3扩容测试","广州天河数据中心测试"]', 'liming@example.com', '13800001002'
 WHERE NOT EXISTS (SELECT 1 FROM team_members WHERE employee_id = 'EMP002');
+
+-- 知识库文档表（树形结构 + markdown + 可选外部链接）
+-- 2026-07-19 新增：支持本地 KB 系统，可作为飞书 iframe 的替代/补充
+CREATE TABLE IF NOT EXISTS kb_documents (
+    id              SERIAL PRIMARY KEY,
+    parent_id       INTEGER REFERENCES kb_documents(id) ON DELETE CASCADE,
+    title           TEXT    NOT NULL,
+    content_md      TEXT    NOT NULL DEFAULT '',
+    external_url    TEXT,                  -- 外部链接（飞书等 URL，可选）
+    sort_order      INTEGER NOT NULL DEFAULT 0,
+    created_at      TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMP NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_kb_parent ON kb_documents(parent_id);
+CREATE INDEX IF NOT EXISTS idx_kb_sort ON kb_documents(parent_id, sort_order);
+
+-- 知识库默认数据：根目录 + 3 个分类
+INSERT INTO kb_documents (id, parent_id, title, sort_order)
+SELECT 1, NULL, '智航测试部知识库', 0
+WHERE NOT EXISTS (SELECT 1 FROM kb_documents WHERE id = 1);
+
+INSERT INTO kb_documents (parent_id, title, sort_order)
+SELECT 1, '电力系统测试', 1
+WHERE NOT EXISTS (SELECT 1 FROM kb_documents WHERE parent_id = 1 AND title = '电力系统测试');
+
+INSERT INTO kb_documents (parent_id, title, sort_order)
+SELECT 1, '暖通系统测试', 2
+WHERE NOT EXISTS (SELECT 1 FROM kb_documents WHERE parent_id = 1 AND title = '暖通系统测试');
+
+INSERT INTO kb_documents (parent_id, title, sort_order)
+SELECT 1, '弱电消防测试', 3
+WHERE NOT EXISTS (SELECT 1 FROM kb_documents WHERE parent_id = 1 AND title = '弱电消防测试');
+
+-- 让 kb_documents.id SERIAL 从 100 开始（避免和默认 1-4 冲突）
+SELECT setval('kb_documents_id_seq', GREATEST(100, (SELECT MAX(id) FROM kb_documents)));

@@ -5,6 +5,7 @@ import resourceCalcRouter from './routes/resourceCalc.js';
 import projectsRouter from './routes/projects.js';
 import reportReviewRouter from './routes/reportReview.js';
 import authRouter, { authMiddleware } from './routes/auth.js';
+import kbRouter from './routes/kb.js';
 import { initDatabase } from './database.js';
 
 const app = express();
@@ -20,6 +21,7 @@ app.use('/api/auth', authRouter);
 app.use('/api/resource-calc', resourceCalcRouter);
 app.use('/api/projects', projectsRouter);
 app.use('/api/report-review', reportReviewRouter);
+app.use('/api/kb', kbRouter);
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
