@@ -10,8 +10,8 @@ const asyncHandler = (fn: (req: Request, res: Response, next: NextFunction) => P
     Promise.resolve(fn(req, res, next)).catch(next);
   };
 
-// 所有 /api/projects/* 路由都必须登录
-router.use(requireAuth);
+// 设计：GET 路由（只读）允许匿名访问，POST/PUT/DELETE 路由单独加 requireAuth
+// 这样未登录用户也能看到项目数据（演示模式），但写操作必须有登录态
 
 // ============= 参数校验工具 =============
 
@@ -49,7 +49,7 @@ router.get('/', asyncHandler(async (req, res) => {
 }));
 
 /** POST /api/projects — 创建项目 */
-router.post('/', asyncHandler(async (req, res) => {
+router.post('/', requireAuth, asyncHandler(async (req, res) => {
   const {
     name, customer, status, manager,
     start_date, end_date, it_output,
@@ -77,7 +77,7 @@ router.post('/', asyncHandler(async (req, res) => {
 }));
 
 /** PUT /api/projects/:id — 更新项目 */
-router.put('/:id', asyncHandler(async (req, res) => {
+router.put('/:id', requireAuth, asyncHandler(async (req, res) => {
   const id = parseIdOrNull(req.params.id);
   if (id === null) { res.status(400).json({ error: 'id 必须为正整数' }); return; }
   const {
@@ -139,7 +139,7 @@ router.get('/history/list', asyncHandler(async (_req, res) => {
 }));
 
 /** POST /api/projects/history — 创建历史项目（写入 historical_projects 表） */
-router.post('/history', asyncHandler(async (req, res) => {
+router.post('/history', requireAuth, asyncHandler(async (req, res) => {
   const {
     name, customer, it_output, start_date, end_date, doc_link,
     city, manager, status, planned_delivery_date, actual_delivery_date,
@@ -187,7 +187,7 @@ router.get('/members/list', asyncHandler(async (req, res) => {
 }));
 
 /** POST /api/projects/members — 创建团队成员 */
-router.post('/members', asyncHandler(async (req, res) => {
+router.post('/members', requireAuth, asyncHandler(async (req, res) => {
   const { name, employee_id, status, skills, current_projects, email, phone } = req.body;
   if (!name || !employee_id) {
     res.status(400).json({ error: '姓名和工号必填' });
@@ -217,7 +217,7 @@ router.post('/members', asyncHandler(async (req, res) => {
 }));
 
 /** PUT /api/projects/members/:id — 更新团队成员 */
-router.put('/members/:id', asyncHandler(async (req, res) => {
+router.put('/members/:id', requireAuth, asyncHandler(async (req, res) => {
   const id = parseIdOrNull(req.params.id);
   if (id === null) { res.status(400).json({ error: 'id 必须为正整数' }); return; }
   const { name, employee_id, status, skills, current_projects, email, phone } = req.body;
@@ -250,7 +250,7 @@ router.delete('/members/:id', requireRole(['管理者']), asyncHandler(async (re
 }));
 
 /** PUT /api/projects/history/:id — 更新历史项目（2026-07-19 补全字段） */
-router.put('/history/:id', asyncHandler(async (req, res) => {
+router.put('/history/:id', requireAuth, asyncHandler(async (req, res) => {
   const id = parseIdOrNull(req.params.id);
   if (id === null) { res.status(400).json({ error: 'id 必须为正整数' }); return; }
   const {
