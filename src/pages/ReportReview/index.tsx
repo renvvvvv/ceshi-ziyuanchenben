@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import { Upload, Button, Spin, message, Tooltip, Modal, List, Empty } from 'antd';
+import { Upload, Button, Spin, message, Tooltip, Modal, List, Empty, Popconfirm, Input } from 'antd';
 import type { UploadProps } from 'antd';
 import {
   InboxOutlined,
@@ -36,6 +36,7 @@ function ReportReview() {
   const [reviewStats, setReviewStats] = useState<{aiErrors: number; ruleErrors: number; merged: number}>({aiErrors: 0, ruleErrors: 0, merged: 0});
   const [manageLibOpen, setManageLibOpen] = useState(false);
   const [learnedItems, setLearnedItems] = useState<Array<{original:string;suggestion:string;count:number;lastSeen:string;source?:string}>>([]);
+  const [learnedSearch, setLearnedSearch] = useState('');
   const previewRef = useRef<HTMLDivElement>(null);
 
   // 加载学习库规模
@@ -485,12 +486,30 @@ function ReportReview() {
                   )}
                   {!err.fixed && (
                     <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                      <Button size="small" type="link" icon={<EditOutlined />} onClick={(e) => { e.stopPropagation(); handleFixOne(err.id); }} style={{ padding: 0, color: '#4d9fff', fontSize: 11 }}>
-                        修改并学习
-                      </Button>
-                      <Button size="small" type="link" onClick={(e) => { e.stopPropagation(); handleAdoptOnly(err.id); }} style={{ padding: 0, color: 'rgba(82,196,26,0.7)', fontSize: 11 }}>
-                        仅采纳
-                      </Button>
+                      <Popconfirm
+                        title="修改并加入学习库？"
+                        description={`将把「${err.original}」→「${err.suggestion}」加入学习库，后续 AI 审核会自动应用此纠错。`}
+                        onConfirm={(e) => { e?.stopPropagation(); handleFixOne(err.id); }}
+                        onCancel={(e) => e?.stopPropagation()}
+                        okText="确认"
+                        cancelText="取消"
+                      >
+                        <Button size="small" type="link" icon={<EditOutlined />} onClick={(e) => e.stopPropagation()} style={{ padding: 0, color: '#4d9fff', fontSize: 11 }}>
+                          修改并学习
+                        </Button>
+                      </Popconfirm>
+                      <Popconfirm
+                        title="仅采纳为纠错？"
+                        description={`将把「${err.original}」→「${err.suggestion}」加入学习库，但保留原文不动。`}
+                        onConfirm={(e) => { e?.stopPropagation(); handleAdoptOnly(err.id); }}
+                        onCancel={(e) => e?.stopPropagation()}
+                        okText="确认采纳"
+                        cancelText="取消"
+                      >
+                        <Button size="small" type="link" onClick={(e) => e.stopPropagation()} style={{ padding: 0, color: 'rgba(82,196,26,0.7)', fontSize: 11 }}>
+                          仅采纳
+                        </Button>
+                      </Popconfirm>
                     </div>
                   )}
                   {err.fixed && (
@@ -554,17 +573,30 @@ function ReportReview() {
         <div style={{ marginBottom: 12, padding: '8px 12px', background: 'rgba(77,159,255,0.05)', border: '1px solid rgba(77,159,255,0.15)', borderRadius: 6, fontSize: 12, color: 'rgba(255,255,255,0.65)' }}>
           <BulbOutlined style={{ color: '#4d9fff', marginRight: 6 }} />
           这些纠错已在历史审核中被你采纳，下次遇到相同错误会优先识别（按 count 频次排序）。
-          误学的条目可点击右侧"移除"按钮清除。
+          误学的条目可点击右侧"移除"按钮清除。count=1 的条目已标灰，可考虑清理。
         </div>
+        {/* 搜索框 */}
+        <Input
+          placeholder="搜索原词或推荐词"
+          value={learnedSearch}
+          onChange={(e) => setLearnedSearch(e.target.value)}
+          allowClear
+          size="small"
+          style={{ marginBottom: 12 }}
+        />
         {learnedItems.length === 0 ? (
           <Empty description="暂无学习数据" />
         ) : (
           <div style={{ maxHeight: 440, overflowY: 'auto' }}>
             <List
               size="small"
-              dataSource={learnedItems}
+              dataSource={learnedItems
+                .filter((it) => !learnedSearch || it.original.includes(learnedSearch) || it.suggestion.includes(learnedSearch))
+                .slice()  // 不修改原数组
+                .sort((a, b) => b.count - a.count)}
               renderItem={(item) => (
                 <List.Item
+                  style={{ opacity: item.count <= 1 ? 0.55 : 1 }}
                   actions={[
                     <Tooltip key="del" title="从学习库移除">
                       <Button
