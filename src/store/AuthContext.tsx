@@ -83,8 +83,7 @@ interface AuthContextValue {
   canDelete: (module: AppModule) => boolean;
 
   // 操作
-  login: (username: string, password: string) => { success: boolean; message: string };
-  loginWithFeishu: (user: User) => { success: boolean; message: string };
+  login: (username: string, password: string) => Promise<{ success: boolean; message: string }>;
   logout: () => void;
 
   // 权限配置（仅管理者）
@@ -163,20 +162,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [permissionMap]
   );
 
-  // 登录
+  // 登录（先调后端 /api/auth/login 拿 token，再写本地状态）
   const login = useCallback(
-    (username: string, password: string): { success: boolean; message: string } => {
-      const preset = PRESET_USERS[username];
-      if (!preset) {
-        return { success: false, message: '账号不存在' };
+    async (username: string, password: string): Promise<{ success: boolean; message: string }> => {
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include', // 带上 cookie（即使失败也带上）
+          body: JSON.stringify({ username, password }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          return { success: false, message: data.error || '登录失败' };
+        }
+        const newState = { user: data.user };
+        setAuthState(newState);
+        saveToStorage(AUTH_KEY, newState);
+        return { success: true, message: '登录成功' };
+      } catch (err) {
+        return { success: false, message: '网络错误，请检查后端服务' };
       }
-      if (preset.password !== password) {
-        return { success: false, message: '密码错误' };
-      }
-      const newState = { user: preset.user };
-      setAuthState(newState);
-      saveToStorage(AUTH_KEY, newState);
-      return { success: true, message: '登录成功' };
     },
     []
   );
@@ -187,17 +193,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAuthState(newState);
     saveToStorage(AUTH_KEY, newState);
   }, []);
-
-  // 飞书登录
-  const loginWithFeishu = useCallback(
-    (user: User): { success: boolean; message: string } => {
-      const newState = { user };
-      setAuthState(newState);
-      saveToStorage(AUTH_KEY, newState);
-      return { success: true, message: '飞书登录成功' };
-    },
-    []
-  );
 
   // 更新权限配置
   const updatePermissionConfig = useCallback(
@@ -224,7 +219,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     canEdit,
     canDelete,
     login,
-    loginWithFeishu,
     logout,
     permissionConfigs,
     updatePermissionConfig,

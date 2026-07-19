@@ -1,5 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import db from '../database.js';
+import { requireAuth, requireRole } from './auth.js';
 
 const router = Router();
 
@@ -8,6 +9,9 @@ const asyncHandler = (fn: (req: Request, res: Response, next: NextFunction) => P
   (req: Request, res: Response, next: NextFunction) => {
     Promise.resolve(fn(req, res, next)).catch(next);
   };
+
+// 所有 /api/projects/* 路由都必须登录
+router.use(requireAuth);
 
 // ============= 参数校验工具 =============
 
@@ -101,7 +105,7 @@ router.put('/:id', asyncHandler(async (req, res) => {
 }));
 
 /** DELETE /api/projects/:id — 删除项目 */
-router.delete('/:id', asyncHandler(async (req, res) => {
+router.delete('/:id', requireRole(['管理者']), asyncHandler(async (req, res) => {
   const id = parseIdOrNull(req.params.id);
   if (id === null) { res.status(400).json({ error: 'id 必须为正整数' }); return; }
   const result = await db.runAsync('DELETE FROM test_projects WHERE id=$1 RETURNING id', id);
@@ -212,7 +216,7 @@ router.put('/members/:id', asyncHandler(async (req, res) => {
 }));
 
 /** DELETE /api/projects/members/:id — 删除团队成员 */
-router.delete('/members/:id', asyncHandler(async (req, res) => {
+router.delete('/members/:id', requireRole(['管理者']), asyncHandler(async (req, res) => {
   const id = parseIdOrNull(req.params.id);
   if (id === null) { res.status(400).json({ error: 'id 必须为正整数' }); return; }
   const result = await db.runAsync('DELETE FROM team_members WHERE id=$1 RETURNING id', id);
@@ -243,7 +247,7 @@ router.put('/history/:id', asyncHandler(async (req, res) => {
 }));
 
 /** DELETE /api/projects/history/:id — 删除历史项目 */
-router.delete('/history/:id', asyncHandler(async (req, res) => {
+router.delete('/history/:id', requireRole(['管理者']), asyncHandler(async (req, res) => {
   const id = parseIdOrNull(req.params.id);
   if (id === null) { res.status(400).json({ error: 'id 必须为正整数' }); return; }
   const result = await db.runAsync('DELETE FROM historical_projects WHERE id=$1 RETURNING id', id);

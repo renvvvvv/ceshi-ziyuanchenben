@@ -3,19 +3,22 @@ import express from 'express';
 import cors from 'cors';
 import resourceCalcRouter from './routes/resourceCalc.js';
 import projectsRouter from './routes/projects.js';
-import authRouter from './routes/auth.js';
 import reportReviewRouter from './routes/reportReview.js';
+import authRouter, { authMiddleware } from './routes/auth.js';
 import { initDatabase } from './database.js';
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3001', 10);
 
-app.use(cors());
+app.use(cors({ credentials: true, origin: true })); // credentials:true 让 cookie 跨域带上
 app.use(express.json({ limit: '2mb' }));
 
+// 解析 session token（所有请求都会跑；只是把 user 挂到 req 上，不强制要求登录）
+app.use(authMiddleware);
+
+app.use('/api/auth', authRouter);
 app.use('/api/resource-calc', resourceCalcRouter);
 app.use('/api/projects', projectsRouter);
-app.use('/api/auth', authRouter);
 app.use('/api/report-review', reportReviewRouter);
 
 app.get('/api/health', (_req, res) => {

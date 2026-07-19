@@ -51,6 +51,7 @@ async function request<T>(path: string, options?: RequestOptions): Promise<T> {
         'Content-Type': 'application/json',
         ...fetchOptions.headers,
       },
+      credentials: 'include', // 自动带 session_token cookie
       signal: controller.signal,
     });
 

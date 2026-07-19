@@ -16,15 +16,17 @@ function Login() {
     return <Navigate to="/dashboard" replace />;
   }
 
-  const handleSubmit = (values: { username: string; password: string }) => {
+  const handleSubmit = async (values: { username: string; password: string }) => {
     setLoading(true);
-    const result = login(values.username, values.password);
-    setLoading(false);
-    if (result.success) {
-      message.success(result.message);
-      // 不调用 navigate：让上方的 <Navigate> 在 state 更新后自动跳
-    } else {
-      message.error(result.message);
+    try {
+      const result = await login(values.username, values.password);
+      if (result.success) {
+        message.success(result.message);
+      } else {
+        message.error(result.message);
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
