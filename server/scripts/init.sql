@@ -101,6 +101,9 @@ CREATE INDEX IF NOT EXISTS idx_kb_parent ON kb_documents(parent_id);
 CREATE INDEX IF NOT EXISTS idx_kb_sort ON kb_documents(parent_id, sort_order);
 
 -- 知识库默认数据：根目录 + 3 个分类
+-- 注意：必须先把 sequence 设到 100，避免后续不带 id 的 INSERT 用到 1（与根节点冲突）
+SELECT setval('kb_documents_id_seq', 100, false);
+
 INSERT INTO kb_documents (id, parent_id, title, sort_order)
 SELECT 1, NULL, '智航测试部知识库', 0
 WHERE NOT EXISTS (SELECT 1 FROM kb_documents WHERE id = 1);
@@ -117,5 +120,5 @@ INSERT INTO kb_documents (parent_id, title, sort_order)
 SELECT 1, '弱电消防测试', 3
 WHERE NOT EXISTS (SELECT 1 FROM kb_documents WHERE parent_id = 1 AND title = '弱电消防测试');
 
--- 让 kb_documents.id SERIAL 从 100 开始（避免和默认 1-4 冲突）
-SELECT setval('kb_documents_id_seq', GREATEST(100, (SELECT MAX(id) FROM kb_documents)));
+-- 如果之前已有数据，把 sequence 同步到 MAX(id) 之后
+SELECT setval('kb_documents_id_seq', GREATEST(100, (SELECT COALESCE(MAX(id), 100) FROM kb_documents)));
