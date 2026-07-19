@@ -1,11 +1,14 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import crypto from 'crypto';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import db from '../database.js';
 
 const router = Router();
 
 // ============================================================
-// 会话 token 存储（内存 Map；生产环境可换 Redis / PG session 表）
+// 会话 token 存储（持久化到文件，backend 重启不丢）
 // ============================================================
 interface SessionData {
   userId: string;
@@ -13,7 +16,45 @@ interface SessionData {
   role: '管理者' | '编辑者' | '阅读者';
   expiresAt: number;
 }
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+// 注意：__dirname 在 ESM 编译后是 /app/dist/src/routes
+// 用 process.cwd()（= /app）作为基准，避免路径错位
+const SESSIONS_FILE = path.resolve(process.cwd(), 'data', 'sessions.json');
+
+// 启动时从文件加载 sessions
 const sessions = new Map<string, SessionData>();
+try {
+  if (fs.existsSync(SESSIONS_FILE)) {
+    const data = JSON.parse(fs.readFileSync(SESSIONS_FILE, 'utf-8'));
+    for (const [token, session] of Object.entries(data || {})) {
+      if ((session as SessionData).expiresAt > Date.now()) {
+        sessions.set(token, session as SessionData);
+      }
+    }
+    console.log(`[Auth] 加载 ${sessions.size} 个有效 session`);
+  }
+} catch (err) {
+  console.warn('[Auth] 加载 sessions.json 失败：', err);
+}
+
+// 持久化到文件（debounce 避免频繁写）
+let persistTimer: NodeJS.Timeout | null = null;
+function persistSessions() {
+  if (persistTimer) clearTimeout(persistTimer);
+  persistTimer = setTimeout(() => {
+    try {
+      const obj: Record<string, SessionData> = {};
+      for (const [token, session] of sessions.entries()) {
+        obj[token] = session;
+      }
+      fs.writeFileSync(SESSIONS_FILE, JSON.stringify(obj, null, 2), 'utf-8');
+    } catch (err) {
+      console.warn('[Auth] 保存 sessions.json 失败：', err);
+    }
+  }, 100);
+}
 
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000; // 24 小时
 
@@ -127,6 +168,7 @@ router.post('/login', asyncHandler(async (req, res) => {
     role: preset.role,
     expiresAt,
   });
+  persistSessions();  // 登录后立即持久化（避免重启丢登录态）
   // 同时设置 httpOnly cookie（防 XSS，path=/ 让所有 /api/* 路由都能用）
   res.cookie('session_token', token, {
     httpOnly: true,
@@ -147,7 +189,10 @@ router.post('/login', asyncHandler(async (req, res) => {
 // ============================================================
 router.post('/logout', asyncHandler(async (req, res) => {
   const token = extractToken(req);
-  if (token) sessions.delete(token);
+  if (token) {
+    sessions.delete(token);
+    persistSessions();
+  }
   res.clearCookie('session_token');
   res.json({ success: true });
 }));
