@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Table, Button, Select, Input, Space, Popconfirm, message, Tag, Tooltip } from 'antd';
-import { PlusOutlined, SearchOutlined, DeleteOutlined, EditOutlined, EyeOutlined, SwapOutlined, LinkOutlined } from '@ant-design/icons';
+import { PlusOutlined, SearchOutlined, DeleteOutlined, EditOutlined, EyeOutlined, SwapOutlined, LinkOutlined, InboxOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import StatusTag from '../../components/StatusTag';
@@ -11,7 +11,7 @@ import { useData } from '../../store/DataContext';
 import type { Project, HistoricalProject, TeamMember } from '../../types';
 
 function Projects() {
-  const { projects, setProjects, historyProjects, setHistoryProjects, teamMembers, setTeamMembers, autoProcessProjects, autoProcessMembers, addProject, updateProject, deleteProject, addHistoryProject, updateTeamMember } = useData();
+  const { projects, setProjects, historyProjects, setHistoryProjects, teamMembers, setTeamMembers, autoProcessProjects, autoProcessMembers, addProject, updateProject, deleteProject, addHistoryProject, updateTeamMember, archiveProject } = useData();
 
   // ===== 自动化流程：进入项目管理页时也自动处理项目状态 =====
   useEffect(() => {
@@ -25,11 +25,14 @@ function Projects() {
   const [reportOpen, setReportOpen] = useState(false);
   const navigate = useNavigate();
 
-  // 过滤：项目管理只显示进行中和未开始的项目，已完成的自动归档到历史项目
+  // 过滤：默认不显示"已完成"项目（隐藏），可手动通过状态筛选查看
+  // 设计变更（2026-07-19）：已完成项目不再自动归档，保留在 projects 数组里
+  //   - 默认 statusFilter='全部' 时仍隐藏已完成（避免与历史项目板块混淆）
+  //   - 用户切到"已完成"Tab 时可见
   const filteredProjects = useMemo(() => {
     return projects.filter((p) => {
-      // 已完成的项目不在项目管理中展示（归档到历史项目）
-      if (p.status === '已完成') return false;
+      // 默认隐藏已完成（保留原有 UX）
+      if (statusFilter === '全部' && p.status === '已完成') return false;
       if (statusFilter !== '全部' && p.status !== statusFilter) return false;
       if (searchText) {
         const kw = searchText.toLowerCase();
@@ -112,15 +115,14 @@ function Projects() {
       const allRelatedIds = Array.from(new Set([...oldMemberIds, ...newMemberIds]));
 
       if (values.status === '已完成') {
-        // 删除项目 + 添加到历史项目
-        deleteProject(editingProject.id);
-        const archived: HistoricalProject = {
+        // 设计变更（2026-07-19）：状态变"已完成"只更新项目状态，不再自动归档
+        // 归档需要用户在 Projects 列表里点击「归档」按钮（archiveProject）显式触发
+        updateProject(editingProject.id, {
           ...values,
           id: editingProject.id,
           updatedAt: dayjs().format('YYYY-MM-DD'),
-        };
-        addHistoryProject(archived);
-        // 清理成员关联
+        });
+        // 清理相关人员的项目关联（项目已完成，人员应退出）
         const oldName = editingProject.name;
         const newName = values.name;
         const nameMatch = (n: string) => n === oldName || n === newName;
@@ -139,7 +141,7 @@ function Projects() {
           }
           updateTeamMember(m.id, updates);
         });
-        message.info('项目状态已标记为「已完成」，已自动归档至历史项目板块');
+        message.info('项目状态已标记为「已完成」，需手动点击「归档」按钮移到历史项目板块');
       } else {
         updateProject(editingProject.id, {
           ...values,
@@ -249,7 +251,7 @@ function Projects() {
     {
       title: '操作',
       key: 'action',
-      width: 140,
+      width: 170,
       fixed: 'right' as const,
       render: (_: unknown, record: Project) => (
         <Space size={0} split={null}>
@@ -259,6 +261,24 @@ function Projects() {
           <Tooltip title="编辑项目">
             <Button type="text" size="small" icon={<EditOutlined />} onClick={() => handleEdit(record)} style={{ color: '#faad14', width: 32, height: 28 }} />
           </Tooltip>
+          {/* 仅"已完成"项目显示归档按钮（显式归档到历史项目板块） */}
+          {record.status === '已完成' && (
+            <Popconfirm
+              title="归档到历史项目"
+              description={`确定要把项目"${record.name}"归档到历史项目板块吗？归档后可在历史项目页面查看。`}
+              onConfirm={() => {
+                const ok = archiveProject(record.id);
+                if (ok) message.success('项目已归档到历史项目');
+                else message.error('归档失败');
+              }}
+              okText="确认归档"
+              cancelText="取消"
+            >
+              <Tooltip title="归档到历史项目">
+                <Button type="text" size="small" icon={<InboxOutlined />} style={{ color: '#b37feb', width: 32, height: 28 }} />
+              </Tooltip>
+            </Popconfirm>
+          )}
           <Popconfirm
             title="确认删除"
             description={`确定要删除项目"${record.name}"吗？`}
@@ -273,7 +293,7 @@ function Projects() {
         </Space>
       ),
     },
-  ], [navigate, handleDelete]);
+  ], [navigate, handleDelete, archiveProject]);
 
   return (
     <div>
@@ -315,6 +335,7 @@ function Projects() {
           <Select.Option value="全部">全部状态</Select.Option>
           <Select.Option value="未开始">未开始</Select.Option>
           <Select.Option value="测试中">测试中</Select.Option>
+          <Select.Option value="已完成">已完成</Select.Option>
           <Select.Option value="阻塞">阻塞</Select.Option>
         </Select>
         <Input
