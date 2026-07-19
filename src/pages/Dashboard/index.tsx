@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button, Spin, Select, Tag } from 'antd';
-import { ReloadOutlined, ProjectOutlined, CheckCircleOutlined, ThunderboltOutlined, TeamOutlined, FilterOutlined, RightOutlined, ClockCircleOutlined } from '@ant-design/icons';
+import { ReloadOutlined, ProjectOutlined, CheckCircleOutlined, ThunderboltOutlined, TeamOutlined, FilterOutlined, RightOutlined, ClockCircleOutlined, WarningOutlined, AlertOutlined } from '@ant-design/icons';
 import ReactEChartsCore from 'echarts-for-react/lib/core';
 import * as echarts from 'echarts/core';
 import { PieChart, BarChart } from 'echarts/charts';
@@ -47,6 +47,15 @@ function Dashboard() {
     autoProcessMembers();
   }, [autoProcessProjects, autoProcessMembers]);
 
+  // ===== 定时自动刷新（每 5 分钟跑一次 autoProcess，让逾期/今日到期数据保持最新） =====
+  useEffect(() => {
+    const timer = setInterval(() => {
+      autoProcessProjects();
+      autoProcessMembers();
+    }, 5 * 60 * 1000);
+    return () => clearInterval(timer);
+  }, [autoProcessProjects, autoProcessMembers]);
+
   const handleRefresh = () => {
     setLoading(true);
     autoProcessProjects();
@@ -54,7 +63,7 @@ function Dashboard() {
     setTimeout(() => setLoading(false), 300);
   };
 
-  // ===== 显示屏模块：进行中 + 即将开始 =====
+  // ===== 显示屏模块：进行中 + 即将开始 + 逾期预警 =====
   const displayData = useMemo(() => {
     const today = dayjs();
     const tenDaysLater = today.add(10, 'day');
@@ -62,14 +71,44 @@ function Dashboard() {
     // 进行中：status === '测试中'
     const activeProjects = projects.filter((p) => p.status === '测试中');
 
-    // 即将开始：status === '未开始' 且 startDate 在 10 天内（today <= startDate <= today+10）
+    // 即将开始：status === '未开始' 且 startDate 在 10 天内
     const upcomingProjects = projects.filter((p) => {
       if (p.status !== '未开始') return false;
       const start = dayjs(p.startDate);
       return !start.isBefore(today, 'day') && !start.isAfter(tenDaysLater, 'day');
     });
 
-    return { activeProjects, upcomingProjects };
+    // 今日到期：status === '测试中' 且 endDate === today
+    const dueToday = projects.filter((p) =>
+      p.status === '测试中' && p.endDate && dayjs(p.endDate).isSame(today, 'day')
+    );
+
+    // 逾期：status === '测试中' 且 endDate < today
+    // 区分轻度（1~3 天）和重度（7+ 天）逾期
+    const overdue = projects.filter((p) =>
+      p.status === '测试中' && p.endDate && dayjs(p.endDate).isBefore(today, 'day')
+    );
+    const overdueMild = overdue.filter((p) => {
+      const days = today.diff(dayjs(p.endDate), 'day');
+      return days >= 1 && days <= 3;
+    });
+    const overdueSevere = overdue.filter((p) => {
+      const days = today.diff(dayjs(p.endDate), 'day');
+      return days >= 7;
+    });
+    // 逾期但未超过 7 天的归入 overdueMild 显示
+    const overdueOthers = overdue.filter((p) => {
+      const days = today.diff(dayjs(p.endDate), 'day');
+      return days >= 4 && days <= 6;
+    });
+
+    return {
+      activeProjects,
+      upcomingProjects,
+      dueToday,
+      overdueMild: [...overdueMild, ...overdueOthers],
+      overdueSevere,
+    };
   }, [projects]);
 
   // ===== 筛选后的项目（用于甘特图和环形图） =====
@@ -517,6 +556,80 @@ function Dashboard() {
           )}
         </div>
       </div>
+
+      {/* ===== 逾期预警条 ===== */}
+      {(displayData.dueToday.length > 0 || displayData.overdueMild.length > 0 || displayData.overdueSevere.length > 0) && (
+        <div
+          style={{
+            background: displayData.overdueSevere.length > 0
+              ? 'linear-gradient(135deg, rgba(255,45,85,0.15) 0%, rgba(255,77,79,0.08) 100%)'
+              : 'linear-gradient(135deg, rgba(255,107,53,0.12) 0%, rgba(255,77,79,0.06) 100%)',
+            border: displayData.overdueSevere.length > 0
+              ? '1px solid rgba(255,45,85,0.4)'
+              : '1px solid rgba(255,77,79,0.3)',
+            borderRadius: 12,
+            padding: '14px 20px',
+            marginBottom: 20,
+            display: 'flex',
+            gap: 24,
+            alignItems: 'center',
+            flexWrap: 'wrap' as const,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+            {displayData.overdueSevere.length > 0 ? (
+              <AlertOutlined style={{ color: '#ff2d55', fontSize: 18 }} />
+            ) : (
+              <WarningOutlined style={{ color: '#ff6b35', fontSize: 18 }} />
+            )}
+            <span style={{
+              color: displayData.overdueSevere.length > 0 ? '#ff2d55' : '#ff6b35',
+              fontSize: 14,
+              fontWeight: 600,
+              fontFamily: 'var(--font-primary)',
+              letterSpacing: 1,
+            }}>
+              {displayData.overdueSevere.length > 0 ? '严重逾期警告' : '逾期提醒'}
+            </span>
+          </div>
+          <div style={{ display: 'flex', gap: 18, flex: 1, flexWrap: 'wrap' as const, fontSize: 12 }}>
+            {displayData.dueToday.length > 0 && (
+              <span style={{ color: 'rgba(255,200,87,0.95)' }}>
+                <strong style={{ color: '#ffc857', fontSize: 14 }}>{displayData.dueToday.length}</strong>
+                <span style={{ marginLeft: 4 }}>个项目今日到期</span>
+              </span>
+            )}
+            {displayData.overdueMild.length > 0 && (
+              <span style={{ color: 'rgba(255,140,80,0.95)' }}>
+                <strong style={{ color: '#ff8c50', fontSize: 14 }}>{displayData.overdueMild.length}</strong>
+                <span style={{ marginLeft: 4 }}>个项目轻度逾期（1-6 天）</span>
+              </span>
+            )}
+            {displayData.overdueSevere.length > 0 && (
+              <span style={{ color: 'rgba(255,80,100,0.95)' }}>
+                <strong style={{ color: '#ff2d55', fontSize: 14 }}>{displayData.overdueSevere.length}</strong>
+                <span style={{ marginLeft: 4 }}>个项目严重逾期（7+ 天）</span>
+              </span>
+            )}
+          </div>
+          <Button
+            type="default"
+            size="small"
+            onClick={async () => {
+              // 自动跳到第一个逾期/今日到期项目
+              const all = [...displayData.overdueSevere, ...displayData.overdueMild, ...displayData.dueToday];
+              if (all.length > 0) navigate(`/projects/${all[0].id}`);
+            }}
+            style={{
+              borderColor: 'rgba(255,77,79,0.5)',
+              color: '#ff6b35',
+              flexShrink: 0,
+            }}
+          >
+            立即查看
+          </Button>
+        </div>
+      )}
 
       <div className="kpi-cards-row">
         <KpiCard
