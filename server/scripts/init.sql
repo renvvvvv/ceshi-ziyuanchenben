@@ -40,13 +40,21 @@ CREATE TABLE IF NOT EXISTS test_projects (
     -- 2026-07-18 新增：支撑前端 Project 完整字段
     planned_manpower       INTEGER,    -- 计划投入人力
     city                   TEXT,       -- 项目城市
-    assigned_member_ids    TEXT        -- 关联人员 ID 列表（JSON 字符串）
+    assigned_member_ids    TEXT,        -- 关联人员 ID 列表（JSON 字符串）
+    -- 2026-07-19 新增：计划/实际交付日期 + 测试管理链接
+    planned_delivery_date  TEXT,
+    actual_delivery_date   TEXT,
+    doc_link               TEXT
 );
 
 -- 兼容升级：旧库可能缺这些列
 ALTER TABLE test_projects ADD COLUMN IF NOT EXISTS planned_manpower INTEGER;
 ALTER TABLE test_projects ADD COLUMN IF NOT EXISTS city TEXT;
 ALTER TABLE test_projects ADD COLUMN IF NOT EXISTS assigned_member_ids TEXT;
+-- 2026-07-19 新增列兼容升级
+ALTER TABLE test_projects ADD COLUMN IF NOT EXISTS planned_delivery_date TEXT;
+ALTER TABLE test_projects ADD COLUMN IF NOT EXISTS actual_delivery_date TEXT;
+ALTER TABLE test_projects ADD COLUMN IF NOT EXISTS doc_link TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_tp_status ON test_projects(status);
 CREATE INDEX IF NOT EXISTS idx_tp_updated ON test_projects(updated_at DESC);
@@ -83,8 +91,20 @@ CREATE TABLE IF NOT EXISTS team_members (
     current_projects TEXT   NOT NULL DEFAULT '[]',
     email           TEXT,
     phone           TEXT,
+    position        TEXT,                          -- 岗位（2026-07-19 新增）
+    projects        TEXT    NOT NULL DEFAULT '[]', -- 详细项目 [{projectName,startDate,endDate}]（2026-07-19 新增）
+    upcoming_projects TEXT  NOT NULL DEFAULT '[]', -- 即将开始的项目（2026-07-19 新增）
+    leave_start_date TEXT,                         -- 休假开始日期（2026-07-19 新增）
+    leave_end_date  TEXT,                          -- 休假结束日期（2026-07-19 新增）
     created_at      TIMESTAMP NOT NULL DEFAULT NOW()
 );
+
+-- 2026-07-19 ALTER：兼容已部署的库（即使表已存在也能加列）
+ALTER TABLE team_members ADD COLUMN IF NOT EXISTS position TEXT;
+ALTER TABLE team_members ADD COLUMN IF NOT EXISTS projects TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE team_members ADD COLUMN IF NOT EXISTS upcoming_projects TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE team_members ADD COLUMN IF NOT EXISTS leave_start_date TEXT;
+ALTER TABLE team_members ADD COLUMN IF NOT EXISTS leave_end_date TEXT;
 
 -- 插入默认数据（仅首次初始化）
 INSERT INTO team_members (name, employee_id, status, skills, current_projects, email, phone)

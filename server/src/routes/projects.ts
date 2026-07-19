@@ -85,6 +85,7 @@ router.put('/:id', requireAuth, asyncHandler(async (req, res) => {
     start_date, end_date, it_output,
     business_type, description,
     planned_manpower, city, assigned_member_ids,
+    planned_delivery_date, actual_delivery_date, doc_link,
   } = req.body;
   const result = await db.runAsync(
     `UPDATE test_projects SET
@@ -92,12 +93,16 @@ router.put('/:id', requireAuth, asyncHandler(async (req, res) => {
        start_date=$5, end_date=$6, it_output=$7,
        business_type=$8, description=$9,
        planned_manpower=$10, city=$11, assigned_member_ids=$12,
+       planned_delivery_date=$13, actual_delivery_date=$14, doc_link=$15,
        updated_at=NOW()
-     WHERE id=$13 RETURNING id`,
+     WHERE id=$16 RETURNING id`,
     name, customer, status, manager,
     start_date, end_date, it_output,
     business_type, description,
     planned_manpower, city, assigned_member_ids,
+    planned_delivery_date ?? null,
+    actual_delivery_date ?? null,
+    doc_link ?? null,
     id,
   );
   if (result.changes === 0) { res.status(404).json({ error: '项目不存在' }); return; }
@@ -113,20 +118,10 @@ router.delete('/:id', requireRole(['管理者']), asyncHandler(async (req, res) 
   res.json({ success: true });
 }));
 
-/** GET /api/projects/:id — 项目详情 */
-router.get('/:id', asyncHandler(async (req, res) => {
-  const id = parseIdOrNull(req.params.id);
-  if (id === null) { res.status(400).json({ error: 'id 必须为正整数' }); return; }
-  const row = await db.getAsync('SELECT * FROM test_projects WHERE id=$1', id);
-  if (!row) { res.status(404).json({ error: '项目不存在' }); return; }
-  res.json({ success: true, data: row });
-}));
-
-/** GET /api/history-projects — 历史项目（注意：必须在 /history/:id 之前，否则会被 :id='list' 拦截）*/
+/** GET /api/history-projects — 历史项目（必须在 /:id 之前，否则会被 :id='list' 拦截）*/
 router.get('/history/list', asyncHandler(async (_req, res) => {
   const rows = await db.allAsync('SELECT * FROM historical_projects ORDER BY end_date DESC');
   // 2026-07-19 直接转 camelCase 返回，前端无需再 snakeToCamel
-  // 兼容：snakeToCamel 对已经是 camelCase 的 key 无副作用
   const camelRows = rows.map((r) => {
     const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(r)) {
@@ -136,6 +131,15 @@ router.get('/history/list', asyncHandler(async (_req, res) => {
     return out;
   });
   res.json({ success: true, data: camelRows });
+}));
+
+/** GET /api/projects/:id — 项目详情 */
+router.get('/:id', asyncHandler(async (req, res) => {
+  const id = parseIdOrNull(req.params.id);
+  if (id === null) { res.status(400).json({ error: 'id 必须为正整数' }); return; }
+  const row = await db.getAsync('SELECT * FROM test_projects WHERE id=$1', id);
+  if (!row) { res.status(404).json({ error: '项目不存在' }); return; }
+  res.json({ success: true, data: row });
 }));
 
 /** POST /api/projects/history — 创建历史项目（写入 historical_projects 表） */
@@ -195,8 +199,8 @@ router.post('/members', requireAuth, asyncHandler(async (req, res) => {
   }
   try {
     const result = await db.runAsync(
-      `INSERT INTO team_members (name, employee_id, status, skills, current_projects, email, phone)
-       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
+      `INSERT INTO team_members (name, employee_id, status, skills, current_projects, email, phone, position, projects, upcoming_projects, leave_start_date, leave_end_date)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id`,
       name,
       employee_id,
       status || '空闲',
@@ -204,6 +208,11 @@ router.post('/members', requireAuth, asyncHandler(async (req, res) => {
       JSON.stringify(current_projects || []),
       email || null,
       phone || null,
+      req.body.position ?? null,
+      JSON.stringify(req.body.projects || []),
+      JSON.stringify(req.body.upcoming_projects || []),
+      req.body.leave_start_date ?? null,
+      req.body.leave_end_date ?? null,
     );
     res.json({ success: true, id: result.lastInsertRowid });
   } catch (err: any) {
@@ -220,13 +229,15 @@ router.post('/members', requireAuth, asyncHandler(async (req, res) => {
 router.put('/members/:id', requireAuth, asyncHandler(async (req, res) => {
   const id = parseIdOrNull(req.params.id);
   if (id === null) { res.status(400).json({ error: 'id 必须为正整数' }); return; }
-  const { name, employee_id, status, skills, current_projects, email, phone } = req.body;
+  const { name, employee_id, status, skills, current_projects, email, phone, position, projects, upcoming_projects, leave_start_date, leave_end_date } = req.body;
   const result = await db.runAsync(
     `UPDATE team_members SET
        name=$1, employee_id=$2, status=$3,
        skills=$4, current_projects=$5,
-       email=$6, phone=$7
-     WHERE id=$8 RETURNING id`,
+       email=$6, phone=$7,
+       position=$8, projects=$9, upcoming_projects=$10,
+       leave_start_date=$11, leave_end_date=$12
+     WHERE id=$13 RETURNING id`,
     name,
     employee_id,
     status || '空闲',
@@ -234,6 +245,11 @@ router.put('/members/:id', requireAuth, asyncHandler(async (req, res) => {
     JSON.stringify(current_projects || []),
     email || null,
     phone || null,
+    position ?? null,
+    JSON.stringify(projects || []),
+    JSON.stringify(upcoming_projects || []),
+    leave_start_date ?? null,
+    leave_end_date ?? null,
     id,
   );
   if (result.changes === 0) { res.status(404).json({ error: '成员不存在' }); return; }

@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useRef, type ReactNode } from 'react';
 import dayjs from 'dayjs';
 import {
   projectsApi,
@@ -445,90 +445,103 @@ export function DataProvider({ children }: { children: ReactNode }) {
   //   - 现在改为：autoProcessProjects 只根据日期自动更新状态（未开始→测试中、测试中→已完成）
   //   - "已完成"项目保留在 projects 列表（被 Projects 页面过滤掉，但可通过"已完成"Tab 查看）
   //   - 显式归档用 archiveProject(id)，由 Projects 页面"归档到历史"按钮触发
+  // 防止 autoProcess 在自身 setState 触发 useEffect 重跑时再次执行（循环依赖保护）
+  const isAutoProcessingRef = useRef(false);
+
+  // 设计变更（2026-07-19 晚）：
+  //   - 之前只改前端 state 不调 API → 刷新后从 DB 拉回旧值，用户看到状态变回去
+  //   - 现在改完后遍历 changed 调 projectsApi.update / teamMembersApi.update 同步到 DB
   const autoProcessProjects = useCallback(() => {
-    const todayStr = dayjs().format('YYYY-MM-DD');
+    if (isAutoProcessingRef.current) return;
+    isAutoProcessingRef.current = true;
+    try {
+      const todayStr = dayjs().format('YYYY-MM-DD');
 
-    let changed = false;
-    const updatedProjects: Project[] = [];
+      let changed = false;
+      const updatedProjects: Project[] = [];
+      const changedIds: string[] = [];
 
-    for (const p of projects) {
-      // 1. 未开始 → 测试中（今天 >= startDate 且 未过期）
-      //    特殊处理：如果整个项目周期已过（endDate < today），直接转为"已完成"
-      if (p.status === '未开始' && p.startDate <= todayStr) {
-        if (p.endDate && p.endDate < todayStr) {
-          // 整个周期已过，直接变"已完成"（不归档，留给用户显式归档）
-          updatedProjects.push({
-            ...p,
-            status: '已完成' as const,
-            actualDeliveryDate: p.endDate,
-            updatedAt: dayjs().format('YYYY-MM-DD'),
-          });
-          changed = true;
-        } else {
-          // 正常转测试中
-          updatedProjects.push({ ...p, status: '测试中' as const, updatedAt: dayjs().format('YYYY-MM-DD') });
-          changed = true;
+      for (const p of projects) {
+        if (p.status === '未开始' && p.startDate <= todayStr) {
+          if (p.endDate && p.endDate < todayStr) {
+            updatedProjects.push({ ...p, status: '已完成' as const, actualDeliveryDate: p.endDate, updatedAt: dayjs().format('YYYY-MM-DD') });
+            changed = true;
+            changedIds.push(p.id);
+          } else {
+            updatedProjects.push({ ...p, status: '测试中' as const, updatedAt: dayjs().format('YYYY-MM-DD') });
+            changed = true;
+            changedIds.push(p.id);
+          }
+          continue;
         }
-        continue;
+
+        if (p.status === '测试中' && p.endDate && p.endDate < todayStr) {
+          updatedProjects.push({ ...p, status: '已完成' as const, actualDeliveryDate: p.endDate, updatedAt: dayjs().format('YYYY-MM-DD') });
+          changed = true;
+          changedIds.push(p.id);
+          continue;
+        }
+
+        updatedProjects.push(p);
       }
 
-      // 2. 测试中 → 已完成（今天 > endDate，不归档）
-      if (p.status === '测试中' && p.endDate && p.endDate < todayStr) {
-        updatedProjects.push({
-          ...p,
-          status: '已完成' as const,
-          actualDeliveryDate: p.endDate,
-          updatedAt: dayjs().format('YYYY-MM-DD'),
-        });
-        changed = true;
-        continue;
+      if (!changed) return;
+
+      setProjects(updatedProjects);
+
+      // 同步 DB：对每个 changed 项目调 API 持久化
+      for (const updated of updatedProjects) {
+        if (!changedIds.includes(updated.id)) continue;
+        const dbId = parseInt(updated.id, 10);
+        if (Number.isNaN(dbId)) continue;
+        void projectsApi.update(String(dbId), {
+          status: updated.status,
+          actualDeliveryDate: updated.actualDeliveryDate,
+          updatedAt: updated.updatedAt,
+        }).catch((err) => console.warn('[autoProcessProjects] 同步失败', updated.id, err));
       }
 
-      updatedProjects.push(p);
-    }
-
-    if (!changed) return;
-
-    // 应用状态变更（保留所有项目，包括"已完成"）
-    setProjects(updatedProjects);
-
-    // 同步更新指派人员：未开始→测试中 时，更新人员 projects/currentProjects
-    const projectsToStart = updatedProjects.filter(
-      (p) => p.status === '测试中' && projects.some((orig) => orig.id === p.id && orig.status === '未开始')
-    );
-    if (projectsToStart.length > 0) {
-      setTeamMembers((prevMembers) =>
-        prevMembers.map((m) => {
-          const assignedToStarted = projectsToStart.filter((p) =>
-            (p.assignedMemberIds || []).includes(m.id)
-          );
-          if (assignedToStarted.length === 0) return m;
-
-          const newProjects = [...(m.projects || [])];
-          const newCurrentProjects = [...m.currentProjects];
-          const newUpcoming = [...(m.upcomingProjects || [])];
-
-          assignedToStarted.forEach((p) => {
-            const projectName = p.name;
-            const idx = newUpcoming.findIndex((up) => up.projectName === projectName);
-            if (idx >= 0) newUpcoming.splice(idx, 1);
-            if (!newProjects.find((np) => np.projectName === projectName)) {
-              newProjects.push({ projectName, startDate: p.startDate, endDate: p.endDate });
-            }
-            if (!newCurrentProjects.includes(projectName)) {
-              newCurrentProjects.push(projectName);
-            }
+      const projectsToStart = updatedProjects.filter(
+        (p) => p.status === '测试中' && projects.some((orig) => orig.id === p.id && orig.status === '未开始')
+      );
+      if (projectsToStart.length > 0) {
+        setTeamMembers((prevMembers) => {
+          const newMembers = prevMembers.map((m) => {
+            const assignedToStarted = projectsToStart.filter((p) => (p.assignedMemberIds || []).includes(m.id));
+            if (assignedToStarted.length === 0) return m;
+            const newProjects = [...(m.projects || [])];
+            const newCurrentProjects = [...m.currentProjects];
+            const newUpcoming = [...(m.upcomingProjects || [])];
+            assignedToStarted.forEach((p) => {
+              const projectName = p.name;
+              const idx = newUpcoming.findIndex((up) => up.projectName === projectName);
+              if (idx >= 0) newUpcoming.splice(idx, 1);
+              if (!newProjects.find((np) => np.projectName === projectName)) {
+                newProjects.push({ projectName, startDate: p.startDate, endDate: p.endDate });
+              }
+              if (!newCurrentProjects.includes(projectName)) {
+                newCurrentProjects.push(projectName);
+              }
+            });
+            return { ...m, status: m.status === '休假' ? m.status : '测试中' as const, projects: newProjects, currentProjects: newCurrentProjects, upcomingProjects: newUpcoming };
           });
 
-          return {
-            ...m,
-            status: m.status === '休假' ? m.status : '测试中' as const,
-            projects: newProjects,
-            currentProjects: newCurrentProjects,
-            upcomingProjects: newUpcoming,
-          };
-        })
-      );
+          // 同步到 DB
+          for (const m of newMembers) {
+            const orig = prevMembers.find((o) => o.id === m.id);
+            if (!orig) continue;
+            if (JSON.stringify(orig.currentProjects) !== JSON.stringify(m.currentProjects) || orig.status !== m.status) {
+              const dbId = parseInt(m.id, 10);
+              if (Number.isNaN(dbId)) continue;
+              void teamMembersApi.update(String(dbId), { status: m.status, currentProjects: m.currentProjects || [] })
+                .catch((err) => console.warn('[autoProcessProjects] 成员同步失败', m.id, err));
+            }
+          }
+          return newMembers;
+        });
+      }
+    } finally {
+      setTimeout(() => { isAutoProcessingRef.current = false; }, 0);
     }
   }, [projects, setProjects, setTeamMembers]);
 
@@ -562,23 +575,23 @@ export function DataProvider({ children }: { children: ReactNode }) {
     return true;
   }, [projects, projectPhases, addHistoryProject, setProjects, setProjectPhases, setHistoryPhases]);
 
-  // ====== 自动化流程：人员状态管理（函数式更新，避免覆盖 autoProcessProjects 的并发更新） ======
+  // ====== 自动化流程：人员状态管理（2026-07-19 晚：同步 DB）======
   const autoProcessMembers = useCallback(() => {
+    if (isAutoProcessingRef.current) return;
     const todayStr = dayjs().format('YYYY-MM-DD');
 
     setTeamMembers((prevMembers) => {
-      let changed = false;
+      const updates: { memberId: string; updates: Record<string, unknown> }[] = [];
 
       const updatedMembers = prevMembers.map((m) => {
         // 1. 测试中 → 空闲（项目结束日期已过）
         if (m.status === '测试中') {
           const projects = m.projects || [];
-          // 检查是否所有项目都已结束
           const allProjectsFinished = projects.length > 0 && projects.every(
             (p) => p.endDate < todayStr
           );
           if (allProjectsFinished) {
-            changed = true;
+            updates.push({ memberId: m.id, updates: { status: '空闲', currentProjects: '[]' } });
             return {
               ...m,
               status: '空闲' as const,
@@ -591,7 +604,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         // 2. 休假 → 空闲（休假结束日期已过）
         if (m.status === '休假') {
           if (m.leaveEndDate && m.leaveEndDate < todayStr) {
-            changed = true;
+            updates.push({ memberId: m.id, updates: { status: '空闲', leaveStartDate: null, leaveEndDate: null } });
             return {
               ...m,
               status: '空闲' as const,
@@ -605,7 +618,15 @@ export function DataProvider({ children }: { children: ReactNode }) {
         return m;
       });
 
-      return changed ? updatedMembers : prevMembers;
+      // 同步 DB
+      for (const { memberId, updates: fields } of updates) {
+        const dbId = parseInt(memberId, 10);
+        if (Number.isNaN(dbId)) continue;
+        void teamMembersApi.update(String(dbId), fields)
+          .catch((err) => console.warn('[autoProcessMembers] 同步失败', memberId, err));
+      }
+
+      return updatedMembers;
     });
   }, [setTeamMembers]);
 

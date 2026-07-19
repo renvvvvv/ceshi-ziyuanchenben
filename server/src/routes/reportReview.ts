@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import fs from 'fs';
 import path from 'path';
+import { requireAuth, requireRole } from './auth.js';
 import { TERMINOLOGY, buildTerminologyPrompt, FEW_SHOT_EXAMPLES } from './terminology.js';
 import { ALL_COMMON_TYPOS, buildCommonTyposPrompt } from './commonTypos.js';
 import { buildLearnedPrompt, addCorrection, loadCorrections, getKnownOriginals } from './learnedCorrections.js';
@@ -71,7 +72,7 @@ const SYSTEM_PROMPT = `你是智航万恒测试验证管理平台的【专业错
 - **专有名词优先**：地名、品牌名、客户名这些错误一旦识别务必返回，影响报告专业性
 `;
 
-router.post('/', async (req, res) => {
+router.post('/', requireAuth, async (req, res) => {
   const { text } = req.body;
   if (!text || typeof text !== 'string') {
     return res.status(400).json({ success: false, message: '缺少待审核文本' });
@@ -136,7 +137,7 @@ router.post('/learn', (req, res) => {
  * 移除已学习的纠错（误学/废弃/已纠正时使用）
  * body: { original: string }
  */
-router.delete('/learn', (req, res) => {
+router.delete('/learn', requireRole(['管理者']), (req, res) => {
   const raw = (req.body?.original ?? '').toString().trim();
   if (!raw) {
     return res.status(400).json({ success: false, message: 'original 必填' });

@@ -49,7 +49,7 @@ const ALL_PHASE_TEMPLATES = [
 function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { projects, setProjects, projectPhases, setProjectPhases, teamMembers } = useData();
+  const { projects, setProjects, projectPhases, setProjectPhases, teamMembers, updateProject } = useData();
   const [modalOpen, setModalOpen] = useState(false);
   const [docLinkInput, setDocLinkInput] = useState('');
 
@@ -89,17 +89,14 @@ function ProjectDetail() {
   }
 
   const handleEdit = (values: Project) => {
-    setProjects((prev) => prev.map((p) => (p.id === project.id ? { ...values, id: project.id, updatedAt: dayjs().format('YYYY-MM-DD') } : p)));
+    // 走 updateProject（DataContext）持久化到 DB
+    updateProject(project.id, { ...values, id: project.id, updatedAt: dayjs().format('YYYY-MM-DD') });
     setModalOpen(false);
   };
 
   /** 更新测试管理链接 */
   const handleUpdateDocLink = () => {
-    setProjects((prev) => prev.map((p) =>
-      p.id === project.id
-        ? { ...p, docLink: docLinkInput.trim(), updatedAt: dayjs().format('YYYY-MM-DD') }
-        : p
-    ));
+    updateProject(project.id, { docLink: docLinkInput.trim(), updatedAt: dayjs().format('YYYY-MM-DD') });
     message.success('测试管理链接已更新');
   };
 

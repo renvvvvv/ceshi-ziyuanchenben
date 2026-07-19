@@ -1,5 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import db from '../database.js';
+import { requireRole } from './auth.js';
 
 const router = Router();
 
@@ -91,7 +92,7 @@ router.put('/', asyncHandler(async (req, res) => {
 /**
  * DELETE /api/attendance-adjustments/:id
  */
-router.delete('/:id', asyncHandler(async (req, res) => {
+router.delete('/:id', requireRole(['管理者']), asyncHandler(async (req, res) => {
   const id = parseIdOrNull(req.params.id);
   if (id === null) { res.status(400).json({ error: 'id 必须为正整数' }); return; }
   const result = await db.runAsync('DELETE FROM attendance_adjustments WHERE id = $1 RETURNING id', id);

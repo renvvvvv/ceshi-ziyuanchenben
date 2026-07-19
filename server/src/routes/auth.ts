@@ -49,7 +49,10 @@ function persistSessions() {
       for (const [token, session] of sessions.entries()) {
         obj[token] = session;
       }
-      fs.writeFileSync(SESSIONS_FILE, JSON.stringify(obj, null, 2), 'utf-8');
+      // 原子写入：先写 .tmp 再 rename（防止写到一半崩溃导致文件损坏）
+      const tmpFile = SESSIONS_FILE + '.tmp';
+      fs.writeFileSync(tmpFile, JSON.stringify(obj, null, 2), 'utf-8');
+      fs.renameSync(tmpFile, SESSIONS_FILE);
     } catch (err) {
       console.warn('[Auth] 保存 sessions.json 失败：', err);
     }

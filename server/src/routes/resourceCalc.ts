@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { execFile } from 'child_process';
 import { join, dirname } from 'path';
+import { requireAuth, requireRole } from './auth.js';
 import { fileURLToPath } from 'url';
 import { writeFileSync, unlinkSync } from 'fs';
 import { tmpdir } from 'os';
@@ -52,7 +53,7 @@ function runPy(jsonInput: Record<string, unknown>): Promise<string> {
 }
 
 /** POST /api/resource-calc — 单算 */
-router.post('/', asyncHandler(async (req, res) => {
+router.post('/', requireAuth, asyncHandler(async (req, res) => {
   const input = req.body;
   if (!input.total_mw || !input.total_duration) {
     res.status(400).json({ error: '缺少必填参数 total_mw / total_duration' });
@@ -115,7 +116,7 @@ router.post('/', asyncHandler(async (req, res) => {
 }));
 
 /** POST /api/resource-calc/batch — 群算 */
-router.post('/batch', asyncHandler(async (req, res) => {
+router.post('/batch', requireAuth, asyncHandler(async (req, res) => {
   // 兼容两种 schema：{ inputs: [...] } (REST 风格) 和 { calculations: [...] } (前端当前使用)
   const body = req.body as { inputs?: Record<string, unknown>[]; calculations?: Record<string, unknown>[]; batch_id?: string };
   const inputs = body.inputs || body.calculations;
@@ -245,8 +246,11 @@ router.get('/history/:id', asyncHandler(async (req, res) => {
 }));
 
 /** DELETE /api/resource-calc/history/:id */
-router.delete('/history/:id', asyncHandler(async (req, res) => {
-  await db.runAsync('DELETE FROM resource_calc_history WHERE id=$1', req.params.id);
+router.delete('/history/:id', requireRole(['管理者']), asyncHandler(async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id) || id <= 0) { res.status(400).json({ error: 'id 必须为正整数' }); return; }
+  const result = await db.runAsync('DELETE FROM resource_calc_history WHERE id=$1 RETURNING id', id);
+  if (result.changes === 0) { res.status(404).json({ error: '记录不存在' }); return; }
   res.json({ success: true });
 }));
 

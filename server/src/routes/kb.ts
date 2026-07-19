@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import db from '../database.js';
-import { requireAuth } from './auth.js';
+import { requireAuth, requireRole } from './auth.js';
 
 const router = Router();
 
@@ -107,7 +107,7 @@ router.put('/:id', requireAuth, asyncHandler(async (req, res) => {
 }));
 
 /** DELETE /api/kb/:id — 删除 KB 文档（cascade 会删子节点） */
-router.delete('/:id', requireAuth, asyncHandler(async (req, res) => {
+router.delete('/:id', requireRole(['管理者']), asyncHandler(async (req, res) => {
   const id = parseIdOrNull(req.params.id);
   if (id === null) { res.status(400).json({ error: 'id 必须为正整数' }); return; }
   const result = await db.runAsync('DELETE FROM kb_documents WHERE id=$1 RETURNING id', id);

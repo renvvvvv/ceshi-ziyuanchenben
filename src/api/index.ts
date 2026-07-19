@@ -391,13 +391,15 @@ export function dbRowToProject(row: Record<string, unknown>): Project {
     manager: String(c.manager || ''),
     startDate: String(c.startDate || ''),
     endDate: c.endDate ? String(c.endDate) : undefined,
+    plannedDeliveryDate: c.plannedDeliveryDate ? String(c.plannedDeliveryDate) : undefined,
+    actualDeliveryDate: c.actualDeliveryDate ? String(c.actualDeliveryDate) : undefined,
     itOutput: Number(c.itOutput || 0),
     plannedManpower: c.plannedManpower ? Number(c.plannedManpower) : undefined,
     businessType: c.businessType ? String(c.businessType) : undefined,
     city: c.city ? String(c.city) : undefined,
     description: c.description ? String(c.description) : undefined,
     assignedMemberIds,
-    docLink: undefined,
+    docLink: c.docLink ? String(c.docLink) : undefined,
     updatedAt: c.updatedAt ? String(c.updatedAt) : undefined,
   } as Project;
 }
@@ -420,6 +422,9 @@ export function projectToDbBody(p: Partial<Project>): Record<string, unknown> {
     city: p.city || null,
     assigned_member_ids: p.assignedMemberIds && p.assignedMemberIds.length > 0
       ? JSON.stringify(p.assignedMemberIds) : null,
+    planned_delivery_date: p.plannedDeliveryDate ?? null,
+    actual_delivery_date: p.actualDeliveryDate ?? null,
+    doc_link: p.docLink ?? null,
   };
   for (const k of Object.keys(body)) {
     if (body[k] === undefined) delete body[k];
@@ -434,11 +439,19 @@ export function dbRowToTeamMember(row: Record<string, unknown>): TeamMember {
   const c = snakeToCamel<Record<string, unknown>>(row);
   let skills: string[] = [];
   let currentProjects: string[] = [];
+  let projects: Array<{ projectName: string; startDate: string; endDate: string }> = [];
+  let upcomingProjects: Array<{ projectName: string; startDate: string; endDate: string }> = [];
   try {
     if (typeof c.skills === 'string') skills = JSON.parse(c.skills);
   } catch { /* ignore */ }
   try {
     if (typeof c.currentProjects === 'string') currentProjects = JSON.parse(c.currentProjects);
+  } catch { /* ignore */ }
+  try {
+    if (typeof c.projects === 'string') projects = JSON.parse(c.projects);
+  } catch { /* ignore */ }
+  try {
+    if (typeof c.upcomingProjects === 'string') upcomingProjects = JSON.parse(c.upcomingProjects);
   } catch { /* ignore */ }
 
   // 归一化 status：后端默认值是'在线'，但前端枚举只有'空闲'/'测试中'/'休假'
@@ -454,6 +467,11 @@ export function dbRowToTeamMember(row: Record<string, unknown>): TeamMember {
     status: normalizedStatus,
     skills,
     currentProjects,
+    projects,
+    upcomingProjects,
+    position: c.position ? String(c.position) : undefined,
+    leaveStartDate: c.leaveStartDate ? String(c.leaveStartDate) : undefined,
+    leaveEndDate: c.leaveEndDate ? String(c.leaveEndDate) : undefined,
     email: c.email ? String(c.email) : undefined,
     phone: c.phone ? String(c.phone) : undefined,
   } as TeamMember;
@@ -466,9 +484,14 @@ export function teamMemberToDbBody(m: Partial<TeamMember>): Record<string, unkno
   const body: Record<string, unknown> = {
     name: m.name,
     employee_id: m.employeeId,
-    status: m.status || '在线',
+    status: m.status || '空闲',
     skills: JSON.stringify(m.skills || []),
     current_projects: JSON.stringify(m.currentProjects || []),
+    projects: JSON.stringify(m.projects || []),
+    upcoming_projects: JSON.stringify(m.upcomingProjects || []),
+    position: m.position ?? null,
+    leave_start_date: m.leaveStartDate ?? null,
+    leave_end_date: m.leaveEndDate ?? null,
     email: m.email || null,
     phone: m.phone || null,
   };
