@@ -106,14 +106,22 @@ function HistoryDetail() {
       uploadedAt: new Date().toLocaleString('zh-CN'),
     };
 
-    setHistoryPhases((prev) => ({
-      ...prev,
-      [project.id]: (prev[project.id] || phases).map((phase) =>
-        phase.key === phaseKey
-          ? { ...phase, files: [...phase.files, newFile] }
-          : phase
-      ),
-    }));
+    setHistoryPhases((prev) => {
+      const current = prev[project.id] ?? ALL_PHASE_TEMPLATES.map((t) => ({
+        ...t,
+        status: 'pending' as const,
+        files: [],
+        allowUpload: true,
+      }));
+      return {
+        ...prev,
+        [project.id]: current.map((phase) =>
+          phase.key === phaseKey
+            ? { ...phase, files: [...phase.files, newFile] }
+            : phase
+        ),
+      };
+    });
     message.success(`文件「${lastFile.name}」上传成功`);
   };
 
@@ -126,14 +134,22 @@ function HistoryDetail() {
       okText: '删除',
       cancelText: '取消',
       onOk: () => {
-        setHistoryPhases((prev) => ({
-          ...prev,
-          [project.id]: (prev[project.id] || phases).map((phase) =>
-            phase.key === phaseKey
-              ? { ...phase, files: phase.files.filter((f) => f.id !== fileId) }
-              : phase
-          ),
-        }));
+        setHistoryPhases((prev) => {
+          const current = prev[project.id] ?? ALL_PHASE_TEMPLATES.map((t) => ({
+            ...t,
+            status: 'pending' as const,
+            files: [],
+            allowUpload: true,
+          }));
+          return {
+            ...prev,
+            [project.id]: current.map((phase) =>
+              phase.key === phaseKey
+                ? { ...phase, files: phase.files.filter((f) => f.id !== fileId) }
+                : phase
+            ),
+          };
+        });
         message.success('文件已删除');
       },
     });

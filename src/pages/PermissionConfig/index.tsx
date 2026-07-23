@@ -73,10 +73,11 @@ function PermissionConfig() {
       message.warning('只有管理者可以重置权限');
       return;
     }
-    resetPermissions();
+    // 用返回值同步本地 state，避免闭包陈旧
+    const fresh = resetPermissions();
     setLocalConfigs(() => {
       const map: Record<string, ModulePermission[]> = {};
-      for (const c of permissionConfigs) {
+      for (const c of fresh) {
         map[c.role] = c.permissions;
       }
       return map as Record<UserRole, ModulePermission[]>;

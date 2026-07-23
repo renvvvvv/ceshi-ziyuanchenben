@@ -90,9 +90,9 @@ router.put('/:id', requireAuth, asyncHandler(async (req, res) => {
     `UPDATE kb_documents SET
        title = COALESCE($1, title),
        content_md = COALESCE($2, content_md),
-       external_url = $3,
+       external_url = CASE WHEN $3::text IS NOT NULL THEN $3 ELSE external_url END,
        sort_order = COALESCE($4, sort_order),
-       parent_id = $5,
+       parent_id = CASE WHEN $5::int IS NOT NULL THEN $5 ELSE parent_id END,
        updated_at = NOW()
      WHERE id = $6 RETURNING id`,
     title ?? null,

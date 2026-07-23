@@ -109,6 +109,18 @@ router.post('/', requireAuth, asyncHandler(async (req, res) => {
     JSON.stringify(report),
   );
 
+  // 校验 it_transformers / power_transformers 格式，避免 reduce 解构抛错
+  const validateTransformers = (val: unknown): val is [number, number][] =>
+    Array.isArray(val) && val.every((t) => Array.isArray(t) && t.length >= 2 && typeof t[0] === 'number' && typeof t[1] === 'number');
+  if (!validateTransformers(input.it_transformers)) {
+    res.status(400).json({ error: 'it_transformers 必须为 [count, capacity][] 数组' });
+    return;
+  }
+  if (!validateTransformers(input.power_transformers)) {
+    res.status(400).json({ error: 'power_transformers 必须为 [count, capacity][] 数组' });
+    return;
+  }
+
   const itCap = input.it_transformers.reduce((s: number, [c, n]: [number, number]) => s + c * n, 0);
   const pue = itCap > 0 ? input.total_mw / itCap : 1.3;
 

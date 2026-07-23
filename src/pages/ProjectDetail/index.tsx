@@ -114,14 +114,24 @@ function ProjectDetail() {
       uploadedAt: new Date().toLocaleString('zh-CN'),
     };
 
-    setProjectPhases((prev) => ({
-      ...prev,
-      [project.id]: (prev[project.id] || phases).map((phase) =>
-        phase.key === phaseKey
-          ? { ...phase, files: [...phase.files, newFile], status: phase.status === 'pending' ? 'in_progress' : phase.status }
-          : phase
-      ),
-    }));
+    setProjectPhases((prev) => {
+      // 始终基于 prev[project.id] 计算，避免闭包 phases 陈旧覆盖
+      // 若 prev 无此项目，从 ALL_PHASE_TEMPLATES 构造初始模板
+      const current = prev[project.id] ?? ALL_PHASE_TEMPLATES.map((t) => ({
+        ...t,
+        status: 'pending' as const,
+        files: [],
+        allowUpload: true,
+      }));
+      return {
+        ...prev,
+        [project.id]: current.map((phase) =>
+          phase.key === phaseKey
+            ? { ...phase, files: [...phase.files, newFile], status: phase.status === 'pending' ? 'in_progress' : phase.status }
+            : phase
+        ),
+      };
+    });
     message.success(`文件「${lastFile.name}」上传成功`);
   };
 
@@ -134,14 +144,22 @@ function ProjectDetail() {
       okText: '删除',
       cancelText: '取消',
       onOk: () => {
-        setProjectPhases((prev) => ({
-          ...prev,
-          [project.id]: (prev[project.id] || phases).map((phase) =>
-            phase.key === phaseKey
-              ? { ...phase, files: phase.files.filter((f) => f.id !== fileId) }
-              : phase
-          ),
-        }));
+        setProjectPhases((prev) => {
+          const current = prev[project.id] ?? ALL_PHASE_TEMPLATES.map((t) => ({
+            ...t,
+            status: 'pending' as const,
+            files: [],
+            allowUpload: true,
+          }));
+          return {
+            ...prev,
+            [project.id]: current.map((phase) =>
+              phase.key === phaseKey
+                ? { ...phase, files: phase.files.filter((f) => f.id !== fileId) }
+                : phase
+            ),
+          };
+        });
         message.success('文件已删除');
       },
     });

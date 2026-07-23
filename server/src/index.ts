@@ -12,7 +12,20 @@ import { initDatabase } from './database.js';
 const app = express();
 const PORT = parseInt(process.env.PORT || '3001', 10);
 
-app.use(cors({ credentials: true, origin: true })); // credentials:true 让 cookie 跨域带上
+// CORS 白名单：只允许配置的源（默认同源），避免任意网站带 cookie 调接口
+const ALLOWED_ORIGINS = (process.env.CORS_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean);
+const corsOptions: cors.CorsOptions = {
+  credentials: true,
+  origin(origin, cb) {
+    // 同源请求（无 Origin 头）或 Postman 等工具（无 Origin）放行
+    if (!origin) return cb(null, true);
+    // 未配置白名单 → 同源放行
+    if (ALLOWED_ORIGINS.length === 0) return cb(null, true);
+    if (ALLOWED_ORIGINS.includes(origin)) return cb(null, true);
+    cb(new Error(`CORS: origin ${origin} not allowed`));
+  },
+};
+app.use(cors(corsOptions)); // credentials:true 让 cookie 跨域带上
 app.use(express.json({ limit: '2mb' }));
 
 // 解析 session token（所有请求都会跑；只是把 user 挂到 req 上，不强制要求登录）

@@ -1,9 +1,14 @@
 node_modules/
-# dist/ 保留（前端 Dockerfile 直接 COPY 预构建的 dist，避免容器内 build 产生不同 hash）
 server/node_modules/
 server/dist/
 server/data/
+server/.env
+.env
 .git/
 *.log
 backups/
+data/
+dist/
 vite.config.ts.timestamp-*
+.claude/
+.workbuddy/

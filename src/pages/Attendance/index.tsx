@@ -208,7 +208,11 @@ function Attendance() {
     // 1) 写入批量考勤
     Object.entries(batchAdj).forEach(([compositeKey, v]) => {
       // 仅当用户修改过（原值与当前 allRows 计算值不同时）才落库
-      const [memberId, projectName] = compositeKey.split('|');
+      // 用 indexOf 而非 split('|')，避免 projectName 含 | 时丢字符
+      const sepIdx = compositeKey.indexOf('|');
+      if (sepIdx < 0) return;
+      const memberId = compositeKey.slice(0, sepIdx);
+      const projectName = compositeKey.slice(sepIdx + 1);
       const original = filteredRows.find((r) => r.memberId === memberId && r.projectName === projectName);
       if (!original) return;
       const onDutyChanged = v.onDutyDays !== undefined && v.onDutyDays !== original.onDutyDays;

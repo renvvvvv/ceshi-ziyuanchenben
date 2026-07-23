@@ -22,6 +22,10 @@ COPY server/scripts/ ./scripts/
 RUN npm run build
 RUN mkdir -p /app/data /app/test6/config
 
+# 创建非 root 用户，避免容器以 root 运行（安全加固）
+RUN groupadd -r app && useradd -r -g app app && chown -R app:app /app
+USER app
+
 EXPOSE 3001
 ENV PORT=3001 NODE_ENV=production
 

@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import dayjs from 'dayjs';
 import {
   Input,
@@ -60,6 +60,14 @@ function TestGuide() {
   const [uploadForm] = Form.useForm();
   const [fileList, setFileList] = useState<UploadFile[]>([]);
   const fileUrlMap = useRef<Map<string, string>>(new Map());
+
+  // 组件卸载时释放所有 ObjectURL，防止内存泄漏
+  useEffect(() => {
+    return () => {
+      fileUrlMap.current.forEach((url) => URL.revokeObjectURL(url));
+      fileUrlMap.current.clear();
+    };
+  }, []);
 
   const filteredDocs = useMemo(() => {
     return docs.filter((doc) => {

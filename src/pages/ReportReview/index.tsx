@@ -40,10 +40,19 @@ function ReportReview() {
   const [learnedItems, setLearnedItems] = useState<Array<{original:string;suggestion:string;count:number;lastSeen:string;source?:string}>>([]);
   const [learnedSearch, setLearnedSearch] = useState('');
   const previewRef = useRef<HTMLDivElement>(null);
+  const jumpTimersRef = useRef<number[]>([]);
+
+  // 组件卸载时清理所有 setTimeout，防止 setState on unmounted
+  useEffect(() => {
+    return () => {
+      jumpTimersRef.current.forEach((t) => clearTimeout(t));
+      jumpTimersRef.current = [];
+    };
+  }, []);
 
   // 加载学习库规模
   useEffect(() => {
-    fetch('/api/report-review/learned')
+    fetch('/api/report-review/learned', { credentials: 'include' })
       .then((r) => r.json())
       .then((d) => { if (d.success) setLearnedSize(d.size); })
       .catch(() => {});
@@ -52,7 +61,7 @@ function ReportReview() {
   // 打开"管理学习库"Modal 时刷新列表
   const openManageLib = async () => {
     try {
-      const r = await fetch('/api/report-review/learned');
+      const r = await fetch('/api/report-review/learned', { credentials: 'include' });
       const d = await r.json();
       if (d.success) setLearnedItems(d.items || []);
     } catch {}
@@ -203,8 +212,8 @@ function ReportReview() {
     if (errors.length === 0) {
       return <pre style={{ whiteSpace: 'pre-wrap', margin: 0, fontFamily: 'inherit', fontSize: 12.5, color: 'rgba(255,255,255,0.75)', lineHeight: 1.8 }}>{rawText}</pre>;
     }
-    const unfixedErrors = errors.filter((e) => !e.fixed && e.original);
-    const fixedErrors = errors.filter((e) => e.fixed && e.suggestion);
+    const unfixedErrors = errors.filter((e) => !e.fixed && e.original && e.original.length > 0);
+    const fixedErrors = errors.filter((e) => e.fixed && e.suggestion && e.suggestion.length > 0);
     let segments: Array<{ text: string; type: 'normal' | 'error' | 'fixed'; error?: TypoError }> = [{ text: rawText, type: 'normal' }];
 
     for (const err of unfixedErrors) {
@@ -297,13 +306,15 @@ function ReportReview() {
   // 点击错别字 → 右栏滚动到对应位置
   const handleJumpToError = (id: number) => {
     setActiveErrorId(id);
-    setTimeout(() => {
+    const t1 = window.setTimeout(() => {
       const el = document.getElementById(`error-${id}`);
       if (el && previewRef.current) {
         el.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
-      setTimeout(() => setActiveErrorId(null), 2000);
+      const t2 = window.setTimeout(() => setActiveErrorId(null), 2000);
+      jumpTimersRef.current.push(t2);
     }, 100);
+    jumpTimersRef.current.push(t1);
   };
 
   const handleExport = async () => {

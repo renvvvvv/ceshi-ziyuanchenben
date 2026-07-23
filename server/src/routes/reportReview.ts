@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import fs from 'fs';
 import path from 'path';
 import { requireAuth, requireRole } from './auth.js';
@@ -7,6 +7,12 @@ import { ALL_COMMON_TYPOS, buildCommonTyposPrompt } from './commonTypos.js';
 import { buildLearnedPrompt, addCorrection, loadCorrections, getKnownOriginals } from './learnedCorrections.js';
 
 const router = Router();
+
+// async 错误兜底到 next，Express 4 不会自动捕获 async reject
+const asyncHandler = (fn: (req: Request, res: Response, next: NextFunction) => Promise<unknown>) =>
+  (req: Request, res: Response, next: NextFunction) => {
+    Promise.resolve(fn(req, res, next)).catch(next);
+  };
 
 // 已学习纠错库的落盘路径（与 learnedCorrections.ts DATA_DIR/FILE 保持一致）
 const PERSIST_PATH = path.resolve(process.cwd(), 'data', 'learned-corrections.json');
@@ -72,7 +78,11 @@ const SYSTEM_PROMPT = `你是智航万恒测试验证管理平台的【专业错
 - **专有名词优先**：地名、品牌名、客户名这些错误一旦识别务必返回，影响报告专业性
 `;
 
-router.post('/', requireAuth, async (req, res) => {
+router.post('/', requireAuth, asyncHandler(async (req, res) => {
+  // 先校验 body 存在且为对象，避免 destructure undefined 抛错
+  if (!req.body || typeof req.body !== 'object') {
+    return res.status(400).json({ success: false, message: '请求体格式错误' });
+  }
   const { text } = req.body;
   if (!text || typeof text !== 'string') {
     return res.status(400).json({ success: false, message: '缺少待审核文本' });
@@ -103,7 +113,7 @@ router.post('/', requireAuth, async (req, res) => {
     console.error('[ReportReview] 审核失败:', err.message || err);
     res.status(500).json({ success: false, message: 'AI 审核失败，请稍后重试' });
   }
-});
+}));
 
 /**
  * POST /api/report-review/learn

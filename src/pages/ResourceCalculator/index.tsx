@@ -63,8 +63,6 @@ function ResourceCalculator() {
   const [filterDate, setFilterDate] = useState('');
   const [backendOnline, setBackendOnline] = useState(true);
 
-  useEffect(() => { loadHistory(1, historyPageSize); }, []);
-
   const loadHistory = async (page: number, size: number) => {
     setHistoryLoading(true);
     try {
@@ -85,6 +83,8 @@ function ResourceCalculator() {
     finally { setHistoryLoading(false); }
   };
 
+  // 合并 mount-only + filter 变化的两个 effect，避免重复请求
+  // mount 时 filterType/filterDate 为初值也会触发，无需单独 useEffect
   useEffect(() => { loadHistory(1, historyPageSize); }, [filterType, filterDate]);
 
   const parseItTrans = (s: string): [number, number][] => {

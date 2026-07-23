@@ -90,7 +90,7 @@ interface AuthContextValue {
   // 权限配置（仅管理者）
   permissionConfigs: PermissionConfig[];
   updatePermissionConfig: (role: UserRole, permissions: ModulePermission[]) => void;
-  resetPermissions: () => void;
+  resetPermissions: () => PermissionConfig[];
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -137,11 +137,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (res.ok && data.success && data.user) {
           const presetUser = PRESET_USERS[data.user.username]?.user;
+          // 白名单校验 role，防止后端返回未知角色导致权限映射全空
+          const ALLOWED_ROLES: UserRole[] = ['管理者', '编辑者', '阅读者'];
+          const rawRole = data.user.role;
+          const role: UserRole = ALLOWED_ROLES.includes(rawRole) ? rawRole : '阅读者';
           const validatedUser: User = {
             id: String(data.user.id || data.user.userId || presetUser?.id || authState.user?.id || ''),
             username: String(data.user.username || presetUser?.username || authState.user?.username || ''),
             name: String(data.user.name || presetUser?.name || authState.user?.name || data.user.username || ''),
-            role: data.user.role,
+            role,
           };
           const newState = { user: validatedUser };
           setAuthState(newState);
@@ -252,9 +256,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   // 重置权限
-  const resetPermissions = useCallback(() => {
+  const resetPermissions = useCallback((): PermissionConfig[] => {
     setPermissionConfigs(DEFAULT_PERMISSIONS);
     saveToStorage(PERMISSION_KEY, DEFAULT_PERMISSIONS);
+    return DEFAULT_PERMISSIONS;
   }, []);
 
   const value: AuthContextValue = {

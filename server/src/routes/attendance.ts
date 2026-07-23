@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import db from '../database.js';
-import { requireRole } from './auth.js';
+import { requireAuth, requireRole } from './auth.js';
 
 const router = Router();
 
@@ -36,7 +36,7 @@ function rowToAdjustment(row: Record<string, unknown>): Record<string, unknown> 
  * 返回所有校准记录（key 形如 "memberId-projectName-cycleStart"）
  * 前端可以直接 setAttendanceAdjustments(mapFromRows)
  */
-router.get('/', asyncHandler(async (req, res) => {
+router.get('/', requireAuth, asyncHandler(async (req, res) => {
   const memberId = req.query.member_id as string | undefined;
   const cycleStart = req.query.cycle_start as string | undefined;
 
@@ -62,7 +62,7 @@ router.get('/', asyncHandler(async (req, res) => {
  * body: { memberId, projectName, cycleStart, projectStart?, projectEnd?, leaveDays? }
  * upsert by (member_id, project_name, cycle_start)
  */
-router.put('/', asyncHandler(async (req, res) => {
+router.put('/', requireAuth, requireRole(['管理者', '编辑者']), asyncHandler(async (req, res) => {
   const { memberId, projectName, cycleStart, projectStart, projectEnd, leaveDays } = req.body;
   if (!memberId || !projectName || !cycleStart) {
     res.status(400).json({ error: 'memberId / projectName / cycleStart 必填' });
