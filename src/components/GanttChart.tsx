@@ -413,15 +413,27 @@ function GanttChart({ projects, unit = 'day' }: GanttChartProps) {
                     className="gantt-label-col gantt-sticky-label"
                     style={{ width: LABEL_WIDTH, minWidth: LABEL_WIDTH, height: '100%' }}
                   >
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2, overflow: 'hidden' }}>
-                      <span style={{ color: '#fff', fontSize: 13, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {project.name}
-                      </span>
-                      <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {project.customer} · {project.city}
-                        {project.plannedManpower ? ` · ${project.plannedManpower}人` : ''}
-                      </span>
-                    </div>
+                    <Tooltip
+                      title={
+                        <div style={{ fontSize: 12 }}>
+                          <div style={{ fontWeight: 600, marginBottom: 4 }}>{project.name}</div>
+                          <div>客户：{project.customer || '-'}</div>
+                          <div>城市：{project.city || '-'}</div>
+                          <div>状态：{project.status}</div>
+                          <div>计划人力：{project.plannedManpower ?? '-'} 人</div>
+                        </div>
+                      }
+                    >
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 2, overflow: 'hidden', minWidth: 0, flex: 1 }}>
+                        <span style={{ color: '#fff', fontSize: 13, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block', minWidth: 0 }}>
+                          {project.name}
+                        </span>
+                        <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block', minWidth: 0 }}>
+                          {project.customer}{project.city ? ` · ${project.city}` : ''}
+                          {project.plannedManpower ? ` · ${project.plannedManpower}人` : ''}
+                        </span>
+                      </div>
+                    </Tooltip>
                     <Tag
                       style={{
                         background: colors.bg,
@@ -500,11 +512,29 @@ function GanttChart({ projects, unit = 'day' }: GanttChartProps) {
                           boxShadow: `0 2px 8px ${colors.text}33`,
                         }}
                       >
-                        <span className="gantt-bar-label">
-                          {dayjs(project.startDate).format('MM/DD')} — {project.endDate ? dayjs(project.endDate).format('MM/DD') : '至今'}
-                          {project.plannedManpower ? ` · ${project.plannedManpower}人` : ''}
-                          {project.itOutput ? ` · ${project.itOutput}MW` : ''}
-                        </span>
+                        {(() => {
+                          // 根据 bar 像素宽度自适应渲染 label，避免窄 bar 被截断后产生乱字符
+                          const barWidth = Math.max(widthPx, tickWidth);
+                          const startMD = dayjs(project.startDate).format('MM/DD');
+                          const endMD = project.endDate ? dayjs(project.endDate).format('MM/DD') : '至今';
+                          if (barWidth < 56) {
+                            // 极窄 bar：留空，详细信息走 Tooltip
+                            return <span className="gantt-bar-label" />;
+                          }
+                          if (barWidth < 120) {
+                            // 窄 bar：只显示开始日期
+                            return <span className="gantt-bar-label">{startMD}</span>;
+                          }
+                          if (barWidth < 200) {
+                            // 中等 bar：显示开始 — 结束日期
+                            return <span className="gantt-bar-label">{startMD} — {endMD}</span>;
+                          }
+                          // 宽 bar：完整信息
+                          const parts = [`${startMD} — ${endMD}`];
+                          if (project.plannedManpower) parts.push(`${project.plannedManpower}人`);
+                          if (project.itOutput) parts.push(`${project.itOutput}MW`);
+                          return <span className="gantt-bar-label">{parts.join(' · ')}</span>;
+                        })()}
                       </div>
                     </Tooltip>
                   </div>

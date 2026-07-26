@@ -744,10 +744,22 @@ function Dashboard() {
           </div>
         </div>
         <GanttChart projects={ganttProjects} unit={ganttUnit} />
-        <div style={{ marginTop: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: 'rgba(255,255,255,0.35)', fontSize: 12 }}>
-          <span>
-            未开始：{notStartedCount} · 测试中：{activeCount} · 已完成：{completedCount} 个项目
-          </span>
+        <div style={{ marginTop: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: 'rgba(255,255,255,0.45)', fontSize: 12, flexWrap: 'wrap', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'rgba(255,255,255,0.4)', display: 'inline-block' }} />
+              未开始 <b style={{ color: 'rgba(255,255,255,0.85)' }}>{notStartedCount}</b>
+            </span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#52c41a', display: 'inline-block' }} />
+              测试中 <b style={{ color: 'rgba(255,255,255,0.85)' }}>{activeCount}</b>
+            </span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#1677ff', display: 'inline-block' }} />
+              已完成 <b style={{ color: 'rgba(255,255,255,0.85)' }}>{completedCount}</b>
+            </span>
+            <span style={{ color: 'rgba(255,255,255,0.35)' }}>个项目</span>
+          </div>
           <Button
             type="link"
             size="small"
