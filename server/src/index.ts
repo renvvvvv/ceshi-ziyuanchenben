@@ -8,6 +8,7 @@ import authRouter, { authMiddleware } from './routes/auth.js';
 import kbRouter from './routes/kb.js';
 import attendanceRouter from './routes/attendance.js';
 import { initDatabase } from './database.js';
+import db from './database.js';
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3001', 10);
@@ -40,6 +41,62 @@ app.use('/api/attendance-adjustments', attendanceRouter);
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// 深度健康检查：所有表行数 + 最近修改时间（用于防回归监控）
+app.get('/api/health/deep', async (_req, res) => {
+  try {
+    const tables = [
+      'test_projects',
+      'team_members',
+      'historical_projects',
+      'resource_calc_history',
+      'kb_documents',
+      'attendance_adjustments',
+      'learned_corrections',
+      'users',
+      'sessions',
+    ];
+    const results: Array<{ table: string; rowCount: number; lastModified: string | null }> = [];
+    for (const table of tables) {
+      try {
+        const row = await db.getAsync(
+          `SELECT COUNT(*)::int AS count FROM ${table}`
+        );
+        const count = (row?.count as number) ?? 0;
+        let lastMod: string | null = null;
+        // 尝试查 updated_at 或 created_at 列
+        try {
+          const mod = await db.getAsync(
+            `SELECT MAX(updated_at)::text AS last FROM ${table}`
+          );
+          lastMod = (mod?.last as string) || null;
+        } catch {
+          try {
+            const mod = await db.getAsync(
+              `SELECT MAX(created_at)::text AS last FROM ${table}`
+            );
+            lastMod = (mod?.last as string) || null;
+          } catch {
+            // 表无时间列
+          }
+        }
+        results.push({ table, rowCount: count, lastModified: lastMod });
+      } catch {
+        results.push({ table, rowCount: -1, lastModified: null });
+      }
+    }
+    res.json({
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+      database: results,
+    });
+  } catch (err: any) {
+    res.status(500).json({
+      status: 'error',
+      error: err?.message || 'Deep health check failed',
+    });
+  }
 });
 
 // ============================================================

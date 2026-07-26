@@ -66,9 +66,18 @@ function usePersistentState<T>(key: string, initial: T): [T, (value: T | ((prev:
 // Context 类型定义
 // ============================================================
 
+// 环境变量控制：生产环境默认禁用 mock fallback，避免 API 失败时静默回退到 mock 数据
+// 设置 VITE_USE_MOCK_DATA=true 可显式启用（仅调试用）
+const USE_MOCK_FALLBACK = import.meta.env.VITE_USE_MOCK_DATA === 'true';
+
 interface DataContextValue {
-  // 数据源（用于 UI 显示）
-  dataSource: 'mock' | 'api' | 'cache' | 'loading';
+  // 数据源（用于 UI 显示）：'mock' | 'api' | 'cache' | 'loading' | 'error'
+  // - loading: 启动加载中
+  // - api: 后端 API 成功返回
+  // - cache: API 失败但 localStorage 有缓存（降级）
+  // - mock: USE_MOCK_FALLBACK=true 且无缓存时用 mock（仅调试）
+  // - error: API 失败且无缓存且禁用 mock fallback
+  dataSource: 'mock' | 'api' | 'cache' | 'loading' | 'error';
 
   // 项目管理
   projects: Project[];
@@ -102,11 +111,13 @@ interface DataContextValue {
   updateTestDoc: (id: string, updates: Partial<TestDoc>) => void;
   deleteTestDoc: (id: string) => void;
 
-  // 项目阶段（时间线）
+  // 项目阶段（时间线）—— 本地数据，无后端 API
+  // 设计说明：projectPhases 存储每个项目的阶段时间线，当前仅 localStorage 持久化。
+  // 如需多端共享，未来可扩展 /api/project-phases 路由。
   projectPhases: Record<string, ProjectPhase[]>;
   setProjectPhases: (value: Record<string, ProjectPhase[]> | ((prev: Record<string, ProjectPhase[]>) => Record<string, ProjectPhase[]>)) => void;
 
-  // 历史项目阶段
+  // 历史项目阶段 —— 本地数据，无后端 API（同上）
   historyPhases: Record<string, ProjectPhase[]>;
   setHistoryPhases: (value: Record<string, ProjectPhase[]> | ((prev: Record<string, ProjectPhase[]>) => Record<string, ProjectPhase[]>)) => void;
 
@@ -177,15 +188,17 @@ export function DataProvider({ children }: { children: ReactNode }) {
       return next;
     });
   }, []);
-  // 数据源标记：'mock' | 'api' | 'cache'，用于 UI 显示数据来源
-  const [dataSource, setDataSource] = useState<'mock' | 'api' | 'cache' | 'loading'>('loading');
+  // 数据源标记：'mock' | 'api' | 'cache' | 'loading' | 'error'，用于 UI 显示数据来源
+  const [dataSource, setDataSource] = useState<'mock' | 'api' | 'cache' | 'loading' | 'error'>('loading');
 
   // ====== 启动时从后端拉数据 ======
   // 策略：
   //   1. 异步 fetch /api/projects + /api/projects/members/list + /api/projects/history/list
-  //   2. 失败时降级到 localStorage（mock）
-  //   3. 成功时**完全覆盖**本地 → 实现多用户共享 + 让所有 id 同步成 DB 主键
-  //      （避免"前端有 uuid id 但后端无对应记录，导致 update 失败"的问题）
+  //   2. 成功时**完全覆盖**本地 → 实现多用户共享 + 让所有 id 同步成 DB 主键
+  //   3. 失败时：
+  //      - 若 localStorage 有缓存 → 降级到 cache（UI 可用但提示"离线模式"）
+  //      - 若无缓存且 USE_MOCK_FALLBACK=true → 用 mock（仅调试）
+  //      - 若无缓存且禁用 mock → 标记 error，UI 显示"加载失败"
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -232,8 +245,17 @@ export function DataProvider({ children }: { children: ReactNode }) {
         const allOk = projRes && memRes && histRes && attRes;
         setDataSource(allOk ? 'api' : 'cache');
       } catch (err) {
-        console.warn('[DataContext] 后端拉取失败，使用 localStorage:', err);
-        if (!cancelled) setDataSource('cache');
+        console.warn('[DataContext] 后端拉取失败:', err);
+        if (cancelled) return;
+        // 检查 localStorage 是否有缓存数据
+        const hasCache = localStorage.getItem(STORAGE_PREFIX + 'projects');
+        if (hasCache) {
+          setDataSource('cache');
+        } else if (USE_MOCK_FALLBACK) {
+          setDataSource('mock');
+        } else {
+          setDataSource('error');
+        }
       }
     })();
     return () => { cancelled = true; };
@@ -426,7 +448,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
   }, [setTeamMembers]);
 
-  // ====== 测试文档 CRUD ======
+  // ====== 测试文档 CRUD（本地数据，无后端 API —— TestGuide 页面的文档目录元数据） ======
+  // 设计说明：testDocs 是 TestGuide 页面用来展示已上传文档列表的本地元数据
+  // （文件名/分类/上传时间等），实际文件内容存储在浏览器 localStorage。
+  // 如需多端共享，未来可扩展 /api/test-docs 路由，当前设计为单端使用。
   const addTestDoc = useCallback((doc: TestDoc) => {
     setTestDocs((prev) => [doc, ...prev]);
   }, [setTestDocs]);

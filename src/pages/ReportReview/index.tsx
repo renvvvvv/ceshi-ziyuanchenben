@@ -29,6 +29,7 @@ function ReportReview() {
   const [fileName, setFileName] = useState('');
   const [fileSize, setFileSize] = useState('');
   const [rawText, setRawText] = useState('');
+  const [originalFile, setOriginalFile] = useState<File | null>(null);
   const [reviewing, setReviewing] = useState(false);
   const [errors, setErrors] = useState<TypoError[]>([]);
   const [reviewed, setReviewed] = useState(false);
@@ -191,6 +192,7 @@ function ReportReview() {
       setFileName(file.name);
       setFileSize(formatFileSize(file.size));
       setRawText('');
+      setOriginalFile(file);
       setErrors([]);
       setReviewed(false);
       try {
@@ -321,22 +323,129 @@ function ReportReview() {
     if (!rawText) return;
     setExporting(true);
     try {
-      const { Document, Packer, Paragraph, TextRun } = await import('docx');
-      const paragraphs = rawText
-        .split('\n')
-        .filter((l) => l.trim())
-        .map((line) => new Paragraph({ children: [new TextRun({ text: line, font: '微软雅黑', size: 24 })] }));
-      const doc = new Document({ sections: [{ properties: {}, children: paragraphs }] });
-      const blob = await Packer.toBlob(doc);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `审核后_${fileName.replace(/\.[^.]+$/, '')}.docx`;
-      a.click();
-      URL.revokeObjectURL(url);
-      message.success('已导出 Word 文档');
-    } catch {
-      message.error('导出失败');
+      const isDocx = originalFile?.name.toLowerCase().endsWith('.docx');
+      if (isDocx && originalFile) {
+        // ===== docx：保留原样式，只替换已采纳的错别字 =====
+        const JSZip = (await import('jszip')).default;
+        const zip = await JSZip.loadAsync(await originalFile.arrayBuffer());
+        const docXmlFile = zip.file('word/document.xml');
+        if (!docXmlFile) {
+          throw new Error('文档结构异常：未找到 word/document.xml');
+        }
+        let docXml = await docXmlFile.async('string');
+
+        // 收集已采纳（fixed）的纠错，按 original 长度降序排列，避免短词先匹配破坏长词
+        const fixedErrors = errors
+          .filter((e) => e.fixed && e.original && e.suggestion && e.original !== e.suggestion)
+          .sort((a, b) => b.original.length - a.original.length);
+
+        if (fixedErrors.length > 0) {
+          // 跨 run 文本合并替换算法：
+          // docx 里 <w:r><w:t>错</w:t></w:r><w:r><w:t>别</w:t></w:r><w:r><w:t>字</w:t></w:r>
+          // 需要把相邻 run 的 <w:t> 文本拼起来匹配，找到后把替换词写回第一个 run，其余 run 的 <w:t> 清空
+          // 这里用正则匹配连续的 <w:r>...<w:t...>...</w:t>...</w:r> 序列
+          const runRe = /<w:r\b[^>]*>(?:(?!<\/w:r>)[\s\S])*?<\/w:r>/g;
+          // 匹配 <w:t> 或 <w:t xml:space="preserve"> 标签内的文本
+          const textTagRe = /<w:t(\s[^>]*)?>([^<]*)<\/w:t>/g;
+
+          // 先做简单替换：每个 <w:t> 标签内的文本直接替换（覆盖错别字词完整在一个 run 内的情况）
+          for (const err of fixedErrors) {
+            const escOriginal = err.original.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const escSuggestion = err.suggestion.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            docXml = docXml.replace(textTagRe, (match, attrs, text) => {
+              if (!text.includes(err.original)) return match;
+              const newText = text.split(err.original).join(err.suggestion);
+              const escapedNewText = newText.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+              const attrStr = attrs || '';
+              // 如果替换后文本首尾有空格，需要 xml:space="preserve" 防止 Word 丢失空格
+              const needPreserve = /^\s|\s$/.test(newText) ? ' xml:space="preserve"' : '';
+              const finalAttrs = needPreserve && !/xml:space/.test(attrStr) ? attrStr + needPreserve : attrStr;
+              return `<w:t${finalAttrs}>${escapedNewText}</w:t>`;
+            });
+          }
+
+          // 跨 run 替换：处理错别字词被分割到多个 run 的情况
+          // 找到所有连续的 run 序列，拼接它们的 <w:t> 文本，匹配后把 suggestion 写回第一个 run，其余清空
+          for (const err of fixedErrors) {
+            // 用全局匹配找连续 run 块
+            let lastIdx = 0;
+            const matches: Array<{ fullMatch: string; runs: Array<{ start: number; end: number; content: string; textContent: string; textTagMatch: string; attrs: string }> }> = [];
+            let m: RegExpExecArray | null;
+            const globalRunRe = new RegExp(runRe.source, 'g');
+            while ((m = globalRunRe.exec(docXml)) !== null) {
+              matches.push({ fullMatch: m[0], runs: [{ start: m.index, end: m.index + m[0].length, content: m[0], textContent: '', textTagMatch: '', attrs: '' }] });
+            }
+            // 把相邻 run 分组（连续的 run 之间只有空白/其他标签的视为一组）
+            // 简化处理：对每对相邻 run，拼接它们的 <w:t> 文本，看是否包含 err.original
+            for (let i = 0; i < matches.length - 1; i++) {
+              const run1Content = matches[i].runs[0].content;
+              const run2Content = matches[i + 1].runs[0].content;
+              const text1Match = run1Content.match(textTagRe);
+              const text2Match = run2Content.match(textTagRe);
+              if (!text1Match || !text2Match) continue;
+              const text1 = text1Match[0].replace(textTagRe, '$2');
+              const text2 = text2Match[0].replace(textTagRe, '$2');
+              const combined = text1 + text2;
+              if (!combined.includes(err.original)) continue;
+              // 找到了，做替换
+              const newCombined = combined.split(err.original).join(err.suggestion);
+              // 把 newCombined 写回：第一个 run 的 <w:t> 放 newCombined，第二个 run 的 <w:t> 清空
+              const escapedNew = newCombined.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+              const attrs1 = (text1Match[0].match(/<w:t(\s[^>]*)?>/) || [, ''])[1] || '';
+              const attrs2 = (text2Match[0].match(/<w:t(\s[^>]*)?>/) || [, ''])[1] || '';
+              const needPreserve1 = /^\s|\s$/.test(newCombined) ? ' xml:space="preserve"' : '';
+              const finalAttrs1 = needPreserve1 && !/xml:space/.test(attrs1) ? attrs1 + needPreserve1 : attrs1;
+              const newRun1 = run1Content.replace(textTagRe, `<w:t${finalAttrs1}>${escapedNew}</w:t>`);
+              const newRun2 = run2Content.replace(textTagRe, `<w:t${attrs2}></w:t>`);
+              docXml = docXml.slice(0, matches[i].runs[0].start) + newRun1 + docXml.slice(matches[i].runs[0].end, matches[i + 1].runs[0].start) + newRun2 + docXml.slice(matches[i + 1].runs[0].end);
+              // 替换后 docXml 长度变了，重新匹配（简化：break，下一个 err 重新进入循环）
+              break;
+            }
+          }
+        }
+
+        zip.file('word/document.xml', docXml);
+        const blob = await zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `审核后_${fileName.replace(/\.[^.]+$/, '')}.docx`;
+        a.click();
+        URL.revokeObjectURL(url);
+        message.success('已导出 Word 文档（保留原排版样式）');
+      } else {
+        // ===== PDF 或无原文件：纯文字导出（PDF 无法保留原样式） =====
+        const { Document, Packer, Paragraph, TextRun, HeadingLevel } = await import('docx');
+        const lines = rawText.split('\n');
+        const paragraphs = lines.map((line) => {
+          const trimmed = line.trim();
+          if (!trimmed) return new Paragraph({ children: [] });
+          // 简单启发：全行短且无标点（≤20字、无句号逗号）视为标题
+          const isHeading = trimmed.length <= 20 && !/[，。；！？、,.!?;:]/.test(trimmed);
+          return new Paragraph({
+            heading: isHeading ? HeadingLevel.HEADING_2 : undefined,
+            children: [new TextRun({
+              text: trimmed,
+              font: '微软雅黑',
+              size: isHeading ? 32 : 24, // 标题16pt，正文12pt
+              bold: isHeading,
+            })],
+            spacing: { after: isHeading ? 120 : 60 },
+          });
+        });
+        const doc = new Document({ sections: [{ properties: {}, children: paragraphs }] });
+        const blob = await Packer.toBlob(doc);
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `审核后_${fileName.replace(/\.[^.]+$/, '')}.docx`;
+        a.click();
+        URL.revokeObjectURL(url);
+        message.success('已导出 Word 文档（PDF 源文件无法保留原样式，已按段落格式导出）');
+      }
+    } catch (err) {
+      console.error(err);
+      message.error(err instanceof Error ? `导出失败：${err.message}` : '导出失败');
     } finally {
       setExporting(false);
     }
@@ -346,6 +455,7 @@ function ReportReview() {
     setFileName('');
     setFileSize('');
     setRawText('');
+    setOriginalFile(null);
     setErrors([]);
     setReviewed(false);
   };

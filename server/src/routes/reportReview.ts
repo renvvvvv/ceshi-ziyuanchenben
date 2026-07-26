@@ -110,8 +110,16 @@ router.post('/', requireAuth, asyncHandler(async (req, res) => {
       },
     });
   } catch (err: any) {
-    console.error('[ReportReview] 审核失败:', err.message || err);
-    res.status(500).json({ success: false, message: 'AI 审核失败，请稍后重试' });
+    // AI 调用失败时，把具体错误信息透传给前端（而非笼统的"AI 审核失败"）
+    // 前端可以据此提示用户"API Key 失效/余额不足/超时"等真实原因
+    const errMsg = err?.message || 'AI 审核失败';
+    console.error('[ReportReview] 审核失败:', errMsg);
+    res.status(500).json({
+      success: false,
+      message: errMsg,
+      // 仍然返回规则审核结果，让用户至少看到词典兜底发现的问题
+      ruleErrorsOnly: ruleBasedDetect(text).length,
+    });
   }
 }));
 
@@ -183,22 +191,45 @@ router.get('/learned', (_req, res) => {
 
 /**
  * 调 MINIMAX AI；带超时、超长分段、Few-shot
+ *
+ * 注意：callMiniMaxOnce 在失败时会抛错（而非静默返回空数组），
+ * 上层 callAiReview 用 try/catch 兜底，把错误信息透传给前端，
+ * 避免"AI 挂了但前端显示审核完成 0 错误"的误导。
  */
 async function callAiReview(apiKey: string, text: string): Promise<Array<{original: string; suggestion: string; context: string}>> {
   // 长文档分段（按段落切，每段 ≤ 3500 字）
   const chunks = splitText(text, 3500);
-  const tasks = chunks.map((chunk) => callMiniMaxOnce(apiKey, chunk));
-  const results = await Promise.all(tasks);
-  // 合并所有段结果
-  return results.flat();
+  // 串行调用（避免并发触发限流；分段一般 1~3 段，延迟可接受）
+  const out: Array<{original: string; suggestion: string; context: string}> = [];
+  for (let i = 0; i < chunks.length; i++) {
+    const part = await callMiniMaxOnce(apiKey, chunks[i]);
+    out.push(...part);
+  }
+  return out;
 }
 
+/**
+ * 单次调用 MiniMax ChatCompletion v2
+ *
+ * 模型选择（2026-07 官方主推）：
+ *   - MiniMax-M3：当前旗舰，Coding/Agentic 能力前沿，1M 上下文
+ *   - 旧的 abab6.5g-chat / abab6.5s-chat 已过时，阿里云百炼已标记
+ *     "免费额度用完后不可调用"，官方文档主推 MiniMax-M1/M3
+ *
+ * 错误处理：
+ *   - HTTP 非 2xx → 抛错（带状态码 + 响应体片段）
+ *   - base_resp.status_code !== 0 → 抛错（MiniMax 业务错误，如鉴权失败/余额不足/敏感词）
+ *   - JSON 解析失败 → 抛错
+ *   - 超时 → 抛错（AbortError）
+ *   - 上层 callAiReview 不 catch，让错误冒泡到路由 handler 返回 500
+ */
 async function callMiniMaxOnce(
   apiKey: string,
   text: string,
 ): Promise<Array<{original: string; suggestion: string; context: string}>> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 60000);
+  // 90s 超时（长文档 + M3 推理可能较慢）
+  const timeout = setTimeout(() => controller.abort(), 90000);
 
   // 拼装 system prompt：基础 + 通用错字词典 + 数据中心术语词典 + 学习库 + Few-shot
   const commonTypos = buildCommonTyposPrompt();
@@ -216,6 +247,7 @@ async function callMiniMaxOnce(
     '\n\n【Few-shot 学习样例】\n' + fewshot,
   ].join('');
 
+  let requestId = 'unknown';
   try {
     const response = await fetch('https://api.minimaxi.com/v1/text/chatcompletion_v2', {
       method: 'POST',
@@ -224,34 +256,65 @@ async function callMiniMaxOnce(
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        // abab6.5g 比 abab6.5s-chat 能力强很多
-        model: 'abab6.5g-chat',
+        // MiniMax-M3：当前官方主推前沿模型，能力远超 abab6.5 系列
+        // 旧 abab6.5g-chat 已过时（阿里云百炼标记"免费额度用完后不可调用"）
+        model: 'MiniMax-M3',
         messages: [
           { role: 'system', content: systemContent },
           { role: 'user', content: text },
         ],
-        response_format: { type: 'json_object' },
+        // 注意：abab6.5 系列不支持 response_format；M3 通过 system prompt 约束 JSON 输出
         temperature: 0.05,
-        max_tokens: 4096,
+        max_tokens: 8192,
       }),
       signal: controller.signal,
     });
     clearTimeout(timeout);
 
+    // 记录 request_id（MiniMax 响应头里通常有，方便排查）
+    requestId = response.headers.get('x-request-id') || response.headers.get('request-id') || 'unknown';
+
     if (!response.ok) {
       const errText = await response.text();
-      console.error('[ReportReview] MINIMAX API error:', response.status, errText.slice(0, 500));
-      return [];
+      const msg = `MINIMAX HTTP ${response.status}: ${errText.slice(0, 300)}`;
+      console.error(`[ReportReview] ${msg} | req_id=${requestId}`);
+      throw new Error(msg);
     }
 
     const data: any = await response.json();
-    const content: string = data.choices?.[0]?.message?.content || '{"errors":[]}';
+
+    // MiniMax 业务错误检查：HTTP 200 但 base_resp.status_code != 0 表示业务失败
+    // 常见：鉴权失败(1004)、余额不足(1008)、敏感词命中(1027) 等
+    const baseStatus = data?.base_resp?.status_code;
+    const baseMsg = data?.base_resp?.status_msg;
+    if (typeof baseStatus === 'number' && baseStatus !== 0) {
+      const msg = `MINIMAX 业务错误 code=${baseStatus}: ${baseMsg || 'unknown'}`;
+      console.error(`[ReportReview] ${msg} | req_id=${requestId}`);
+      throw new Error(msg);
+    }
+
+    const content: string = data.choices?.[0]?.message?.content || '';
+    if (!content) {
+      console.warn(`[ReportReview] AI 返回空 content | req_id=${requestId}`);
+      return [];
+    }
     let parsed: any;
     try {
       parsed = JSON.parse(content);
     } catch {
-      console.warn('[ReportReview] AI 返回非 JSON:', content.slice(0, 300));
-      return [];
+      // M3 可能输出带 ```json 包裹的 markdown，尝试提取
+      const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
+      if (jsonMatch) {
+        try {
+          parsed = JSON.parse(jsonMatch[1].trim());
+        } catch {
+          console.warn(`[ReportReview] AI 返回非 JSON | req_id=${requestId}:`, content.slice(0, 300));
+          return [];
+        }
+      } else {
+        console.warn(`[ReportReview] AI 返回非 JSON | req_id=${requestId}:`, content.slice(0, 300));
+        return [];
+      }
     }
     const arr = Array.isArray(parsed.errors) ? parsed.errors : [];
     return arr
@@ -264,11 +327,12 @@ async function callMiniMaxOnce(
   } catch (err: any) {
     clearTimeout(timeout);
     if (err.name === 'AbortError') {
-      console.warn('[ReportReview] AI 超时');
-    } else {
-      console.error('[ReportReview] AI 调用异常:', err.message);
+      const msg = 'MINIMAX 调用超时（90s）';
+      console.error(`[ReportReview] ${msg} | req_id=${requestId}`);
+      throw new Error(msg);
     }
-    return [];
+    // 已经是上面抛出的带 req_id 的错误，直接冒泡
+    throw err;
   }
 }
 

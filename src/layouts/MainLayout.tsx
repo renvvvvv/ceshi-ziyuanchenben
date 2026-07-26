@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { Layout, Menu, Button, Avatar, Dropdown, Tag } from 'antd';
+import { Layout, Menu, Button, Avatar, Dropdown, Tag, Alert } from 'antd';
 import {
   DashboardOutlined,
   ProjectOutlined,
@@ -18,6 +18,7 @@ import {
   FileSearchOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../store/AuthContext';
+import { useData } from '../store/DataContext';
 import type { AppModule } from '../types';
 
 const { Sider, Content } = Layout;
@@ -53,8 +54,47 @@ function MainLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout, canView } = useAuth();
+  const { dataSource } = useData();
 
   const selectedKey = '/' + location.pathname.split('/')[1];
+
+  // 数据源状态提示（仅在非 api 状态显示）
+  const dataSourceAlert = (() => {
+    if (dataSource === 'loading') return null;
+    if (dataSource === 'api') return null;
+    if (dataSource === 'cache') {
+      return (
+        <Alert
+          type="warning"
+          showIcon
+          banner
+          message="离线模式：后端服务不可达，当前显示本地缓存数据。修改不会同步到服务器。"
+          style={{ borderRadius: 0, fontSize: 12 }}
+        />
+      );
+    }
+    if (dataSource === 'mock') {
+      return (
+        <Alert
+          type="info"
+          showIcon
+          banner
+          message="调试模式：使用 Mock 数据（VITE_USE_MOCK_DATA=true）。所有修改仅本地生效。"
+          style={{ borderRadius: 0, fontSize: 12 }}
+        />
+      );
+    }
+    // error
+    return (
+      <Alert
+        type="error"
+        showIcon
+        banner
+        message="数据加载失败：后端服务不可达且无本地缓存。请检查网络或联系管理员。"
+        style={{ borderRadius: 0, fontSize: 12 }}
+      />
+    );
+  })();
 
   // 根据权限过滤菜单项
   const visibleMenuItems = ALL_MENU_ITEMS.filter((item) => canView(item.module));
@@ -193,6 +233,7 @@ function MainLayout() {
           </div>
         </div>
         <Content>
+          {dataSourceAlert}
           <div className="app-content" key={location.pathname}>
             <Outlet />
           </div>
