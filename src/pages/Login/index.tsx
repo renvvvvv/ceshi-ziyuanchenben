@@ -1,17 +1,47 @@
-import { useState } from 'react';
-import { Navigate } from 'react-router-dom';
-import { Button, Input, Form, Card, message } from 'antd';
+import { useState, useEffect } from 'react';
+import { Navigate, useSearchParams } from 'react-router-dom';
+import { Button, Input, Form, Card, message, Divider, Collapse } from 'antd';
 import { UserOutlined, LockOutlined, SafetyOutlined } from '@ant-design/icons';
 import { useAuth } from '../../store/AuthContext';
 
 function Login() {
   const [loading, setLoading] = useState(false);
+  const [feishuEnabled, setFeishuEnabled] = useState<boolean | null>(null);
+  const [searchParams] = useSearchParams();
   const { login, isAuthenticated } = useAuth();
 
-  // 关键修复：用 <Navigate> 组件做条件渲染（不依赖 useEffect 时机）
-  // 当 AuthProvider state 已更新为已登录 → Login 组件直接渲染 <Navigate>
-  // → React Router 立即跳转到 /dashboard
-  // 这比 useEffect 监听更稳健（避免 setState 异步 + navigate 时机问题）
+  // 飞书 OAuth 回调处理：?feishu=success|error&msg=xxx
+  useEffect(() => {
+    const feishuStatus = searchParams.get('feishu');
+    const msg = searchParams.get('msg');
+    if (feishuStatus === 'success') {
+      message.success('飞书登录成功');
+      // AuthContext 启动时会调 /api/auth/me 自动拉用户，session cookie 已种下
+    } else if (feishuStatus === 'error') {
+      message.error(`飞书登录失败：${msg || '未知错误'}`);
+    }
+    // 清掉 query（防止刷新重复弹提示）
+    if (feishuStatus) {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('feishu');
+      url.searchParams.delete('msg');
+      window.history.replaceState({}, '', url.toString());
+    }
+  }, [searchParams]);
+
+  // 查询飞书登录是否可用
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/auth/feishu/status')
+      .then(r => r.json())
+      .then(data => {
+        if (!cancelled && data.success) setFeishuEnabled(data.enabled === true);
+      })
+      .catch(() => { if (!cancelled) setFeishuEnabled(false); });
+    return () => { cancelled = true; };
+  }, []);
+
+  // 关键修复：用 <Navigate> 组件做条件渲染
   if (isAuthenticated) {
     return <Navigate to="/dashboard" replace />;
   }
@@ -28,6 +58,11 @@ function Login() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // 飞书登录：直接跳后端 /api/auth/feishu/login，由后端 302 到飞书授权页
+  const handleFeishuLogin = () => {
+    window.location.href = '/api/auth/feishu/login';
   };
 
   return (
@@ -67,81 +102,141 @@ function Login() {
             智航万恒测试验证管理平台
           </h2>
           <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13, margin: 0 }}>
-            请输入账号密码登录系统
+            {feishuEnabled ? '使用飞书账号一键登录' : '请输入账号密码登录系统'}
           </p>
         </div>
 
-        <Form
-          name="login"
-          onFinish={handleSubmit}
-          autoComplete="off"
-          layout="vertical"
-        >
-          <Form.Item
-            name="username"
-            rules={[{ required: true, message: '请输入账号' }]}
-          >
-            <Input
-              prefix={<UserOutlined style={{ color: 'rgba(255,255,255,0.4)' }} />}
-              placeholder="账号"
-              size="large"
-              style={{
-                background: 'rgba(255,255,255,0.06)',
-                border: '1px solid rgba(255,255,255,0.15)',
-                color: '#fff',
-                borderRadius: 8,
-              }}
-              className="dark-input"
-            />
-          </Form.Item>
-
-          <Form.Item
-            name="password"
-            rules={[{ required: true, message: '请输入密码' }]}
-          >
-            <Input.Password
-              prefix={<LockOutlined style={{ color: 'rgba(255,255,255,0.4)' }} />}
-              placeholder="密码"
-              size="large"
-              style={{
-                background: 'rgba(255,255,255,0.06)',
-                border: '1px solid rgba(255,255,255,0.15)',
-                color: '#fff',
-                borderRadius: 8,
-              }}
-              className="dark-input"
-            />
-          </Form.Item>
-
-          <Form.Item style={{ marginBottom: 0 }}>
+        {/* 飞书登录按钮（飞书已配置时显示，作主入口） */}
+        {feishuEnabled && (
+          <>
             <Button
-              type="primary"
-              htmlType="submit"
               size="large"
-              loading={loading}
               block
+              onClick={handleFeishuLogin}
               style={{
-                background: 'linear-gradient(135deg, #4d9fff, #3578e5)',
+                background: 'linear-gradient(135deg, #3370ff, #2b5fe0)',
                 border: 'none',
                 borderRadius: 8,
                 height: 44,
                 fontSize: 15,
                 fontWeight: 500,
+                color: '#fff',
+                boxShadow: '0 4px 12px rgba(51, 112, 255, 0.3)',
               }}
+              icon={
+                <svg width="18" height="18" viewBox="0 0 24 24" style={{ marginRight: 8, verticalAlign: 'middle' }}>
+                  <path fill="#fff" d="M12 2L2 7v10l10 5 10-5V7L12 2zm0 2.3L19.5 8 12 11.7 4.5 8 12 4.3zM4 9.6l7 3.5v7.2l-7-3.5V9.6zm9 10.7v-7.2l7-3.5v7.2l-7 3.5z"/>
+                </svg>
+              }
             >
-              登录
+              飞书一键登录
             </Button>
-          </Form.Item>
-        </Form>
+            <Divider plain style={{ borderColor: 'rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.3)' }}>
+              或使用账号密码
+            </Divider>
+          </>
+        )}
 
-        <div style={{ marginTop: 16, padding: 10, background: 'rgba(77,159,255,0.05)', border: '1px solid rgba(77,159,255,0.12)', borderRadius: 6, fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>
-          <div style={{ fontWeight: 600, color: 'rgba(77,159,255,0.85)', marginBottom: 4 }}>演示账号</div>
-          <div>管理员：<code style={{ color: '#7cb8ff' }}>admin</code> / <code style={{ color: '#7cb8ff' }}>admin123</code></div>
-          <div>编辑者：<code style={{ color: '#7cb8ff' }}>editor</code> / <code style={{ color: '#7cb8ff' }}>editor123</code></div>
-          <div>阅读者：<code style={{ color: '#7cb8ff' }}>reader</code> / <code style={{ color: '#7cb8ff' }}>reader123</code></div>
-        </div>
+        {/* 账密登录：飞书启用时折叠备用，未启用时直接展开 */}
+        {feishuEnabled ? (
+          <Collapse ghost>
+            <Collapse.Panel
+              key="password"
+              header={<span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12 }}>管理员账号登录</span>}
+            >
+              <PasswordForm loading={loading} onSubmit={handleSubmit} />
+            </Collapse.Panel>
+          </Collapse>
+        ) : (
+          <PasswordForm loading={loading} onSubmit={handleSubmit} showDemoAccounts />
+        )}
+
+        {!feishuEnabled && (
+          <div style={{ marginTop: 16, padding: 10, background: 'rgba(77,159,255,0.05)', border: '1px solid rgba(77,159,255,0.12)', borderRadius: 6, fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>
+            <div style={{ fontWeight: 600, color: 'rgba(77,159,255,0.85)', marginBottom: 4 }}>演示账号</div>
+            <div>管理员：<code style={{ color: '#7cb8ff' }}>admin</code> / <code style={{ color: '#7cb8ff' }}>admin123</code></div>
+            <div>编辑者：<code style={{ color: '#7cb8ff' }}>editor</code> / <code style={{ color: '#7cb8ff' }}>editor123</code></div>
+            <div>阅读者：<code style={{ color: '#7cb8ff' }}>reader</code> / <code style={{ color: '#7cb8ff' }}>reader123</code></div>
+          </div>
+        )}
       </Card>
     </div>
+  );
+}
+
+// 抽出账密表单组件（折叠/展开两种形态共用）
+function PasswordForm({
+  loading,
+  onSubmit,
+  showDemoAccounts = false,
+}: {
+  loading: boolean;
+  onSubmit: (values: { username: string; password: string }) => void;
+  showDemoAccounts?: boolean;
+}) {
+  return (
+    <Form
+      name="login"
+      onFinish={onSubmit}
+      autoComplete="off"
+      layout="vertical"
+    >
+      <Form.Item
+        name="username"
+        rules={[{ required: true, message: '请输入账号' }]}
+      >
+        <Input
+          prefix={<UserOutlined style={{ color: 'rgba(255,255,255,0.4)' }} />}
+          placeholder="账号"
+          size="large"
+          style={{
+            background: 'rgba(255,255,255,0.06)',
+            border: '1px solid rgba(255,255,255,0.15)',
+            color: '#fff',
+            borderRadius: 8,
+          }}
+          className="dark-input"
+        />
+      </Form.Item>
+
+      <Form.Item
+        name="password"
+        rules={[{ required: true, message: '请输入密码' }]}
+      >
+        <Input.Password
+          prefix={<LockOutlined style={{ color: 'rgba(255,255,255,0.4)' }} />}
+          placeholder="密码"
+          size="large"
+          style={{
+            background: 'rgba(255,255,255,0.06)',
+            border: '1px solid rgba(255,255,255,0.15)',
+            color: '#fff',
+            borderRadius: 8,
+          }}
+          className="dark-input"
+        />
+      </Form.Item>
+
+      <Form.Item style={{ marginBottom: 0 }}>
+        <Button
+          type="primary"
+          htmlType="submit"
+          size="large"
+          loading={loading}
+          block
+          style={{
+            background: 'linear-gradient(135deg, #4d9fff, #3578e5)',
+            border: 'none',
+            borderRadius: 8,
+            height: 44,
+            fontSize: 15,
+            fontWeight: 500,
+          }}
+        >
+          登录
+        </Button>
+      </Form.Item>
+    </Form>
   );
 }
 

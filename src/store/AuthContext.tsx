@@ -146,6 +146,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             username: String(data.user.username || presetUser?.username || authState.user?.username || ''),
             name: String(data.user.name || presetUser?.name || authState.user?.name || data.user.username || ''),
             role,
+            loginType: data.user.loginType === 'feishu' ? 'feishu' : 'password',
+            deptNames: Array.isArray(data.user.deptNames) ? data.user.deptNames : undefined,
           };
           const newState = { user: validatedUser };
           setAuthState(newState);

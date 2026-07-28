@@ -212,6 +212,8 @@ export interface User {
   name: string;
   role: UserRole;
   avatar?: string;
+  loginType?: 'password' | 'feishu';   // 登录方式（飞书登录 vs 账密）
+  deptNames?: string[];                // 飞书用户部门列表
 }
 
 export interface PermissionConfig {
