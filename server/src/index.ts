@@ -6,6 +6,7 @@ import projectsRouter from './routes/projects.js';
 import reportReviewRouter from './routes/reportReview.js';
 import authRouter, { authMiddleware } from './routes/auth.js';
 import kbRouter from './routes/kb.js';
+import kbQARouter from './routes/kbQA.js';
 import attendanceRouter from './routes/attendance.js';
 import { initDatabase } from './database.js';
 import db from './database.js';
@@ -37,6 +38,7 @@ app.use('/api/resource-calc', resourceCalcRouter);
 app.use('/api/projects', projectsRouter);
 app.use('/api/report-review', reportReviewRouter);
 app.use('/api/kb', kbRouter);
+app.use('/api/kb/qa', kbQARouter);
 app.use('/api/attendance-adjustments', attendanceRouter);
 
 app.get('/api/health', (_req, res) => {

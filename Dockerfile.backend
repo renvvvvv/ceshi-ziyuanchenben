@@ -18,6 +18,7 @@ COPY server/config_v100.json ./scripts/
 COPY server/test6/config/config_v100.json ./test6/config/
 COPY server/src/ ./src/
 COPY server/scripts/ ./scripts/
+COPY server/knowledge/ ./knowledge/
 
 RUN npm run build
 RUN mkdir -p /app/data /app/test6/config
