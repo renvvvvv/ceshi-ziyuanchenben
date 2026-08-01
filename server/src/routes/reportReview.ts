@@ -94,11 +94,13 @@ router.post('/', requireAuth, asyncHandler(async (req, res) => {
   }
 
   // ===== 智能分级审核策略（按字数自动切换）=====
-  // 策略1（≤5万字）: AI 全量精审 + 词典兜底
-  // 策略2（5万~15万字）: AI 全量精审（每段8000字，5并发）+ 词典兜底
-  // 策略3（>15万字）: 词典规则先行（秒级返回），AI 后台补充高频段落
+  // 策略 ai_full（≤3万字）: AI 全量精审（每段8000字，5并发）+ 词典兜底
+  // 策略 hybrid（>3万字）:  词典规则全量秒级扫描 + AI 抽审前 3 万字（目录/摘要/正文开头，错字密度最高）
+  //   说明：长文档（如14万字）若全量走 AI，分段过多、单段易命中 MiniMax 内容安全软拦截
+  //   返回空 content，且 19 段串行批处理总耗时超过前端超时。改用 hybrid：词典保证
+  //   300+ 类已知错字（地名/品牌/术语/学习库）秒级必抓，AI 补充前 3 万字精审。
   const textLen = text.length;
-  const STRATEGY = textLen <= 50000 ? 'ai_full' : textLen <= 150000 ? 'ai_full' : 'hybrid';
+  const STRATEGY = textLen <= 30000 ? 'ai_full' : 'hybrid';
   console.log(`[ReportReview] 文本 ${textLen} 字，策略: ${STRATEGY}`);
 
   try {
@@ -106,17 +108,17 @@ router.post('/', requireAuth, asyncHandler(async (req, res) => {
     let aiErrors: Array<{original: string; suggestion: string; context: string}> = [];
 
     if (STRATEGY === 'hybrid') {
-      // ===== 超大文档（>15万字）: 词典先行 + AI 抽审 =====
+      // ===== 长文档（>3万字）: 词典全量秒级扫描 + AI 抽审前 3 万字 =====
       // 词典规则已覆盖常见错别字（地名/品牌/术语/学习库），秒级完成
-      // AI 只审核"最可能有错别字"的段落：取前 5 万字（通常含目录/摘要/正文开头，错别字密度最高）
-      const aiText = text.slice(0, 50000);
+      // AI 只审核"最可能有错别字"的段落：取前 3 万字（约 4 段，1 批并发，~15-30s）
+      const aiText = text.slice(0, 30000);
       try {
         aiErrors = await callAiReview(apiKey, aiText);
       } catch (aiErr: any) {
-        console.warn('[ReportReview] 超大文档 AI 抽审失败，仅返回词典结果:', aiErr?.message);
+        console.warn('[ReportReview] AI 抽审失败，仅返回词典结果:', aiErr?.message, '| 文档', textLen, '字');
       }
     } else {
-      // ===== 正常文档（≤15万字）: AI 全量精审 =====
+      // ===== 正常文档（≤3万字）: AI 全量精审 =====
       aiErrors = await callAiReview(apiKey, text);
     }
 

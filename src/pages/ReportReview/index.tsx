@@ -148,9 +148,9 @@ function ReportReview() {
     setReviewing(true);
     setReviewed(false);
     try {
-      // GLM-5.2 审核长文档可能需要 30-90 秒，给 120 秒超时
+      // 长文档审核：词典秒级 + AI 抽审前3万字，对齐 nginx proxy_read_timeout 给 180 秒超时
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 120000);
+      const timeoutId = setTimeout(() => controller.abort(), 180000);
       const res = await fetch('/api/report-review', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -174,16 +174,26 @@ function ReportReview() {
         const strategy = data.stats?.strategy;
         const textLen = data.stats?.textLength;
         if (strategy === 'hybrid') {
-          message.success(`文档 ${textLen} 字，已采用智能审核（词典全量+AI抽审前5万字），发现 ${data.errors.length} 处错别字`);
+          message.success(`文档 ${textLen} 字，已采用智能审核（词典全量+AI抽审前3万字），发现 ${data.errors.length} 处错别字`);
         } else {
           message.success(`AI 审核完成，发现 ${data.errors.length} 处错别字`);
         }
       } else {
-        message.error(data.message || data.error || `AI 审核失败（HTTP ${res.status}）`);
+        // 后端整体失败（如 AI 服务异常）时，若词典仍抓到错字，提示用户数量
+        const ruleCount = data.ruleErrorsOnly;
+        if (typeof ruleCount === 'number' && ruleCount > 0) {
+          message.warning(`${data.message || 'AI 审核异常'}（但词典扫描仍发现 ${ruleCount} 处疑似错别字，建议缩短文档后重试以查看完整结果）`);
+        } else {
+          message.error(data.message || data.error || `AI 审核失败（HTTP ${res.status}）`);
+        }
       }
-    } catch (err) {
-      const detail = err instanceof Error ? err.message : '';
-      message.error(detail ? `审核请求失败：${detail}` : '审核请求失败，请确认后端服务已启动');
+    } catch (err: any) {
+      if (err?.name === 'AbortError') {
+        message.warning('审核超时（180秒），可能文档过长或 AI 服务繁忙，请缩短文档后重试');
+      } else {
+        const detail = err instanceof Error ? err.message : '';
+        message.error(detail ? `审核请求失败：${detail}` : '审核请求失败，请确认后端服务已启动');
+      }
     } finally {
       setReviewing(false);
     }
