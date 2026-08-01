@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Button, Spin, Empty, Input, message } from 'antd';
+import { Button, Spin, Empty, Input, message, Modal } from 'antd';
 import {
   GlobalOutlined, RobotOutlined, UserOutlined, SendOutlined, ReloadOutlined,
+  BulbOutlined, SearchOutlined, CheckOutlined, LinkOutlined,
 } from '@ant-design/icons';
 
 const { TextArea } = Input;
@@ -110,7 +111,9 @@ export default function KnowledgeBase() {
 interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
-  sources?: { title: string; file: string }[];
+  reasoning?: string;                            // GLM-5.2 思考过程
+  sources?: { title: string; file: string }[];   // RAG 知识来源
+  webSearch?: { title: string; link: string; media: string }[] | null; // 联网搜索结果
 }
 
 function QAPanel() {
@@ -139,7 +142,7 @@ function QAPanel() {
 
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 90000); // 90s 超时
+      const timeoutId = setTimeout(() => controller.abort(), 120000); // 120s 超时（思考+搜索较慢）
 
       const res = await fetch('/api/kb/qa', {
         method: 'POST',
@@ -160,8 +163,11 @@ function QAPanel() {
         setMessages(prev => [...prev, {
           role: 'assistant',
           content: data.answer,
+          reasoning: data.reasoning,
           sources: data.sources,
-        }]);
+          webSearch: data.webSearch,
+          _question: question,   // 附带用户问题，供"采纳"功能使用
+        } as any]);
       } else {
         message.error(data.message || `AI 问答失败（HTTP ${res.status}）`);
       }
@@ -247,7 +253,7 @@ function QAPanel() {
             }}>
               <Spin size="small" />
               <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, marginLeft: 8 }}>
-                正在思考...
+                正在深度思考 + 联网搜索...
               </span>
             </div>
           </div>
@@ -292,6 +298,41 @@ function QAPanel() {
 // ============== 消息气泡 ==============
 function MessageBubble({ msg }: { msg: ChatMessage }) {
   const isUser = msg.role === 'user';
+  const [showReasoning, setShowReasoning] = useState(false);
+  const [learnOpen, setLearnOpen] = useState(false);
+  const [learnText, setLearnText] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleLearn = async () => {
+    if (!learnText.trim()) return;
+    setSubmitting(true);
+    try {
+      // 找到当前用户问题（messages 里上一个 user 消息 —— 这里简化用 msg 自身定位）
+      // 实际由父组件传入更准确，这里通过闭包变量 questionForLearn 处理
+      const res = await fetch('/api/kb/qa/learn', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ question: learnQuestion || '', answer: learnText.trim() }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (data.success) {
+        message.success('已采纳到知识库，后续相似问题会参考此补充');
+        setLearnOpen(false);
+        setLearnText('');
+      } else {
+        message.error(data.message || '采纳失败');
+      }
+    } catch {
+      message.error('网络错误');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // 存储当前 AI 回答对应的用户问题（由父组件通过 msg 附带）
+  const learnQuestion = (msg as any)._question || '';
+
   return (
     <div style={{
       display: 'flex',
@@ -313,6 +354,33 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
           {isUser ? '我' : 'AI 专家'}
         </span>
       </div>
+
+      {/* 思考过程（可折叠）*/}
+      {!isUser && msg.reasoning && msg.reasoning.trim() && (
+        <div style={{ maxWidth: '90%', marginBottom: 6, width: '100%' }}>
+          <Button
+            size="small"
+            type="text"
+            icon={<BulbOutlined style={{ color: '#faad14' }} />}
+            onClick={() => setShowReasoning(!showReasoning)}
+            style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11, padding: '2px 6px' }}
+          >
+            {showReasoning ? '收起思考过程' : `查看思考过程（${msg.reasoning.length}字）`}
+          </Button>
+          {showReasoning && (
+            <div style={{
+              background: 'rgba(250,173,20,0.05)',
+              border: '1px solid rgba(250,173,20,0.15)',
+              borderRadius: 6, padding: '10px 12px', marginTop: 4,
+              fontSize: 12, lineHeight: 1.6, color: 'rgba(255,255,255,0.55)',
+              whiteSpace: 'pre-wrap', maxHeight: 300, overflowY: 'auto',
+            }}>
+              {msg.reasoning}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* 气泡内容 */}
       <div
         style={{
@@ -327,13 +395,31 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
         }}
         dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content) }}
       />
-      {/* AI 回答的知识来源标注 */}
+
+      {/* 联网搜索来源 */}
+      {!isUser && msg.webSearch && msg.webSearch.length > 0 && (
+        <div style={{ marginTop: 6, maxWidth: '90%', fontSize: 11 }}>
+          <div style={{ color: 'rgba(255,255,255,0.35)', marginBottom: 4 }}>
+            <SearchOutlined style={{ marginRight: 4 }} />联网搜索来源：
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {msg.webSearch.map((s, i) => (
+              <a key={i} href={s.link} target="_blank" rel="noopener noreferrer"
+                style={{ color: '#7cb8ff', fontSize: 11, textDecoration: 'none' }}>
+                <LinkOutlined /> {s.media || '来源'}：{s.title}
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* RAG 知识来源 */}
       {!isUser && msg.sources && msg.sources.length > 0 && (
         <div style={{
           marginTop: 6, fontSize: 11, color: 'rgba(255,255,255,0.35)',
           display: 'flex', flexWrap: 'wrap', gap: 4, maxWidth: '90%',
         }}>
-          <span>📎 来源：</span>
+          <span>📎 知识库：</span>
           {msg.sources.map((s, i) => (
             <span key={i} style={{
               background: 'rgba(77,159,255,0.1)',
@@ -345,6 +431,44 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
           ))}
         </div>
       )}
+
+      {/* 采纳/补充按钮（仅 AI 回答）*/}
+      {!isUser && learnQuestion && (
+        <div style={{ marginTop: 6 }}>
+          <Button
+            size="small"
+            type="text"
+            icon={<CheckOutlined style={{ color: '#52c41a' }} />}
+            onClick={() => setLearnOpen(true)}
+            style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11 }}
+          >
+            采纳/补充到知识库
+          </Button>
+        </div>
+      )}
+
+      {/* 采纳弹窗 */}
+      <Modal
+        title="补充知识到学习库"
+        open={learnOpen}
+        onCancel={() => { setLearnOpen(false); setLearnText(''); }}
+        onOk={handleLearn}
+        confirmLoading={submitting}
+        okText="提交"
+        cancelText="取消"
+        width={500}
+      >
+        <div style={{ marginBottom: 8, fontSize: 12, color: 'rgba(0,0,0,0.5)' }}>
+          原始问题：{learnQuestion}
+        </div>
+        <Input.TextArea
+          value={learnText}
+          onChange={(e) => setLearnText(e.target.value)}
+          placeholder="补充或纠正 AI 的回答。后续遇到相似问题时，这条补充会作为参考资料注入 AI 上下文。"
+          rows={5}
+          autoFocus
+        />
+      </Modal>
     </div>
   );
 }

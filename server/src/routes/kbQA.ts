@@ -10,7 +10,7 @@
  *   3. System prompt（人设 + 参考资料）+ 多轮对话历史 → 调 MiniMax → 返回
  */
 import { Router } from 'express';
-import { readFileSync, readdirSync } from 'fs';
+import { readFileSync, readdirSync, writeFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { requireAuth } from './auth.js';
@@ -146,40 +146,62 @@ function retrieveKnowledge(question: string, topN: number = 3): KnowledgeChunk[]
     .map(s => s.chunk);
 }
 
-// ============== MiniMax 调用 ==============
+// ============== GLM-5.2 调用（思考强度高 + 联网搜索）==============
 
 interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
 }
 
+interface GLMResponse {
+  content: string;
+  reasoning?: string;       // 思考过程
+  webSearch?: any[];        // 联网搜索结果
+}
+
 /**
- * 调 MiniMax-M3 多轮对话
- * 复用 reportReview 的调用模式，独立实现避免耦合
+ * 调 GLM-5.2 多轮对话
+ *   - thinking: enabled（开启思考）
+ *   - reasoning_effort: max（思考强度：高）
+ *   - tools: web_search（联网搜索，获取最新信息）
  */
-async function callMiniMaxChat(
+async function callGLMChat(
   apiKey: string,
   systemPrompt: string,
   messages: ChatMessage[],
-): Promise<string> {
+): Promise<GLMResponse> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 60000); // 60s 超时
+  const timeout = setTimeout(() => controller.abort(), 90000); // 90s 超时（思考+搜索较慢）
 
   try {
-    const response = await fetch('https://api.minimaxi.com/v1/text/chatcompletion_v2', {
+    const response = await fetch('https://open.bigmodel.cn/api/paas/v4/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: 'MiniMax-M3',
+        model: 'glm-5.2',
         messages: [
           { role: 'system', content: systemPrompt },
           ...messages.map(m => ({ role: m.role, content: m.content })),
         ],
-        temperature: 0.3,   // 对话场景稍高，给一点发散
-        max_tokens: 4096,
+        thinking: { type: 'enabled' },      // 开启思考模式
+        reasoning_effort: 'max',            // 思考强度：高
+        tools: [                            // 联网搜索工具
+          {
+            type: 'web_search',
+            web_search: {
+              enable: 'True',
+              search_engine: 'search_pro',
+              search_result: 'True',
+              count: '5',
+            },
+          },
+        ],
+        temperature: 1.0,   // GLM-5.2 思考模式建议 1.0
+        max_tokens: 8192,
+        stream: false,
       }),
       signal: controller.signal,
     });
@@ -187,30 +209,79 @@ async function callMiniMaxChat(
 
     if (!response.ok) {
       const errText = await response.text();
-      throw new Error(`MiniMax HTTP ${response.status}: ${errText.slice(0, 200)}`);
+      throw new Error(`GLM-5.2 HTTP ${response.status}: ${errText.slice(0, 300)}`);
     }
 
     const data: any = await response.json();
-    const baseStatus = data?.base_resp?.status_code;
-    if (typeof baseStatus === 'number' && baseStatus !== 0) {
-      throw new Error(`MiniMax 业务错误 code=${baseStatus}: ${data.base_resp?.status_msg || 'unknown'}`);
-    }
+    const msg = data.choices?.[0]?.message || {};
+    const content: string = msg.content || '';
+    const reasoning: string = msg.reasoning_content || '';  // 思考过程
+    const webSearch = msg.web_search || data.web_search || null;
 
-    const content: string = data.choices?.[0]?.message?.content || '';
-    return content;
+    return { content, reasoning, webSearch };
   } catch (err: any) {
     clearTimeout(timeout);
     if (err.name === 'AbortError') {
-      throw new Error('AI 回答超时（60s），请稍后重试');
+      throw new Error('AI 回答超时（90s，含思考+联网搜索），请稍后重试');
     }
     throw err;
   }
 }
 
+// ============== 自学习库（用户纠错入库）==============
+
+interface LearnedEntry {
+  question: string;      // 原始问题
+  answer: string;        // 补充/纠正后的答案
+  source: string;        // 来源（用户名）
+  count: number;         // 引用次数
+  createdAt: string;
+}
+
+const LEARNED_FILE = join(__dirname, '..', '..', '..', 'data', 'learned-kb.json');
+let learnedCache: Record<string, LearnedEntry> = {};
+
+function loadLearned(): void {
+  try {
+    const raw = readFileSync(LEARNED_FILE, 'utf-8');
+    learnedCache = JSON.parse(raw);
+    console.log(`[KB-QA] 已加载自学习库：${Object.keys(learnedCache).length} 条`);
+  } catch {
+    learnedCache = {};
+    console.log('[KB-QA] 自学习库为空（首次使用）');
+  }
+}
+
+function saveLearned(): void {
+  try {
+    writeFileSync(LEARNED_FILE, JSON.stringify(learnedCache, null, 2), 'utf-8');
+  } catch (e) {
+    console.warn('[KB-QA] 保存自学习库失败:', (e as Error).message);
+  }
+}
+
+/**
+ * 构建自学习库 prompt 注入：把与当前问题最相关的纠错条目注入 system prompt
+ */
+function buildLearnedPrompt(question: string): string {
+  const entries = Object.values(learnedCache);
+  if (entries.length === 0) return '';
+  const qKws = new Set(extractKeywords(question));
+  const relevant = entries
+    .map(e => ({ e, score: extractKeywords(e.question + e.answer).filter(k => qKws.has(k)).length }))
+    .filter(x => x.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3);
+  if (relevant.length === 0) return '';
+  return '\n\n【历史用户补充知识】\n以下是之前用户对类似问题的补充/纠正，请参考：\n' +
+    relevant.map(x => `Q: ${x.e.question}\nA: ${x.e.answer}`).join('\n\n');
+}
+
 // ============== 路由 ==============
 
-// 启动时加载知识库
+// 启动时加载知识库 + 自学习库
 loadKnowledge();
+loadLearned();
 
 /**
  * POST /api/kb/qa
@@ -229,9 +300,9 @@ router.post('/', requireAuth, async (req, res) => {
     return res.status(400).json({ success: false, message: '请输入问题' });
   }
 
-  const apiKey = process.env.MINIMAX_API_KEY;
+  const apiKey = process.env.ZHIPU_API_KEY;
   if (!apiKey) {
-    return res.status(500).json({ success: false, message: 'AI 服务未配置（MINIMAX_API_KEY 未设置）' });
+    return res.status(500).json({ success: false, message: 'AI 服务未配置（ZHIPU_API_KEY 未设置）' });
   }
 
   try {
@@ -239,17 +310,18 @@ router.post('/', requireAuth, async (req, res) => {
     const relevant = retrieveKnowledge(question, 3);
     const sources = relevant.map(c => ({ title: c.title, file: c.file }));
 
-    // 2. 拼装 system prompt：人设 + 检索到的知识
+    // 2. 拼装 system prompt：人设 + 检索到的知识 + 自学习库
     const knowledgeContext = relevant.length > 0
       ? '\n\n【参考资料】\n以下是与用户问题相关的专业知识，请优先依据这些内容回答：\n\n' +
         relevant.map((c, i) => `--- 参考资料 ${i + 1}：${c.title}（来源：${c.file}）---\n${c.content}`).join('\n\n')
       : '';
+    const learnedContext = buildLearnedPrompt(question);
     const systemPrompt = personaPrompt +
       '\n\n你是「智航万恒测试验证管理平台」内嵌的知识库问答助手。' +
       '回答要求：用专业、简洁、落地的中文，像机房现场跟同事说话一样。' +
-      '如果参考资料中没有相关内容，基于你的专业知识回答，但要说明"这部分不在内置知识库中"。' +
+      '如果参考资料中没有相关内容，你可以联网搜索获取最新信息，或基于你的专业知识回答。' +
       '涉及具体数值（温度、阈值、标准）时务必给出具体数字。' +
-      knowledgeContext;
+      knowledgeContext + learnedContext;
 
     // 3. 构建对话消息（限制最近 10 轮防 token 爆炸）
     const recentHistory = (history as ChatMessage[])
@@ -257,23 +329,76 @@ router.post('/', requireAuth, async (req, res) => {
       .slice(-20); // 最近 20 条消息（约 10 轮）
     const messages: ChatMessage[] = [...recentHistory, { role: 'user', content: question }];
 
-    // 4. 调 MiniMax
-    const answer = await callMiniMaxChat(apiKey, systemPrompt, messages);
+    // 4. 调 GLM-5.2（思考强度高 + 联网搜索）
+    const { content: answer, reasoning, webSearch } = await callGLMChat(apiKey, systemPrompt, messages);
 
     if (!answer || answer.trim().length === 0) {
       return res.json({
         success: true,
         answer: '抱歉，我暂时无法回答这个问题，请尝试换一种问法。',
+        reasoning: '',
         sources,
+        webSearch: null,
       });
     }
 
-    res.json({ success: true, answer: answer.trim(), sources });
+    // 5. 解析搜索结果摘要（取标题+链接）
+    const searchResults = Array.isArray(webSearch)
+      ? webSearch.slice(0, 5).map((s: any) => ({ title: s.title || '', link: s.link || s.url || '', media: s.media || '' }))
+      : null;
+
+    res.json({
+      success: true,
+      answer: answer.trim(),
+      reasoning: reasoning || '',           // 思考过程
+      sources,                              // RAG 知识来源
+      webSearch: searchResults,             // 联网搜索来源
+    });
   } catch (err: any) {
     const errMsg = err?.message || 'AI 问答失败';
     console.error('[KB-QA] 问答失败:', errMsg);
     res.status(500).json({ success: false, message: errMsg });
   }
+});
+
+/**
+ * POST /api/kb/qa/learn
+ * 用户纠错/补充入库（自学习）
+ *
+ * 请求体: { question: '原始问题', answer: '补充或纠正后的答案' }
+ * 响应: { success:true, learned: { question, answer } }
+ */
+router.post('/learn', requireAuth, (req, res) => {
+  const { question, answer } = req.body || {};
+  if (!question || !answer || typeof question !== 'string' || typeof answer !== 'string') {
+    return res.status(400).json({ success: false, message: '需要 question 和 answer 字段' });
+  }
+  if (question.trim().length < 2 || answer.trim().length < 2) {
+    return res.status(400).json({ success: false, message: '问题和答案至少 2 个字符' });
+  }
+
+  // 以问题为 key 去重，相同问题覆盖更新（count 累加）
+  const key = question.trim().slice(0, 200);
+  const existing = learnedCache[key];
+  learnedCache[key] = {
+    question: question.trim(),
+    answer: answer.trim(),
+    source: (req as any).user?.username || 'unknown',
+    count: (existing?.count || 0) + 1,
+    createdAt: existing?.createdAt || new Date().toISOString(),
+  };
+  saveLearned();
+  console.log(`[KB-QA] 用户 ${(req as any).user?.username || '?' } 补充知识：${key.slice(0, 40)}...`);
+  res.json({ success: true, learned: { question: key, answer: answer.trim() } });
+});
+
+/**
+ * GET /api/kb/qa/learned
+ * 查看自学习库
+ */
+router.get('/learned', requireAuth, (_req, res) => {
+  const list = Object.values(learnedCache).sort((a, b) => b.count - a.count);
+  res.json({ success: true, count: list.length, data: list });
 });
 
 export default router;

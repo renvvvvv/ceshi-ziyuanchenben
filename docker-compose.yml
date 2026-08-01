@@ -44,6 +44,7 @@ services:
       - DB_USER=postgres
       - DB_PASSWORD=${DB_PASSWORD:-postgres123}
       - MINIMAX_API_KEY=${MINIMAX_API_KEY:-}
+      - ZHIPU_API_KEY=${ZHIPU_API_KEY:-}
       - TZ=Asia/Shanghai
       # 飞书 OAuth 登录配置
       - FEISHU_APP_ID=${FEISHU_APP_ID:-}
