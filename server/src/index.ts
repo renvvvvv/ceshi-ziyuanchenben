@@ -27,7 +27,7 @@ const corsOptions: cors.CorsOptions = {
   },
 };
 app.use(cors(corsOptions)); // credentials:true 让 cookie 跨域带上
-app.use(express.json({ limit: '2mb' }));
+app.use(express.json({ limit: '10mb' })); // 报告审核支持超长文档（~200万字），nginx 已允许 20mb
 
 // 解析 session token（所有请求都会跑；只是把 user 挂到 req 上，不强制要求登录）
 app.use(authMiddleware);
