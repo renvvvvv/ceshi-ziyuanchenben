@@ -164,6 +164,8 @@ CREATE TABLE IF NOT EXISTS attendance_adjustments (
     project_start   TEXT,                    -- 人工覆盖的项目起始日（YYYY-MM-DD）
     project_end     TEXT,                    -- 人工覆盖的项目结束日
     leave_days      INTEGER,                 -- 人工校准请假天数
+    position        TEXT,                    -- 项目级岗位（某人在某项目的角色）
+    attend_days     INTEGER,                 -- 直接录入的实际出勤天数（有值时优先于 onDuty-leave 推算）
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE(member_id, project_name, cycle_start)
 );

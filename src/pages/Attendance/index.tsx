@@ -1,10 +1,11 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Table, Select, DatePicker, Button, Modal, Tag, Empty, Radio, message, InputNumber, Form, Tabs, Input, Space } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { DownloadOutlined, EyeOutlined, CalendarOutlined, PrinterOutlined, FolderOutlined, UserOutlined, EditOutlined, ThunderboltOutlined, ToolOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import * as XLSX from 'xlsx';
 import { useData } from '../../store/DataContext';
+import type { TeamMember } from '../../types';
 
 // ============================================================
 // 岗位配置
@@ -264,9 +265,9 @@ function Attendance() {
 
     const result: AttendanceRow[] = [];
     teamMembers.forEach((m) => {
-      const position = m.position || POSITION_MAP[m.id] || '测试工程师';
+      const memberPosition = m.position || POSITION_MAP[m.id] || '测试工程师';
       for (const p of m.projects || []) {
-        // 应用人工校准（覆盖项目时间和请假天数，应出勤根据调整后的时间重算）
+        // 应用人工校准（覆盖项目时间、请假天数、项目级岗位、实际出勤）
         const key = `${m.id}-${p.projectName}-${cycleStart}`;
         const adj = attendanceAdjustments[key];
         const projStart = adj?.projectStart ?? p.startDate;
@@ -279,7 +280,10 @@ function Attendance() {
           baseLeave = overlapDays(m.leaveStartDate, m.leaveEndDate, duty.start, duty.end);
         }
         const leaveDays = adj?.leaveDays ?? baseLeave;
-        const attendDays = Math.max(onDutyDays - leaveDays, 0);
+        // 项目级岗位优先：adj.position > 人员全局 position
+        const position = adj?.position || memberPosition;
+        // 实际出勤：有录入值用录入值，否则按 onDuty-leave 推算
+        const attendDays = adj?.attendDays != null ? Math.min(adj.attendDays, onDutyDays) : Math.max(onDutyDays - leaveDays, 0);
         const rate = onDutyDays > 0 ? attendDays / onDutyDays : 0;
 
         result.push({
@@ -288,9 +292,10 @@ function Attendance() {
           projectName: p.projectName, projectStart: projStart, projectEnd: projEnd,
           projectTotalDays: daysBetween(projStart, projEnd),
           onDutyDays, leaveDays, attendDays, rate,
-          // 标记是否被人工校准
+          // 标记是否被人工校准 / 录入
           ...(adj ? { _adjusted: true } : {}),
-        } as AttendanceRow & { _adjusted?: boolean });
+          ...(adj?.attendDays != null ? { _entered: true } : {}),
+        } as AttendanceRow & { _adjusted?: boolean; _entered?: boolean });
       }
     });
     return result;
@@ -427,12 +432,23 @@ function Attendance() {
         ? <Tag style={{ background: 'rgba(250,173,20,0.1)', color: '#faad14', border: '1px solid rgba(250,173,20,0.3)' }}>{v}</Tag>
         : <span style={{ color: 'rgba(255,255,255,0.3)' }}>0</span>
     },
-    { title: '出勤率', dataIndex: 'rate', width: 90, align: 'center',
+    { title: '出勤率', dataIndex: 'rate', width: 110, align: 'center',
       sorter: (a, b) => a.rate - b.rate,
-      render: (v: number) => {
-        const pct = (v * 100).toFixed(1) + '%';
+      render: (v: number, record) => {
+        if (record.children) {
+          const pct = (v * 100).toFixed(1) + '%';
+          const color = v >= 0.95 ? '#52c41a' : v >= 0.9 ? '#faad14' : '#ff4d4f';
+          return <span style={{ color, fontWeight: 600 }}>{pct}</span>;
+        }
+        const pct = (v * 100).toFixed(1);
         const color = v >= 0.95 ? '#52c41a' : v >= 0.9 ? '#faad14' : '#ff4d4f';
-        return <span style={{ color, fontWeight: 500 }}>{pct}</span>;
+        // 背景色条：按出勤率比例填充
+        return (
+          <div style={{ position: 'relative', width: 70, height: 22, margin: '0 auto', borderRadius: 4, overflow: 'hidden', background: 'rgba(255,255,255,0.06)' }}>
+            <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${Math.min(v * 100, 100)}%`, background: v >= 0.95 ? 'rgba(82,196,26,0.25)' : v >= 0.9 ? 'rgba(250,173,20,0.25)' : 'rgba(255,77,79,0.25)', transition: 'width 0.3s' }} />
+            <span style={{ position: 'relative', color, fontSize: 12, fontWeight: 600, lineHeight: '22px' }}>{pct}%</span>
+          </div>
+        );
       }
     },
   ];
@@ -453,7 +469,7 @@ function Attendance() {
             人员考勤
           </h3>
           <div style={{ marginTop: 8, color: 'rgba(255,255,255,0.4)', fontSize: 12 }}>
-            当前周期：{cycleLabel} · 按项目分组 · 应出勤=项目周期∩考勤周期{adjustedCount > 0 ? ` · 已人工校准 ${adjustedCount} 项` : ''}
+            当前周期：{cycleLabel} · 按项目分组 · 应出勤=项目周期∩考勤周期（含周末）{adjustedCount > 0 ? ` · 已校准 ${adjustedCount} 项` : ''}
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -472,48 +488,38 @@ function Attendance() {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 20 }}>
-        {kpiCards.map((c) => (
-          <div key={c.label} style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: '16px 20px' }}>
-            <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, marginBottom: 6 }}>{c.label}</div>
-            <div style={{ color: c.color, fontSize: 24, fontWeight: 500, fontFamily: 'var(--font-primary)' }}>{c.value}</div>
-          </div>
-        ))}
-      </div>
-
-      <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
-        <Radio.Group value={cycleType} onChange={(e) => setCycleType(e.target.value)} optionType="button" buttonStyle="solid" size="small">
-          <Radio.Button value="cycle19">19日考勤周期</Radio.Button>
-          <Radio.Button value="month">自然月</Radio.Button>
-        </Radio.Group>
-        <DatePicker picker="month" value={monthFilter} onChange={(v) => v && setMonthFilter(v)} allowClear={false} style={{ width: 140 }} />
-        <Select value={projectFilter} onChange={setProjectFilter} style={{ width: 200 }}
-          options={projectOptions.map((v) => ({ value: v, label: v }))} />
-        <Select value={memberFilter} onChange={setMemberFilter} style={{ width: 140 }}
-          options={memberOptions.map((v) => ({ value: v, label: v }))} />
-      </div>
-
-      <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, overflow: 'hidden' }}>
-        <Table<AttendanceNode> columns={columns} dataSource={treeData} pagination={false} size="small" scroll={{ x: 1050 }}
-          expandable={{ defaultExpandAllRows: true, childrenColumnName: 'children' }}
-          summary={() => {
-            if (filteredRows.length === 0) return null;
-            return (
-              <Table.Summary fixed>
-                <Table.Summary.Row>
-                  <Table.Summary.Cell index={0} colSpan={3}><span style={{ color: '#4d9fff', fontWeight: 600 }}>总计（{treeData.length} 个项目）</span></Table.Summary.Cell>
-                  <Table.Summary.Cell index={3} align="center"><span style={{ color: 'rgba(255,255,255,0.5)' }}>-</span></Table.Summary.Cell>
-                  <Table.Summary.Cell index={4} align="center"><span style={{ color: '#4d9fff', fontWeight: 500 }}>{kpi.totalOnDuty}</span></Table.Summary.Cell>
-                  <Table.Summary.Cell index={5} align="center"><span style={{ color: '#52c41a', fontWeight: 500 }}>{kpi.totalAttend}</span></Table.Summary.Cell>
-                  <Table.Summary.Cell index={6} align="center"><span style={{ color: '#faad14', fontWeight: 500 }}>{kpi.totalLeave}</span></Table.Summary.Cell>
-                  <Table.Summary.Cell index={7} align="center"><span style={{ color: '#4d9fff', fontWeight: 500 }}>{(kpi.avgRate * 100).toFixed(1)}%</span></Table.Summary.Cell>
-                </Table.Summary.Row>
-              </Table.Summary>
-            );
-          }}
-          locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={<span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 13 }}>{dayjs(cycleStart).isAfter(dayjs().format('YYYY-MM-DD')) ? '该周期尚未开始' : '当前筛选无考勤数据'}</span>} /> }}
-        />
-      </div>
+      <Tabs
+        defaultActiveKey="statistics"
+        items={[
+          {
+            key: 'statistics',
+            label: <span><CalendarOutlined /> 考勤统计</span>,
+            children: <StatisticsView
+              cycleType={cycleType} setCycleType={setCycleType}
+              monthFilter={monthFilter} setMonthFilter={setMonthFilter}
+              projectFilter={projectFilter} setProjectFilter={setProjectFilter}
+              memberFilter={memberFilter} setMemberFilter={setMemberFilter}
+              cycleLabel={cycleLabel} cycleStart={cycleStart}
+              projectOptions={projectOptions} memberOptions={memberOptions}
+              kpiCards={kpiCards} columns={columns} treeData={treeData}
+              filteredRows={filteredRows} kpi={kpi}
+            />,
+          },
+          {
+            key: 'entry',
+            label: <span><EditOutlined /> 项目考勤录入</span>,
+            children: <ProjectEntryView
+              teamMembers={teamMembers}
+              attendanceAdjustments={attendanceAdjustments}
+              setAttendanceAdjustments={setAttendanceAdjustments}
+              cycleType={cycleType} setCycleType={setCycleType}
+              monthFilter={monthFilter} setMonthFilter={setMonthFilter}
+              cycleStart={cycleStart} cycleEnd={cycleEnd} cycleLabel={cycleLabel}
+              projectOptions={projectOptions}
+            />,
+          },
+        ]}
+      />
 
       {/* 预览弹窗 */}
       <Modal title={`考勤预览 - ${cycleLabel}`} open={previewOpen} onCancel={() => setPreviewOpen(false)} width={1000}
@@ -747,6 +753,275 @@ function Attendance() {
           ]}
         />
       </Modal>
+    </div>
+  );
+}
+
+// ============== 统计视图组件（原视图封装）==============
+function StatisticsView(props: {
+  cycleType: CycleType; setCycleType: (v: CycleType) => void;
+  monthFilter: dayjs.Dayjs; setMonthFilter: (v: dayjs.Dayjs) => void;
+  projectFilter: string; setProjectFilter: (v: string) => void;
+  memberFilter: string; setMemberFilter: (v: string) => void;
+  cycleLabel: string; cycleStart: string;
+  projectOptions: string[]; memberOptions: string[];
+  kpiCards: { label: string; value: number; color: string }[];
+  columns: ColumnsType<AttendanceNode>;
+  treeData: AttendanceNode[];
+  filteredRows: AttendanceRow[];
+  kpi: { memberCount: number; totalOnDuty: number; totalAttend: number; totalLeave: number; avgRate: number };
+}) {
+  const { cycleType, setCycleType, monthFilter, setMonthFilter, projectFilter, setProjectFilter,
+    memberFilter, setMemberFilter, cycleStart, projectOptions, memberOptions,
+    kpiCards, columns, treeData, filteredRows, kpi } = props;
+
+  return (
+    <>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 20, marginTop: 16 }}>
+        {kpiCards.map((c) => (
+          <div key={c.label} style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: '16px 20px' }}>
+            <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, marginBottom: 6 }}>{c.label}</div>
+            <div style={{ color: c.color, fontSize: 24, fontWeight: 500 }}>{c.value}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+        <Radio.Group value={cycleType} onChange={(e) => setCycleType(e.target.value)} optionType="button" buttonStyle="solid" size="small">
+          <Radio.Button value="cycle19">19日考勤周期</Radio.Button>
+          <Radio.Button value="month">自然月</Radio.Button>
+        </Radio.Group>
+        <DatePicker picker="month" value={monthFilter} onChange={(v) => v && setMonthFilter(v)} allowClear={false} style={{ width: 140 }} />
+        <Select value={projectFilter} onChange={setProjectFilter} style={{ width: 200 }}
+          options={projectOptions.map((v) => ({ value: v, label: v }))} />
+        <Select value={memberFilter} onChange={setMemberFilter} style={{ width: 140 }}
+          options={memberOptions.map((v) => ({ value: v, label: v }))} />
+      </div>
+
+      <style>{`.att-row-low > td { background: rgba(255,77,79,0.04) !important; }`}</style>
+      <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, overflow: 'hidden' }}>
+        <Table<AttendanceNode> columns={columns} dataSource={treeData} pagination={false} size="small" scroll={{ x: 1050 }}
+          expandable={{ defaultExpandAllRows: true, childrenColumnName: 'children' }}
+          rowClassName={(record) => (record.children || record.rate >= 0.9) ? '' : 'att-row-low'}
+          summary={() => {
+            if (filteredRows.length === 0) return null;
+            return (
+              <Table.Summary fixed>
+                <Table.Summary.Row>
+                  <Table.Summary.Cell index={0} colSpan={3}><span style={{ color: '#4d9fff', fontWeight: 600 }}>总计（{treeData.length} 个项目）</span></Table.Summary.Cell>
+                  <Table.Summary.Cell index={3} align="center"><span style={{ color: 'rgba(255,255,255,0.5)' }}>-</span></Table.Summary.Cell>
+                  <Table.Summary.Cell index={4} align="center"><span style={{ color: '#4d9fff', fontWeight: 500 }}>{kpi.totalOnDuty}</span></Table.Summary.Cell>
+                  <Table.Summary.Cell index={5} align="center"><span style={{ color: '#52c41a', fontWeight: 500 }}>{kpi.totalAttend}</span></Table.Summary.Cell>
+                  <Table.Summary.Cell index={6} align="center"><span style={{ color: '#faad14', fontWeight: 500 }}>{kpi.totalLeave}</span></Table.Summary.Cell>
+                  <Table.Summary.Cell index={7} align="center"><span style={{ color: '#4d9fff', fontWeight: 500 }}>{(kpi.avgRate * 100).toFixed(1)}%</span></Table.Summary.Cell>
+                </Table.Summary.Row>
+              </Table.Summary>
+            );
+          }}
+          locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={<span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 13 }}>{dayjs(cycleStart).isAfter(dayjs().format('YYYY-MM-DD')) ? '该周期尚未开始' : '当前筛选无考勤数据'}</span>} /> }}
+        />
+      </div>
+    </>
+  );
+}
+
+// ============== 项目考勤录入组件（新视图）==============
+function ProjectEntryView(props: {
+  teamMembers: TeamMember[];
+  attendanceAdjustments: Record<string, { projectStart?: string; projectEnd?: string; leaveDays?: number; position?: string; attendDays?: number }>;
+  setAttendanceAdjustments: (updater: Record<string, any> | ((prev: Record<string, any>) => Record<string, any>)) => void;
+  cycleType: CycleType; setCycleType: (v: CycleType) => void;
+  monthFilter: dayjs.Dayjs; setMonthFilter: (v: dayjs.Dayjs) => void;
+  cycleStart: string; cycleEnd: string; cycleLabel: string;
+  projectOptions: string[];
+}) {
+  const { teamMembers, attendanceAdjustments, setAttendanceAdjustments, cycleStart, cycleEnd, cycleLabel, projectOptions } = props;
+  const [selectedProject, setSelectedProject] = useState<string>('');
+  const [editing, setEditing] = useState<Record<string, { attendDays?: number; leaveDays?: number; position?: string }>>({});
+  const [saving, setSaving] = useState(false);
+  const [savedKeys, setSavedKeys] = useState<Set<string>>(new Set());
+
+  const today = dayjs().format('YYYY-MM-DD');
+
+  // 选中项目后，计算该项目所有人员的考勤行
+  const projectRows = useMemo(() => {
+    if (!selectedProject || dayjs(cycleStart).isAfter(today)) return [];
+    const rows: Array<{ memberId: string; memberName: string; onDutyDays: number; attendDays: number; leaveDays: number; position: string; entered: boolean }> = [];
+    teamMembers.forEach((m) => {
+      const p = (m.projects || []).find((x) => x.projectName === selectedProject);
+      if (!p) return;
+      const key = `${m.id}-${selectedProject}-${cycleStart}`;
+      const adj = attendanceAdjustments[key];
+      const projStart = adj?.projectStart ?? p.startDate;
+      const projEnd = adj?.projectEnd ?? p.endDate;
+      const duty = dutyRange(projStart, projEnd, cycleStart, cycleEnd, today);
+      if (!duty) return;
+      const onDutyDays = daysBetween(duty.start, duty.end);
+      let baseLeave = 0;
+      if (m.leaveStartDate && m.leaveEndDate) baseLeave = overlapDays(m.leaveStartDate, m.leaveEndDate, duty.start, duty.end);
+      const leaveDays = adj?.leaveDays ?? baseLeave;
+      const memberPos = m.position || POSITION_MAP[m.id] || '测试工程师';
+      const position = adj?.position || memberPos;
+      const attendDays = adj?.attendDays != null ? Math.min(adj.attendDays, onDutyDays) : Math.max(onDutyDays - leaveDays, 0);
+      rows.push({ memberId: m.id, memberName: m.name, onDutyDays, attendDays, leaveDays, position, entered: adj?.attendDays != null });
+    });
+    return rows;
+  }, [selectedProject, teamMembers, attendanceAdjustments, cycleStart, cycleEnd, today]);
+
+  // 初始化 editing（切换项目时从现有数据加载）
+  useEffect(() => {
+    const init: Record<string, { attendDays?: number; leaveDays?: number; position?: string }> = {};
+    projectRows.forEach((r) => {
+      init[r.memberId] = { attendDays: r.attendDays, leaveDays: r.leaveDays, position: r.position };
+    });
+    setEditing(init);
+    setSavedKeys(new Set());
+  }, [selectedProject, cycleStart, projectRows.length]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    let count = 0;
+    projectRows.forEach((r) => {
+      const edit = editing[r.memberId];
+      if (!edit) return;
+      const key = `${r.memberId}-${selectedProject}-${cycleStart}`;
+      const hasChange =
+        (edit.attendDays !== undefined && edit.attendDays !== r.attendDays) ||
+        (edit.leaveDays !== undefined && edit.leaveDays !== r.leaveDays) ||
+        (edit.position !== undefined && edit.position !== r.position);
+      if (!hasChange) return;
+      setAttendanceAdjustments((prev) => ({
+        ...prev,
+        [key]: {
+          ...prev[key],
+          projectStart: prev[key]?.projectStart,
+          projectEnd: prev[key]?.projectEnd,
+          leaveDays: edit.leaveDays ?? prev[key]?.leaveDays ?? r.leaveDays,
+          position: edit.position ?? prev[key]?.position ?? r.position,
+          attendDays: edit.attendDays ?? prev[key]?.attendDays,
+        },
+      }));
+      setSavedKeys((prev) => new Set(prev).add(r.memberId));
+      count++;
+    });
+    setSaving(false);
+    if (count === 0) message.info('未检测到修改');
+    else message.success(`已保存 ${count} 人的考勤数据`);
+  };
+
+  const totalOnDuty = projectRows.reduce((s, r) => s + r.onDutyDays, 0);
+  const totalAttend = projectRows.reduce((s, r) => s + (editing[r.memberId]?.attendDays ?? r.attendDays), 0);
+  const avgRate = totalOnDuty > 0 ? totalAttend / totalOnDuty : 0;
+
+  return (
+    <div style={{ marginTop: 16 }}>
+      {/* 选择器条 */}
+      <div style={{ display: 'flex', gap: 12, marginBottom: 16, alignItems: 'center', flexWrap: 'wrap' }}>
+        <Select
+          placeholder="选择项目进行考勤录入"
+          value={selectedProject || undefined}
+          onChange={(v) => setSelectedProject(v || '')}
+          style={{ width: 320 }}
+          showSearch
+          optionFilterProp="label"
+          options={projectOptions.filter((v) => v !== '全部').map((v) => ({ value: v, label: v }))}
+        />
+        <Radio.Group value={props.cycleType} onChange={(e) => props.setCycleType(e.target.value)} optionType="button" buttonStyle="solid" size="small">
+          <Radio.Button value="cycle19">19日周期</Radio.Button>
+          <Radio.Button value="month">自然月</Radio.Button>
+        </Radio.Group>
+        <DatePicker picker="month" value={props.monthFilter} onChange={(v) => v && props.setMonthFilter(v)} allowClear={false} style={{ width: 140 }} />
+        <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>{cycleLabel}</span>
+      </div>
+
+      {!selectedProject ? (
+        <Empty description={<span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 13 }}>请选择一个项目进行考勤录入</span>} style={{ padding: 60 }} />
+      ) : projectRows.length === 0 ? (
+        <Empty description={<span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 13 }}>该项目在本周期内无在岗人员</span>} style={{ padding: 60 }} />
+      ) : (
+        <>
+          <div style={{ background: 'rgba(77,159,255,0.06)', border: '1px solid rgba(77,159,255,0.15)', borderRadius: 8, padding: '10px 14px', marginBottom: 12, fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>
+            💡 应出勤 = 项目周期 ∩ 考勤周期（自动推算，含周末）· 实际出勤和岗位可直接编辑 · 修改后点击「一键保存」
+          </div>
+          <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, overflow: 'hidden' }}>
+            <Table
+              size="small" pagination={false}
+              dataSource={projectRows} rowKey="memberId"
+              columns={[
+                { title: '人员', dataIndex: 'memberName', width: 100,
+                  render: (name: string, r: any) => (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ color: 'rgba(255,255,255,0.9)', fontSize: 13 }}>{name}</span>
+                      {savedKeys.has(r.memberId) && <Tag color="success" style={{ margin: 0, fontSize: 10 }}>已保存</Tag>}
+                      {r.entered && !savedKeys.has(r.memberId) && <Tag style={{ background: 'rgba(77,159,255,0.1)', color: '#4d9fff', border: 'none', margin: 0, fontSize: 10 }}>已录入</Tag>}
+                    </div>
+                  ),
+                },
+                { title: '项目岗位', dataIndex: 'position', width: 150,
+                  render: (_: unknown, r: any) => (
+                    <Select
+                      size="small" value={editing[r.memberId]?.position ?? r.position}
+                      onChange={(v) => setEditing((prev) => ({ ...prev, [r.memberId]: { ...prev[r.memberId], position: v } }))}
+                      style={{ width: '100%' }}
+                      options={['助理测试工程师', '测试工程师', '项目主测', '项目经理'].map((v) => ({ value: v, label: v }))}
+                    />
+                  ),
+                },
+                { title: '应出勤(天)', dataIndex: 'onDutyDays', width: 100, align: 'center' as const,
+                  render: (v: number) => <span style={{ color: 'rgba(255,255,255,0.5)' }}>{v}</span>,
+                },
+                { title: '实际出勤(天)', dataIndex: 'attendDays', width: 120, align: 'center' as const,
+                  render: (_v: unknown, r: any) => (
+                    <InputNumber
+                      size="small" min={0} max={r.onDutyDays}
+                      value={editing[r.memberId]?.attendDays ?? r.attendDays}
+                      onChange={(nv) => setEditing((prev) => ({ ...prev, [r.memberId]: { ...prev[r.memberId], attendDays: nv ?? 0 } }))}
+                      style={{ width: 80 }}
+                    />
+                  ),
+                },
+                { title: '请假(天)', dataIndex: 'leaveDays', width: 110, align: 'center' as const,
+                  render: (_v: unknown, r: any) => (
+                    <InputNumber
+                      size="small" min={0} max={r.onDutyDays}
+                      value={editing[r.memberId]?.leaveDays ?? r.leaveDays}
+                      onChange={(nv) => setEditing((prev) => ({ ...prev, [r.memberId]: { ...prev[r.memberId], leaveDays: nv ?? 0 } }))}
+                      style={{ width: 70 }}
+                    />
+                  ),
+                },
+                { title: '出勤率', key: 'rate', width: 90, align: 'center' as const,
+                  render: (_v: unknown, r: any) => {
+                    const attend = editing[r.memberId]?.attendDays ?? r.attendDays;
+                    const rate = r.onDutyDays > 0 ? attend / r.onDutyDays : 0;
+                    const pct = (rate * 100).toFixed(1) + '%';
+                    const color = rate >= 0.95 ? '#52c41a' : rate >= 0.9 ? '#faad14' : '#ff4d4f';
+                    return <span style={{ color, fontWeight: 600 }}>{pct}</span>;
+                  },
+                },
+              ]}
+              summary={() => (
+                <Table.Summary fixed>
+                  <Table.Summary.Row>
+                    <Table.Summary.Cell index={0} colSpan={3}>
+                      <span style={{ color: '#4d9fff', fontWeight: 600 }}>项目汇总（{projectRows.length} 人）</span>
+                    </Table.Summary.Cell>
+                    <Table.Summary.Cell index={3} align="center"><span style={{ color: '#52c41a', fontWeight: 600 }}>{totalAttend}</span></Table.Summary.Cell>
+                    <Table.Summary.Cell index={4} align="center"><span style={{ color: 'rgba(255,255,255,0.5)' }}>-</span></Table.Summary.Cell>
+                    <Table.Summary.Cell index={5} align="center"><span style={{ color: '#4d9fff', fontWeight: 600 }}>{(avgRate * 100).toFixed(1)}%</span></Table.Summary.Cell>
+                  </Table.Summary.Row>
+                </Table.Summary>
+              )}
+            />
+          </div>
+          <div style={{ marginTop: 16, display: 'flex', justifyContent: 'flex-end' }}>
+            <Button type="primary" icon={<ThunderboltOutlined />} onClick={handleSave} loading={saving}
+              style={{ borderRadius: 8, fontWeight: 500 }}>
+              一键保存全部
+            </Button>
+          </div>
+        </>
+      )}
     </div>
   );
 }

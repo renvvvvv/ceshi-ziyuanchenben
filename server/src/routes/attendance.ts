@@ -27,6 +27,8 @@ function rowToAdjustment(row: Record<string, unknown>): Record<string, unknown> 
     projectStart: row.project_start,
     projectEnd: row.project_end,
     leaveDays: row.leave_days,
+    position: row.position,
+    attendDays: row.attend_days,
     updatedAt: row.updated_at,
   };
 }
@@ -59,24 +61,26 @@ router.get('/', requireAuth, asyncHandler(async (req, res) => {
 
 /**
  * PUT /api/attendance-adjustments
- * body: { memberId, projectName, cycleStart, projectStart?, projectEnd?, leaveDays? }
+ * body: { memberId, projectName, cycleStart, projectStart?, projectEnd?, leaveDays?, position?, attendDays? }
  * upsert by (member_id, project_name, cycle_start)
  */
 router.put('/', requireAuth, requireRole(['管理者', '编辑者']), asyncHandler(async (req, res) => {
-  const { memberId, projectName, cycleStart, projectStart, projectEnd, leaveDays } = req.body;
+  const { memberId, projectName, cycleStart, projectStart, projectEnd, leaveDays, position, attendDays } = req.body;
   if (!memberId || !projectName || !cycleStart) {
     res.status(400).json({ error: 'memberId / projectName / cycleStart 必填' });
     return;
   }
   const result = await db.runAsync(
     `INSERT INTO attendance_adjustments
-       (member_id, project_name, cycle_start, project_start, project_end, leave_days, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, NOW())
+       (member_id, project_name, cycle_start, project_start, project_end, leave_days, position, attend_days, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
      ON CONFLICT (member_id, project_name, cycle_start)
      DO UPDATE SET
        project_start = EXCLUDED.project_start,
        project_end   = EXCLUDED.project_end,
        leave_days    = EXCLUDED.leave_days,
+       position      = EXCLUDED.position,
+       attend_days   = EXCLUDED.attend_days,
        updated_at    = NOW()
      RETURNING id`,
     memberId,
@@ -85,6 +89,8 @@ router.put('/', requireAuth, requireRole(['管理者', '编辑者']), asyncHandl
     projectStart || null,
     projectEnd || null,
     leaveDays ?? null,
+    position || null,
+    attendDays ?? null,
   );
   res.json({ success: true, id: result.lastInsertRowid });
 }));

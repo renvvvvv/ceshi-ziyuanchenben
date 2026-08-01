@@ -308,7 +308,7 @@ export const attendanceAdjustmentsApi = {
     }));
   },
   /** upsert by (memberId, projectName, cycleStart) */
-  upsert: (body: { memberId: string; projectName: string; cycleStart: string; projectStart?: string; projectEnd?: string; leaveDays?: number }) =>
+  upsert: (body: { memberId: string; projectName: string; cycleStart: string; projectStart?: string; projectEnd?: string; leaveDays?: number; position?: string; attendDays?: number }) =>
     request<ApiResponse<{ id?: number }>>('/attendance-adjustments', {
       method: 'PUT',
       body: JSON.stringify(body),

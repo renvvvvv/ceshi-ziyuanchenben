@@ -25,6 +25,15 @@ import type {
   ProjectPhase,
 } from '../types';
 
+/** 考勤校准记录：key = `${memberId}-${projectName}-${cycleStart}` */
+export interface AttendanceAdjustment {
+  projectStart?: string;
+  projectEnd?: string;
+  leaveDays?: number;
+  position?: string;   // 项目级岗位
+  attendDays?: number; // 直接录入的实际出勤（有值时优先于 onDuty-leave 推算）
+}
+
 // ============================================================
 // localStorage 持久化 Hook
 // ============================================================
@@ -134,8 +143,8 @@ interface DataContextValue {
   // 自动化流程：人员状态管理
   autoProcessMembers: () => void;
   syncMembersFromProjects: () => void;
-  attendanceAdjustments: Record<string, { projectStart?: string; projectEnd?: string; leaveDays?: number }>;
-  setAttendanceAdjustments: (updater: Record<string, { projectStart?: string; projectEnd?: string; leaveDays?: number }> | ((prev: Record<string, { projectStart?: string; projectEnd?: string; leaveDays?: number }>) => Record<string, { projectStart?: string; projectEnd?: string; leaveDays?: number }>)) => void;
+  attendanceAdjustments: Record<string, AttendanceAdjustment>;
+  setAttendanceAdjustments: (updater: Record<string, AttendanceAdjustment> | ((prev: Record<string, AttendanceAdjustment>) => Record<string, AttendanceAdjustment>)) => void;
 }
 
 const DataContext = createContext<DataContextValue | null>(null);
@@ -158,7 +167,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [testDocs, setTestDocs] = usePersistentState<TestDoc[]>('testDocs', mockTestDocs);
   const [projectPhases, setProjectPhases] = usePersistentState<Record<string, ProjectPhase[]>>('projectPhases', mockProjectPhases);
   const [historyPhases, setHistoryPhases] = usePersistentState<Record<string, ProjectPhase[]>>('historyPhases', mergedHistoryPhases);
-  const [attendanceAdjustments, setAttendanceAdjustmentsRaw] = usePersistentState<Record<string, { projectStart?: string; projectEnd?: string; leaveDays?: number }>>('attendanceAdjustments', {});
+  const [attendanceAdjustments, setAttendanceAdjustmentsRaw] = usePersistentState<Record<string, AttendanceAdjustment>>('attendanceAdjustments', {});
 
   /**
    * 包一层 setAttendanceAdjustments：
@@ -166,8 +175,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
    * 2. 异步同步到后端 attendance_adjustments 表（持久化）
    */
   const setAttendanceAdjustments = useCallback((
-    updater: Record<string, { projectStart?: string; projectEnd?: string; leaveDays?: number }>
-      | ((prev: Record<string, { projectStart?: string; projectEnd?: string; leaveDays?: number }>) => Record<string, { projectStart?: string; projectEnd?: string; leaveDays?: number }>)
+    updater: Record<string, AttendanceAdjustment>
+      | ((prev: Record<string, AttendanceAdjustment>) => Record<string, AttendanceAdjustment>)
   ) => {
     setAttendanceAdjustmentsRaw((prev) => {
       const next = typeof updater === 'function' ? updater(prev) : updater;
@@ -183,6 +192,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
           projectStart: value.projectStart,
           projectEnd: value.projectEnd,
           leaveDays: value.leaveDays,
+          position: value.position,
+          attendDays: value.attendDays,
         }).catch((err) => console.warn('[DataContext] 考勤校准同步失败', key, err));
       }
       return next;
@@ -226,13 +237,15 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
         // Attendance Adjustments：从后端加载并合并到本地（key 形式：memberId-projectName-cycleStart）
         if (attRes?.success && Array.isArray(attRes.data)) {
-          const map: Record<string, { projectStart?: string; projectEnd?: string; leaveDays?: number }> = {};
+          const map: Record<string, AttendanceAdjustment> = {};
           for (const row of attRes.data as Array<Record<string, unknown>>) {
             const key = `${row.memberId}-${row.projectName}-${row.cycleStart}`;
             map[key] = {
               projectStart: row.projectStart as string | undefined,
               projectEnd: row.projectEnd as string | undefined,
               leaveDays: row.leaveDays as number | undefined,
+              position: row.position as string | undefined,
+              attendDays: row.attendDays as number | undefined,
             };
           }
           // 仅在后端有数据时覆盖本地，避免清掉 localStorage
