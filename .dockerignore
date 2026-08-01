@@ -7,7 +7,7 @@ server/.env
 .git/
 *.log
 backups/
-data/
+/data/
 dist/
 vite.config.ts.timestamp-*
 .claude/
