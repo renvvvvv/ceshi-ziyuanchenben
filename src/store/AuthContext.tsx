@@ -36,6 +36,7 @@ const MODULE_LIST: AppModule[] = [
   'attendance',
   'reportReview',
   'permissionConfig',
+  'aiTestExpert',
 ];
 
 const DEFAULT_PERMISSIONS: PermissionConfig[] = [

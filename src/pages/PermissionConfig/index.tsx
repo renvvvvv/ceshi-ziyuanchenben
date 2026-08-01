@@ -25,6 +25,7 @@ const MODULE_LABELS: Record<AppModule, string> = {
   attendance: '人员考勤',
   reportReview: '测试报告审核',
   permissionConfig: '权限配置',
+  aiTestExpert: 'AI 测试专家',
 };
 
 const ROLE_COLORS: Record<UserRole, string> = {
@@ -36,6 +37,7 @@ const ROLE_COLORS: Record<UserRole, string> = {
 const ALL_MODULES: AppModule[] = [
   'dashboard', 'projects', 'history', 'teamPool', 'testGuide',
   'resourceCalc', 'attendance', 'reportReview', 'permissionConfig',
+  'aiTestExpert',
 ];
 
 const ALL_ROLES: UserRole[] = ['管理者', '编辑者', '阅读者'];

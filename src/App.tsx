@@ -20,6 +20,7 @@ const PermissionConfig = lazy(() => import('./pages/PermissionConfig'));
 const KnowledgeBase = lazy(() => import('./pages/KnowledgeBase'));
 const Attendance = lazy(() => import('./pages/Attendance'));
 const ReportReview = lazy(() => import('./pages/ReportReview'));
+const AiTestExpert = lazy(() => import('./pages/AiTestExpert'));
 
 // 加载中组件（带淡入动画）
 function PageLoading() {
@@ -100,6 +101,7 @@ function AppRoutes() {
           <Route path="resource-calculator" element={<RequirePermission module="resourceCalc"><ResourceCalculator /></RequirePermission>} />
           <Route path="permission-config" element={<RequirePermission module="permissionConfig"><PermissionConfig /></RequirePermission>} />
           <Route path="knowledge-base" element={<RequirePermission module="dashboard"><KnowledgeBase /></RequirePermission>} />
+          <Route path="ai-test-expert" element={<RequirePermission module="aiTestExpert"><AiTestExpert /></RequirePermission>} />
           <Route path="attendance" element={<RequirePermission module="attendance"><Attendance /></RequirePermission>} />
           <Route path="report-review" element={<RequirePermission module="reportReview"><ReportReview /></RequirePermission>} />
         </Route>

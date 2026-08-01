@@ -197,7 +197,8 @@ export type AppModule =
   | 'resourceCalc'
   | 'attendance'
   | 'reportReview'
-  | 'permissionConfig';
+  | 'permissionConfig'
+  | 'aiTestExpert';
 
 export interface ModulePermission {
   module: AppModule;

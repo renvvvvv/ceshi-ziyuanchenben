@@ -16,6 +16,7 @@ import {
   BookOutlined,
   CalendarOutlined,
   FileSearchOutlined,
+  RobotOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../store/AuthContext';
 import { useData } from '../store/DataContext';
@@ -38,7 +39,8 @@ const ALL_MENU_ITEMS: MenuItemDef[] = [
   { key: '/team-pool', icon: <TeamOutlined />, label: '测试人员池', module: 'teamPool' },
   { key: '/attendance', icon: <CalendarOutlined />, label: '人员考勤', module: 'attendance' },
   { key: '/test-guide', icon: <FileTextOutlined />, label: '测试管理制度', module: 'testGuide' },
-  { key: '/knowledge-base', icon: <BookOutlined />, label: '知识库', module: 'dashboard' },
+  { key: '/knowledge-base', icon: <BookOutlined />, label: '飞书知识库', module: 'dashboard' },
+  { key: '/ai-test-expert', icon: <RobotOutlined />, label: 'AI 测试专家', module: 'aiTestExpert' },
   { key: '/report-review', icon: <FileSearchOutlined />, label: '测试报告审核', module: 'reportReview' },
   { key: '/resource-calculator', icon: <CalculatorOutlined />, label: '资源计算器', module: 'resourceCalc' },
   { key: '/permission-config', icon: <SafetyOutlined />, label: '权限配置', module: 'permissionConfig' },
@@ -136,7 +138,8 @@ function MainLayout() {
     '/team-pool': '测试人员池',
     '/test-guide': '测试管理制度',
     '/resource-calculator': '资源计算器',
-    '/knowledge-base': '知识库',
+    '/knowledge-base': '飞书知识库',
+    '/ai-test-expert': 'AI 测试专家',
     '/report-review': '测试报告审核',
     '/attendance': '人员考勤',
     '/permission-config': '权限配置',
