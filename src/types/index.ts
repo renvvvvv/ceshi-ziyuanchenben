@@ -214,6 +214,8 @@ export interface User {
   avatar?: string;
   loginType?: 'password' | 'feishu';   // 登录方式（飞书登录 vs 账密）
   deptNames?: string[];                // 飞书用户部门列表
+  manualRole?: UserRole;                // 管理员手动覆盖的角色（优先于 role）
+  manualPerms?: ModulePermission[];      // 管理员按账号单独覆盖的模块权限（优先于角色默认权限）
 }
 
 export interface PermissionConfig {

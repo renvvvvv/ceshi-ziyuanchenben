@@ -56,12 +56,46 @@ function ProjectModal({ open, project, teamMembers, onCancel, onSubmit }: Projec
 
   const transferData = teamMembers.map((m) => ({
     key: m.id,
-    title: `${m.name} (${m.employeeId})`,
-    description: m.status,
+    name: m.name,
+    employeeId: m.employeeId,
+    status: m.status,
+    skills: m.skills || [],
+    currentProjects: m.currentProjects || [],
   }));
 
-  const transferRender: TransferProps<{ key: string; title: string; description: string }>['render'] = (item) => (
-    <span style={{ color: '#fff', fontSize: 13 }}>{item.title}</span>
+  const STATUS_COLORS: Record<string, string> = {
+    '空闲': '#52c41a',
+    '测试中': '#eb576c',
+    '休假': '#1890ff',
+  };
+
+  const transferRender: TransferProps<{ key: string; name: string; employeeId: string; status: string; skills: string[]; currentProjects: string[] }>['render'] = (item) => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: '2px 0' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span style={{
+          width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
+          background: STATUS_COLORS[item.status] || '#666',
+          boxShadow: `0 0 4px ${STATUS_COLORS[item.status] || '#666'}`,
+        }} />
+        <span style={{ color: '#fff', fontSize: 13 }}>{item.name}</span>
+        <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11 }}>{item.employeeId}</span>
+      </div>
+      {item.skills.length > 0 && (
+        <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', paddingLeft: 12 }}>
+          {item.skills.slice(0, 3).map((s) => (
+            <span key={s} style={{
+              fontSize: 10, color: 'rgba(255,255,255,0.45)',
+              background: 'rgba(255,255,255,0.05)', borderRadius: 3, padding: '0 4px',
+            }}>{s}</span>
+          ))}
+        </div>
+      )}
+      {item.currentProjects.length > 0 && (
+        <div style={{ fontSize: 10, color: 'rgba(235,87,108,0.7)', paddingLeft: 12 }}>
+          {item.currentProjects.length > 1 ? `${item.currentProjects[0]} 等${item.currentProjects.length}个项目` : item.currentProjects[0]}
+        </div>
+      )}
+    </div>
   );
 
   return (
@@ -153,6 +187,12 @@ function ProjectModal({ open, project, teamMembers, onCancel, onSubmit }: Projec
             targetKeys={targetKeys}
             onChange={(nextTargetKeys) => setTargetKeys(nextTargetKeys as string[])}
             render={transferRender}
+            showSearch
+            filterOption={(inputValue, item) =>
+              (item.name || '').toLowerCase().includes(inputValue.toLowerCase()) ||
+              (item.employeeId || '').toLowerCase().includes(inputValue.toLowerCase()) ||
+              (item.skills || []).some((s: string) => s.toLowerCase().includes(inputValue.toLowerCase()))
+            }
             listStyle={{
               width: 280,
               height: 280,

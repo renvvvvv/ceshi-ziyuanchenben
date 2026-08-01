@@ -1382,3 +1382,128 @@ body {
 .gantt-bar-label:empty {
   display: none;
 }
+
+
+/* ============================================
+   移动端适配 (≤992px)
+   ============================================ */
+
+/* 手机端：内容区全宽，去掉侧边栏留白 */
+@media (max-width: 992px) {
+  .app-layout > .ant-layout.mobile-layout {
+    margin-left: 0 !important;
+  }
+
+  .app-content {
+    margin: 12px !important;
+    min-height: calc(100vh - var(--header-height) - 24px) !important;
+  }
+
+  /* Header 缩小内边距，标题字号收紧 */
+  .app-header {
+    padding: 0 12px !important;
+  }
+
+  .app-header h3 {
+    font-size: 14px !important;
+  }
+
+  /* 手机端隐藏角色文字，只保留头像，节省 header 空间 */
+  .header-right .ant-dropdown-trigger > div:last-child {
+    display: none;
+  }
+
+  /* page-header 标题缩小 */
+  .page-header h3 {
+    font-size: 16px !important;
+  }
+
+  .page-header {
+    margin-bottom: 14px;
+  }
+
+  /* 详情页左右分栏改为单列（已有 992px 断点，这里保险） */
+  .detail-layout {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* 甘特图、表格容器内边距收紧 */
+  .gantt-container,
+  .chart-container,
+  .glass-card,
+  .glass-card-dark,
+  .detail-info-card {
+    padding: 14px 12px !important;
+  }
+
+  /* KPI 数值字号缩小 */
+  .kpi-card .kpi-value {
+    font-size: 24px !important;
+  }
+
+  .kpi-card {
+    padding: 14px 14px !important;
+  }
+}
+
+/* 小屏手机 (≤576px) 进一步收紧 */
+@media (max-width: 576px) {
+  .app-content {
+    margin: 8px !important;
+  }
+
+  .app-header {
+    padding: 0 10px !important;
+  }
+
+  /* Modal 在小屏上铺满宽度 */
+  .ant-modal {
+    max-width: calc(100vw - 16px) !important;
+    margin: 8px auto !important;
+  }
+
+  .ant-modal-content {
+    border-radius: 12px !important;
+  }
+
+  /* 表格行内操作按钮紧凑 */
+  .ant-table-tbody > tr > td {
+    padding: 8px 8px !important;
+    font-size: 12px !important;
+  }
+
+  .ant-table-thead > tr > th {
+    padding: 8px 8px !important;
+  }
+
+  /* 分页器简化 */
+  .ant-pagination-options {
+    display: none !important;
+  }
+}
+
+/* 移动端 Drawer 菜单样式继承 Sider 暗色主题 */
+.mobile-sider-drawer .ant-drawer-body {
+  padding: 0 !important;
+}
+
+.mobile-sider-drawer .ant-menu {
+  background: transparent !important;
+  border: none !important;
+  padding: 12px 8px;
+}
+
+.mobile-sider-drawer .ant-menu-item {
+  color: rgba(255, 255, 255, 0.60) !important;
+  font-size: 14px;
+  border-radius: 10px !important;
+  margin: 4px 0 !important;
+  height: 42px !important;
+  line-height: 42px !important;
+}
+
+.mobile-sider-drawer .ant-menu-item-selected {
+  color: #fff !important;
+  background: linear-gradient(135deg, rgba(77, 159, 255, 0.25), rgba(77, 159, 255, 0.10)) !important;
+  border: 1px solid rgba(77, 159, 255, 0.30) !important;
+}

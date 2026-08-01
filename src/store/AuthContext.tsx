@@ -141,6 +141,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const ALLOWED_ROLES: UserRole[] = ['管理者', '编辑者', '阅读者'];
           const rawRole = data.user.role;
           const role: UserRole = ALLOWED_ROLES.includes(rawRole) ? rawRole : '阅读者';
+          // 校验 manualRole（管理员手动覆盖的角色）
+          const rawManualRole = data.user.manualRole;
+          const manualRole: UserRole | undefined =
+            rawManualRole && ALLOWED_ROLES.includes(rawManualRole) ? rawManualRole : undefined;
+          // 校验 manualPerms（管理员按账号覆盖的模块权限）
+          const rawManualPerms = data.user.manualPerms;
+          const manualPerms: ModulePermission[] | undefined =
+            Array.isArray(rawManualPerms) && rawManualPerms.length > 0
+              ? rawManualPerms.filter(
+                  (p: any) => p && typeof p.module === 'string' &&
+                    typeof p.view === 'boolean' &&
+                    typeof p.edit === 'boolean' &&
+                    typeof p.delete === 'boolean'
+                )
+              : undefined;
           const validatedUser: User = {
             id: String(data.user.id || data.user.userId || presetUser?.id || authState.user?.id || ''),
             username: String(data.user.username || presetUser?.username || authState.user?.username || ''),
@@ -148,6 +163,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             role,
             loginType: data.user.loginType === 'feishu' ? 'feishu' : 'password',
             deptNames: Array.isArray(data.user.deptNames) ? data.user.deptNames : undefined,
+            manualRole,
+            manualPerms,
           };
           const newState = { user: validatedUser };
           setAuthState(newState);
@@ -173,6 +190,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const isAuthenticated = !!authState.user;
 
   // 当前用户权限映射
+  // 计算优先级：
+  //   1. user.manualPerms  —— 管理员按账号单独覆盖的模块权限（最高优先级）
+  //   2. 角色默认权限（permissionConfigs/localStorage 里管理员调过的角色矩阵）
+  //   3. DEFAULT_PERMISSIONS 兜底
   const permissionMap = useMemo(() => {
     if (!authState.user) {
       return {} as Record<AppModule, ModulePermission>;
@@ -180,16 +201,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const config = permissionConfigs.find((c) => c.role === authState.user!.role);
     const defaultConfig = DEFAULT_PERMISSIONS.find((c) => c.role === authState.user!.role);
     const map = {} as Record<AppModule, ModulePermission>;
+    // 1. 先铺角色权限（管理员配置的角色矩阵 > 默认）
     if (config) {
       for (const p of config.permissions) {
         map[p.module] = p;
       }
     }
-    // 兼容新增模块：旧 localStorage 缺失时用默认权限补齐
+    // 2. 兼容新增模块：旧 localStorage 缺失时用默认权限补齐
     for (const m of MODULE_LIST) {
       if (!map[m]) {
         const defaultPerm = defaultConfig?.permissions.find((p) => p.module === m);
         if (defaultPerm) map[m] = defaultPerm;
+      }
+    }
+    // 3. 最后用按账号覆盖的 manualPerms 覆盖（最高优先级）
+    if (authState.user.manualPerms && authState.user.manualPerms.length > 0) {
+      for (const p of authState.user.manualPerms) {
+        map[p.module] = p;
       }
     }
     return map;

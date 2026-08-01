@@ -45,8 +45,13 @@ export function loadCorrections(): Record<string, Correction> {
 
 /** 写入落盘 */
 function persist(corrections: Record<string, Correction>): void {
-  ensureFile();
-  fs.writeFileSync(FILE, JSON.stringify(corrections, null, 2), 'utf-8');
+  try {
+    ensureFile();
+    fs.writeFileSync(FILE, JSON.stringify(corrections, null, 2), 'utf-8');
+  } catch (err) {
+    // data 目录无写权限时降级为内存模式（不阻塞审核业务，但重启会丢失学习记录）
+    console.warn('[learnedCorrections] 写入失败，降级为内存模式（需修复 data 目录权限）：', (err as Error).message);
+  }
 }
 
 /**

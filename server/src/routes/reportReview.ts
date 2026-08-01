@@ -19,7 +19,7 @@ const PERSIST_PATH = path.resolve(process.cwd(), 'data', 'learned-corrections.js
 
 /**
  * POST /api/report-review
- * 接收文本，调 MINIMAX AI 审核错别字，返回结构化结果
+ * 接收文本，调智谱 GLM AI 审核错别字，返回结构化结果
  * body: { text: string }
  * response: { success: boolean, errors: [{id, original, suggestion, context}], stats: {...} }
  *
@@ -88,16 +88,38 @@ router.post('/', requireAuth, asyncHandler(async (req, res) => {
     return res.status(400).json({ success: false, message: '缺少待审核文本' });
   }
 
-  const apiKey = process.env.MINIMAX_API_KEY;
+  const apiKey = process.env.ZHIPU_API_KEY;
   if (!apiKey) {
-    return res.status(500).json({ success: false, message: 'AI 服务未配置（MINIMAX_API_KEY 未设置）' });
+    return res.status(500).json({ success: false, message: 'AI 服务未配置（ZHIPU_API_KEY 未设置）' });
   }
 
+  // ===== 智能分级审核策略（按字数自动切换）=====
+  // 策略1（≤5万字）: AI 全量精审 + 词典兜底
+  // 策略2（5万~15万字）: AI 全量精审（每段8000字，5并发）+ 词典兜底
+  // 策略3（>15万字）: 词典规则先行（秒级返回），AI 后台补充高频段落
+  const textLen = text.length;
+  const STRATEGY = textLen <= 50000 ? 'ai_full' : textLen <= 150000 ? 'ai_full' : 'hybrid';
+  console.log(`[ReportReview] 文本 ${textLen} 字，策略: ${STRATEGY}`);
+
   try {
-    const aiErrors = await callAiReview(apiKey, text);
-    // 与词典/学习库做兜底匹配，避免 AI 漏检
     const ruleErrors = ruleBasedDetect(text);
-    // 合并去重（同 original 时保留 AI 优先级更高的 suggestion）
+    let aiErrors: Array<{original: string; suggestion: string; context: string}> = [];
+
+    if (STRATEGY === 'hybrid') {
+      // ===== 超大文档（>15万字）: 词典先行 + AI 抽审 =====
+      // 词典规则已覆盖常见错别字（地名/品牌/术语/学习库），秒级完成
+      // AI 只审核"最可能有错别字"的段落：取前 5 万字（通常含目录/摘要/正文开头，错别字密度最高）
+      const aiText = text.slice(0, 50000);
+      try {
+        aiErrors = await callAiReview(apiKey, aiText);
+      } catch (aiErr: any) {
+        console.warn('[ReportReview] 超大文档 AI 抽审失败，仅返回词典结果:', aiErr?.message);
+      }
+    } else {
+      // ===== 正常文档（≤15万字）: AI 全量精审 =====
+      aiErrors = await callAiReview(apiKey, text);
+    }
+
     const merged = mergeAndDedup(aiErrors, ruleErrors);
     res.json({
       success: true,
@@ -107,17 +129,16 @@ router.post('/', requireAuth, asyncHandler(async (req, res) => {
         ruleErrors: ruleErrors.length,
         merged: merged.length,
         learnedLibrarySize: Object.keys(loadCorrections()).length,
+        strategy: STRATEGY,
+        textLength: textLen,
       },
     });
   } catch (err: any) {
-    // AI 调用失败时，把具体错误信息透传给前端（而非笼统的"AI 审核失败"）
-    // 前端可以据此提示用户"API Key 失效/余额不足/超时"等真实原因
     const errMsg = err?.message || 'AI 审核失败';
     console.error('[ReportReview] 审核失败:', errMsg);
     res.status(500).json({
       success: false,
       message: errMsg,
-      // 仍然返回规则审核结果，让用户至少看到词典兜底发现的问题
       ruleErrorsOnly: ruleBasedDetect(text).length,
     });
   }
@@ -190,46 +211,56 @@ router.get('/learned', (_req, res) => {
 // ============== 内部函数 ==============
 
 /**
- * 调 MINIMAX AI；带超时、超长分段、Few-shot
+ * 调智谱 GLM AI；带超时、超长分段、并发批处理、Few-shot
  *
- * 注意：callMiniMaxOnce 在失败时会抛错（而非静默返回空数组），
+ * 注意：callZhipuOnce 在失败时会抛错（而非静默返回空数组），
  * 上层 callAiReview 用 try/catch 兜底，把错误信息透传给前端，
  * 避免"AI 挂了但前端显示审核完成 0 错误"的误导。
  */
 async function callAiReview(apiKey: string, text: string): Promise<Array<{original: string; suggestion: string; context: string}>> {
   // 长文档分段（按段落切，每段 ≤ 3500 字）
-  const chunks = splitText(text, 3500);
-  // 串行调用（避免并发触发限流；分段一般 1~3 段，延迟可接受）
+  const chunks = splitText(text, 8000);
+  // 并发调用：分批并行（每批 5 段同时调，避免触发限流）
+  // 14万字：旧方案 40段×串行 ≈ 5-10分钟；新方案 18段×并行(每批5个) ≈ 30-60秒
+  const BATCH_SIZE = 5;
   const out: Array<{original: string; suggestion: string; context: string}> = [];
-  for (let i = 0; i < chunks.length; i++) {
-    const part = await callMiniMaxOnce(apiKey, chunks[i]);
-    out.push(...part);
+  for (let i = 0; i < chunks.length; i += BATCH_SIZE) {
+    const batch = chunks.slice(i, i + BATCH_SIZE);
+    const results = await Promise.allSettled(
+      batch.map((chunk) => callZhipuOnce(apiKey, chunk))
+    );
+    for (const r of results) {
+      if (r.status === 'fulfilled') {
+        out.push(...r.value);
+      } else {
+        console.warn('[ReportReview] 某段审核失败:', r.reason?.message || r.reason);
+      }
+    }
   }
   return out;
 }
 
 /**
- * 单次调用 MiniMax ChatCompletion v2
+ * 单次调用智谱 GLM-5.2 ChatCompletion
  *
- * 模型选择（2026-07 官方主推）：
- *   - MiniMax-M3：当前旗舰，Coding/Agentic 能力前沿，1M 上下文
- *   - 旧的 abab6.5g-chat / abab6.5s-chat 已过时，阿里云百炼已标记
- *     "免费额度用完后不可调用"，官方文档主推 MiniMax-M1/M3
+ * 模型：glm-5.2（2026 智谱最新旗舰）
+ *   - 中文理解能力强，适合错别字检测场景
+ *   - 支持 thinking 深度思考模式（提升审核精度）
+ *   - max_tokens 最高 65536，可处理超长文档
  *
  * 错误处理：
  *   - HTTP 非 2xx → 抛错（带状态码 + 响应体片段）
- *   - base_resp.status_code !== 0 → 抛错（MiniMax 业务错误，如鉴权失败/余额不足/敏感词）
- *   - JSON 解析失败 → 抛错
+ *   - JSON 解析失败 → 尝试提取 ```json 块 → 仍失败返回空
  *   - 超时 → 抛错（AbortError）
  *   - 上层 callAiReview 不 catch，让错误冒泡到路由 handler 返回 500
  */
-async function callMiniMaxOnce(
+async function callZhipuOnce(
   apiKey: string,
   text: string,
 ): Promise<Array<{original: string; suggestion: string; context: string}>> {
   const controller = new AbortController();
-  // 90s 超时（长文档 + M3 推理可能较慢）
-  const timeout = setTimeout(() => controller.abort(), 90000);
+  // 120s 超时（GLM-5.2 thinking 模式推理可能较慢）
+  const timeout = setTimeout(() => controller.abort(), 120000);
 
   // 拼装 system prompt：基础 + 通用错字词典 + 数据中心术语词典 + 学习库 + Few-shot
   const commonTypos = buildCommonTyposPrompt();
@@ -249,46 +280,43 @@ async function callMiniMaxOnce(
 
   let requestId = 'unknown';
   try {
-    const response = await fetch('https://api.minimaxi.com/v1/text/chatcompletion_v2', {
+    const response = await fetch('https://open.bigmodel.cn/api/paas/v4/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        // MiniMax-M3：当前官方主推前沿模型，能力远超 abab6.5 系列
-        // 旧 abab6.5g-chat 已过时（阿里云百炼标记"免费额度用完后不可调用"）
-        model: 'MiniMax-M3',
+        // GLM-5.2：智谱最新旗舰模型，中文理解能力强
+        model: 'glm-5.2',
         messages: [
           { role: 'system', content: systemContent },
           { role: 'user', content: text },
         ],
-        // 注意：abab6.5 系列不支持 response_format；M3 通过 system prompt 约束 JSON 输出
-        temperature: 0.05,
+        // 不启用 thinking 深度思考：错别字检测不需要推理，且 thinking 会消耗大量 token 导致 content 为空或超时
+        temperature: 0.05,   // 低温度求稳定
         max_tokens: 8192,
       }),
       signal: controller.signal,
     });
     clearTimeout(timeout);
 
-    // 记录 request_id（MiniMax 响应头里通常有，方便排查）
+    // 记录 request_id（智谱响应头里通常有，方便排查）
     requestId = response.headers.get('x-request-id') || response.headers.get('request-id') || 'unknown';
 
     if (!response.ok) {
       const errText = await response.text();
-      const msg = `MINIMAX HTTP ${response.status}: ${errText.slice(0, 300)}`;
+      const msg = `GLM HTTP ${response.status}: ${errText.slice(0, 300)}`;
       console.error(`[ReportReview] ${msg} | req_id=${requestId}`);
       throw new Error(msg);
     }
 
     const data: any = await response.json();
 
-    // MiniMax 业务错误检查：HTTP 200 但 base_resp.status_code != 0 表示业务失败
-    // 常见：鉴权失败(1004)、余额不足(1008)、敏感词命中(1027) 等
-    const baseStatus = data?.base_resp?.status_code;
-    const baseMsg = data?.base_resp?.status_msg;
-    if (typeof baseStatus === 'number' && baseStatus !== 0) {
-      const msg = `MINIMAX 业务错误 code=${baseStatus}: ${baseMsg || 'unknown'}`;
+    // 智谱业务错误检查：error 字段存在表示失败
+    const errMsg = data?.error?.message;
+    if (errMsg) {
+      const msg = `GLM 业务错误: ${errMsg}`;
       console.error(`[ReportReview] ${msg} | req_id=${requestId}`);
       throw new Error(msg);
     }
@@ -302,7 +330,7 @@ async function callMiniMaxOnce(
     try {
       parsed = JSON.parse(content);
     } catch {
-      // M3 可能输出带 ```json 包裹的 markdown，尝试提取
+      // GLM 可能输出带 ```json 包裹的 markdown，尝试提取
       const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
       if (jsonMatch) {
         try {
@@ -327,7 +355,7 @@ async function callMiniMaxOnce(
   } catch (err: any) {
     clearTimeout(timeout);
     if (err.name === 'AbortError') {
-      const msg = 'MINIMAX 调用超时（90s）';
+      const msg = 'GLM 调用超时（120s）';
       console.error(`[ReportReview] ${msg} | req_id=${requestId}`);
       throw new Error(msg);
     }

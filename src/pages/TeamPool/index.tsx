@@ -192,9 +192,11 @@ function TeamPool() {
     () =>
       members.map((m) => ({
         key: m.id,
-        title: `${m.name}  ${m.employeeId}`,
+        name: m.name,
+        employeeId: m.employeeId,
         status: m.status,
-        chosen: m.status === '测试中',
+        skills: m.skills || [],
+        currentProjects: m.currentProjects || [],
       })),
     [members]
   );
@@ -337,21 +339,36 @@ function TeamPool() {
     });
   };
 
-  const transferRender: TransferProps<{ key: string; title: string; status: MemberStatus }>['render'] = (item) => {
+  const transferRender: TransferProps<{ key: string; name: string; employeeId: string; status: string; skills: string[]; currentProjects: string[] }>['render'] = (item) => {
     const cfg = getStatusConfig(item.status);
     return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span
-          style={{
-            width: 8,
-            height: 8,
-            borderRadius: '50%',
-            background: cfg.dot,
-            display: 'inline-block',
-            boxShadow: `0 0 6px ${cfg.dot}`,
-          }}
-        />
-        <span style={{ color: '#fff', fontFamily: 'var(--font-primary)', fontSize: 13 }}>{item.title}</span>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: '2px 0' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span
+            style={{
+              width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
+              background: cfg.dot,
+              boxShadow: `0 0 4px ${cfg.dot}`,
+            }}
+          />
+          <span style={{ color: '#fff', fontFamily: 'var(--font-primary)', fontSize: 13 }}>{item.name}</span>
+          <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11 }}>{item.employeeId}</span>
+        </div>
+        {item.skills.length > 0 && (
+          <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', paddingLeft: 12 }}>
+            {item.skills.slice(0, 3).map((s) => (
+              <span key={s} style={{
+                fontSize: 10, color: 'rgba(255,255,255,0.45)',
+                background: 'rgba(255,255,255,0.05)', borderRadius: 3, padding: '0 4px',
+              }}>{s}</span>
+            ))}
+          </div>
+        )}
+        {item.currentProjects.length > 0 && (
+          <div style={{ fontSize: 10, color: 'rgba(235,87,108,0.7)', paddingLeft: 12 }}>
+            {item.currentProjects.length > 1 ? `${item.currentProjects[0]} 等${item.currentProjects.length}个项目` : item.currentProjects[0]}
+          </div>
+        )}
       </div>
     );
   };
@@ -1092,6 +1109,12 @@ function TeamPool() {
           targetKeys={batchTargetKeys}
           onChange={(nextTargetKeys) => setBatchTargetKeys(nextTargetKeys as string[])}
           render={transferRender}
+          showSearch
+          filterOption={(inputValue, item) =>
+            (item.name || '').toLowerCase().includes(inputValue.toLowerCase()) ||
+            (item.employeeId || '').toLowerCase().includes(inputValue.toLowerCase()) ||
+            (item.skills || []).some((s: string) => s.toLowerCase().includes(inputValue.toLowerCase()))
+          }
           listStyle={{
             width: 280,
             height: 320,

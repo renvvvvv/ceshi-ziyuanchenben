@@ -38,7 +38,7 @@ interface RequestOptions extends RequestInit {
 }
 
 // -------------------- 核心请求函数 --------------------
-async function request<T>(path: string, options?: RequestOptions): Promise<T> {
+export async function request<T>(path: string, options?: RequestOptions): Promise<T> {
   const { timeout = TIMEOUT_MS, ...fetchOptions } = options || {};
 
   const controller = new AbortController();

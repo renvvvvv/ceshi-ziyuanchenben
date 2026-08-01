@@ -24,7 +24,15 @@ RUN mkdir -p /app/data /app/test6/config
 
 # 创建非 root 用户，避免容器以 root 运行（安全加固）
 RUN groupadd -r app && useradd -r -g app app && chown -R app:app /app
-USER app
+
+# entrypoint：以 root 启动修复挂载的 data 目录权限，再降权到 app 跑实际进程
+# 解决 docker volume 挂载 ./data 后属主是宿主 UID（如 macOS 501）导致容器内 app 用户写不进去的问题
+# 注意：这里不能用 USER app —— 否则 entrypoint 已是 app 用户，gosu 切换会 "operation not permitted"
+RUN printf '#!/bin/sh\nset -e\nchown -R app:app /app/data 2>/dev/null || true\nexec gosu app:app "$@"\n' > /entrypoint.sh \
+ && chmod +x /entrypoint.sh \
+ && apt-get update && apt-get install -y --no-install-recommends gosu && rm -rf /var/lib/apt/lists/*
+
+ENTRYPOINT ["/entrypoint.sh"]
 
 EXPOSE 3001
 ENV PORT=3001 NODE_ENV=production

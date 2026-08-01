@@ -148,12 +148,16 @@ function ReportReview() {
     setReviewing(true);
     setReviewed(false);
     try {
+      // GLM-5.2 审核长文档可能需要 30-90 秒，给 120 秒超时
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 120000);
       const res = await fetch('/api/report-review', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({ text }),
-      });
+        signal: controller.signal,
+      }).finally(() => clearTimeout(timeoutId));
       const data = await res.json().catch(() => ({}));
 
       if (res.status === 401) {
@@ -166,7 +170,14 @@ function ReportReview() {
         setErrors(data.errors.map((e: TypoError, i: number) => ({ ...e, fixed: false, id: i + 1 })));
         setReviewed(true);
         if (data.stats) setReviewStats(data.stats);
-        message.success(`AI 审核完成，发现 ${data.errors.length} 处错别字`);
+        // 超大文档时提示审核策略
+        const strategy = data.stats?.strategy;
+        const textLen = data.stats?.textLength;
+        if (strategy === 'hybrid') {
+          message.success(`文档 ${textLen} 字，已采用智能审核（词典全量+AI抽审前5万字），发现 ${data.errors.length} 处错别字`);
+        } else {
+          message.success(`AI 审核完成，发现 ${data.errors.length} 处错别字`);
+        }
       } else {
         message.error(data.message || data.error || `AI 审核失败（HTTP ${res.status}）`);
       }
