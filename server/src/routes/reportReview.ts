@@ -88,9 +88,9 @@ router.post('/', requireAuth, asyncHandler(async (req, res) => {
     return res.status(400).json({ success: false, message: '缺少待审核文本' });
   }
 
-  const apiKey = process.env.ZHIPU_API_KEY;
+  const apiKey = process.env.MINIMAX_API_KEY;
   if (!apiKey) {
-    return res.status(500).json({ success: false, message: 'AI 服务未配置（ZHIPU_API_KEY 未设置）' });
+    return res.status(500).json({ success: false, message: 'AI 服务未配置（MINIMAX_API_KEY 未设置）' });
   }
 
   // ===== 智能分级审核策略（按字数自动切换）=====
@@ -211,9 +211,9 @@ router.get('/learned', (_req, res) => {
 // ============== 内部函数 ==============
 
 /**
- * 调智谱 GLM AI；带超时、超长分段、并发批处理、Few-shot
+ * 调 MiniMax AI；带超时、超长分段、并发批处理、Few-shot
  *
- * 注意：callZhipuOnce 在失败时会抛错（而非静默返回空数组），
+ * 注意：callMiniMaxOnce 在失败时会抛错（而非静默返回空数组），
  * 上层 callAiReview 用 try/catch 兜底，把错误信息透传给前端，
  * 避免"AI 挂了但前端显示审核完成 0 错误"的误导。
  */
@@ -227,7 +227,7 @@ async function callAiReview(apiKey: string, text: string): Promise<Array<{origin
   for (let i = 0; i < chunks.length; i += BATCH_SIZE) {
     const batch = chunks.slice(i, i + BATCH_SIZE);
     const results = await Promise.allSettled(
-      batch.map((chunk) => callZhipuOnce(apiKey, chunk))
+      batch.map((chunk) => callMiniMaxOnce(apiKey, chunk))
     );
     for (const r of results) {
       if (r.status === 'fulfilled') {
@@ -241,12 +241,11 @@ async function callAiReview(apiKey: string, text: string): Promise<Array<{origin
 }
 
 /**
- * 单次调用智谱 GLM-5.2 ChatCompletion
+ * 单次调用 MiniMax ChatCompletion v2
  *
- * 模型：glm-5.2（2026 智谱最新旗舰）
- *   - 中文理解能力强，适合错别字检测场景
- *   - 支持 thinking 深度思考模式（提升审核精度）
- *   - max_tokens 最高 65536，可处理超长文档
+ * 模型：MiniMax-M3（官方主推旗舰）
+ *   - 1M 上下文，适合长文档错别字检测
+ *   - 通过 system prompt 约束 JSON 输出
  *
  * 错误处理：
  *   - HTTP 非 2xx → 抛错（带状态码 + 响应体片段）
@@ -254,13 +253,13 @@ async function callAiReview(apiKey: string, text: string): Promise<Array<{origin
  *   - 超时 → 抛错（AbortError）
  *   - 上层 callAiReview 不 catch，让错误冒泡到路由 handler 返回 500
  */
-async function callZhipuOnce(
+async function callMiniMaxOnce(
   apiKey: string,
   text: string,
 ): Promise<Array<{original: string; suggestion: string; context: string}>> {
   const controller = new AbortController();
-  // 120s 超时（GLM-5.2 thinking 模式推理可能较慢）
-  const timeout = setTimeout(() => controller.abort(), 120000);
+  // 90s 超时（长文档 + M3 推理可能较慢）
+  const timeout = setTimeout(() => controller.abort(), 90000);
 
   // 拼装 system prompt：基础 + 通用错字词典 + 数据中心术语词典 + 学习库 + Few-shot
   const commonTypos = buildCommonTyposPrompt();
@@ -280,20 +279,19 @@ async function callZhipuOnce(
 
   let requestId = 'unknown';
   try {
-    const response = await fetch('https://open.bigmodel.cn/api/paas/v4/chat/completions', {
+    const response = await fetch('https://api.minimaxi.com/v1/text/chatcompletion_v2', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        // GLM-5.2：智谱最新旗舰模型，中文理解能力强
-        model: 'glm-5.2',
+        // MiniMax-M3：官方主推前沿模型
+        model: 'MiniMax-M3',
         messages: [
           { role: 'system', content: systemContent },
           { role: 'user', content: text },
         ],
-        // 不启用 thinking 深度思考：错别字检测不需要推理，且 thinking 会消耗大量 token 导致 content 为空或超时
         temperature: 0.05,   // 低温度求稳定
         max_tokens: 8192,
       }),
@@ -306,17 +304,18 @@ async function callZhipuOnce(
 
     if (!response.ok) {
       const errText = await response.text();
-      const msg = `GLM HTTP ${response.status}: ${errText.slice(0, 300)}`;
+      const msg = `MINIMAX HTTP ${response.status}: ${errText.slice(0, 300)}`;
       console.error(`[ReportReview] ${msg} | req_id=${requestId}`);
       throw new Error(msg);
     }
 
     const data: any = await response.json();
 
-    // 智谱业务错误检查：error 字段存在表示失败
-    const errMsg = data?.error?.message;
-    if (errMsg) {
-      const msg = `GLM 业务错误: ${errMsg}`;
+    // MiniMax 业务错误检查：base_resp.status_code != 0 表示失败
+    const baseStatus = data?.base_resp?.status_code;
+    const baseMsg = data?.base_resp?.status_msg;
+    if (typeof baseStatus === 'number' && baseStatus !== 0) {
+      const msg = `MINIMAX 业务错误 code=${baseStatus}: ${baseMsg || 'unknown'}`;
       console.error(`[ReportReview] ${msg} | req_id=${requestId}`);
       throw new Error(msg);
     }
@@ -330,7 +329,7 @@ async function callZhipuOnce(
     try {
       parsed = JSON.parse(content);
     } catch {
-      // GLM 可能输出带 ```json 包裹的 markdown，尝试提取
+      // M3 可能输出带 ```json 包裹的 markdown，尝试提取
       const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
       if (jsonMatch) {
         try {
@@ -355,7 +354,7 @@ async function callZhipuOnce(
   } catch (err: any) {
     clearTimeout(timeout);
     if (err.name === 'AbortError') {
-      const msg = 'GLM 调用超时（120s）';
+      const msg = 'MINIMAX 调用超时（120s）';
       console.error(`[ReportReview] ${msg} | req_id=${requestId}`);
       throw new Error(msg);
     }

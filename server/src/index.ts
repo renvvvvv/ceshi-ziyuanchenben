@@ -137,7 +137,7 @@ app.use('/api/*', (_req, res) => {
 initDatabase().then(() => {
   app.listen(PORT, () => {
     console.log(`[Server] Data Center Test Platform API running on http://localhost:${PORT}`);
-    console.log(`[Server] Zhipu GLM API Key: ${process.env.ZHIPU_API_KEY ? '✓ configured' : '✗ not set'}`);
+    console.log(`[Server] MiniMax API Key: ${process.env.MINIMAX_API_KEY ? '✓ configured' : '✗ not set'}`);
   });
 }).catch(err => {
   console.error('[Server] Failed to init database:', err);
