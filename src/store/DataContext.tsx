@@ -38,7 +38,8 @@ export interface AttendanceAdjustment {
 // localStorage 持久化 Hook
 // ============================================================
 
-const STORAGE_PREFIX = 'zhwh_platform_';
+// v2 前缀：强制让旧版缓存（zhwh_platform_）失效，避免旧 mock 数据覆盖后端正确数据
+const STORAGE_PREFIX = 'zhwh_platform_v2_';
 
 function loadFromStorage<T>(key: string, fallback: T): T {
   try {
@@ -231,8 +232,16 @@ export function DataProvider({ children }: { children: ReactNode }) {
         ]);
         if (cancelled) return;
 
+        // 诊断日志
+        console.log('[DataContext] 后端加载结果:', {
+          projSuccess: projRes?.success, projLen: projRes?.data?.length,
+          histSuccess: histRes?.success, histLen: histRes?.data?.length,
+          memSuccess: memRes?.success, memLen: memRes?.data?.length,
+        });
+
         // Projects：后端有数据 → 用后端覆盖本地（让 id 同步成 DB 主键）
         if (projRes?.success && projRes.data && projRes.data.length > 0) {
+          console.log('[DataContext] 用后端数据覆盖 projects:', projRes.data.length, '条');
           setProjects(projRes.data);
         }
         // Members：后端有数据 → 用后端覆盖本地
@@ -241,6 +250,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         }
         // History：后端有数据 → 用后端覆盖本地
         if (histRes?.success && histRes.data && histRes.data.length > 0) {
+          console.log('[DataContext] 用后端数据覆盖 historyProjects:', histRes.data.length, '条');
           setHistoryProjects(histRes.data);
         }
 

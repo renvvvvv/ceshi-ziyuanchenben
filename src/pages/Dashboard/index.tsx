@@ -38,14 +38,16 @@ function Dashboard() {
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>(['未开始', '测试中']);
   // 甘特图时间单位：天/周/月/季/年
   const [ganttUnit, setGanttUnit] = useState<GanttUnit>('day');
-  const { projects, historyProjects, regionMwOutput, autoProcessProjects, autoProcessMembers } = useData();
+  const { projects, historyProjects, regionMwOutput, autoProcessProjects, autoProcessMembers, dataSource } = useData();
   const navigate = useNavigate();
 
   // ===== 自动化流程：根据日期自动转换项目状态 =====
+  // 仅在后端数据加载完成后执行，避免 autoProcess 基于旧缓存覆盖后端返回的正确数据
   useEffect(() => {
+    if (dataSource !== 'api' && dataSource !== 'cache') return;
     autoProcessProjects();
     autoProcessMembers();
-  }, [autoProcessProjects, autoProcessMembers]);
+  }, [autoProcessProjects, autoProcessMembers, dataSource]);
 
   // ===== 定时自动刷新（每 5 分钟跑一次 autoProcess，让逾期/今日到期数据保持最新） =====
   useEffect(() => {
