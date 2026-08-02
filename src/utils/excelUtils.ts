@@ -471,6 +471,7 @@ export async function runBatchCalculation(inputs: ParsedInput[]): Promise<BatchR
     const res = await fetch('/api/resource-calc/batch', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify({ inputs: validInputs, batch_id: batchId }),
     });
     if (res.ok) {

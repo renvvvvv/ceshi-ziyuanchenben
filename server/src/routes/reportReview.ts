@@ -201,7 +201,7 @@ router.delete('/learn', requireRole(['管理者']), (req, res) => {
  * GET /api/report-review/learned
  * 给前端展示当前学习库的容量
  */
-router.get('/learned', (_req, res) => {
+router.get('/learned', requireAuth, (_req, res) => {
   const all = loadCorrections();
   res.json({
     success: true,
@@ -356,7 +356,7 @@ async function callMiniMaxOnce(
   } catch (err: any) {
     clearTimeout(timeout);
     if (err.name === 'AbortError') {
-      const msg = 'MINIMAX 调用超时（120s）';
+      const msg = 'MINIMAX 调用超时（90s）';
       console.error(`[ReportReview] ${msg} | req_id=${requestId}`);
       throw new Error(msg);
     }

@@ -192,10 +192,10 @@ async function callGLMChat(
           {
             type: 'web_search',
             web_search: {
-              enable: 'True',
+              enable: true,
               search_engine: 'search_pro',
-              search_result: 'True',
-              count: '5',
+              search_result: true,
+              count: 5,
             },
           },
         ],
@@ -254,7 +254,14 @@ function loadLearned(): void {
 
 function saveLearned(): void {
   try {
-    writeFileSync(LEARNED_FILE, JSON.stringify(learnedCache, null, 2), 'utf-8');
+    const { mkdirSync, writeFileSync: wf, renameSync, existsSync } = require('fs');
+    const { dirname } = require('path');
+    // 原子写：先写 .tmp 再 rename，避免进程崩溃时写一半损坏 JSON
+    const dir = dirname(LEARNED_FILE);
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+    const tmp = LEARNED_FILE + '.tmp';
+    wf(tmp, JSON.stringify(learnedCache, null, 2), 'utf-8');
+    renameSync(tmp, LEARNED_FILE);
   } catch (e) {
     console.warn('[KB-QA] 保存自学习库失败:', (e as Error).message);
   }

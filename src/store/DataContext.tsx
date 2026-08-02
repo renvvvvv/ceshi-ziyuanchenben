@@ -181,10 +181,18 @@ export function DataProvider({ children }: { children: ReactNode }) {
     setAttendanceAdjustmentsRaw((prev) => {
       const next = typeof updater === 'function' ? updater(prev) : updater;
       // 同步每个 key 到后端（best-effort，失败不阻塞 UI）
+      // key 格式：${memberId}-${projectName}-${cycleStart}
+      // cycleStart 是 YYYY-MM-DD 格式（含 -），不能用 split('-') 否则日期被截断
       for (const [key, value] of Object.entries(next)) {
         if (prev[key] && JSON.stringify(prev[key]) === JSON.stringify(value)) continue; // 未变
-        const [memberId, projectName, cycleStart] = key.split('-');
-        if (!memberId || !projectName || !cycleStart) continue;
+        // cycleStart 固定为 YYYY-MM-DD（10字符），从末尾截取
+        const cycleStart = key.slice(-10);
+        const rest = key.slice(0, key.length - 11); // 去掉 -YYYY-MM-DD
+        const firstDash = rest.indexOf('-');
+        if (firstDash < 0 || !cycleStart.match(/^\d{4}-\d{2}-\d{2}$/)) continue;
+        const memberId = rest.slice(0, firstDash);
+        const projectName = rest.slice(firstDash + 1);
+        if (!memberId || !projectName) continue;
         void attendanceAdjustmentsApi.upsert({
           memberId,
           projectName,
@@ -629,7 +637,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
             (p) => p.endDate < todayStr
           );
           if (allProjectsFinished) {
-            updates.push({ memberId: m.id, updates: { status: '空闲', currentProjects: '[]' } });
+            updates.push({ memberId: m.id, updates: { status: '空闲', currentProjects: [] } });
             return {
               ...m,
               status: '空闲' as const,
