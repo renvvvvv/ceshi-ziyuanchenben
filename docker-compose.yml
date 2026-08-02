@@ -35,6 +35,8 @@ services:
       # 原来有 - ./scripts:/app/scripts:ro（删掉，会让容器内 scripts 变 deploy.sh/init.sql，缺 resource_plan.py）
       # 学习纠错库持久化（自学习能力）
       - ./data:/app/data
+      # 测试管理制度文件上传持久化
+      - ./uploads:/app/uploads
     environment:
       - PORT=3001
       - NODE_ENV=production

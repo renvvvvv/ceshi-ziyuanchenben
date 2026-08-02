@@ -172,3 +172,17 @@ CREATE TABLE IF NOT EXISTS attendance_adjustments (
 
 CREATE INDEX IF NOT EXISTS idx_attendance_adj_member
     ON attendance_adjustments(member_id, cycle_start);
+
+-- 测试管理制度文档（文件上传到 uploads/ 目录，元数据存此表）
+CREATE TABLE IF NOT EXISTS test_docs (
+    id          TEXT PRIMARY KEY,
+    title       TEXT NOT NULL,
+    category    TEXT NOT NULL,
+    description TEXT DEFAULT '',
+    file_name   TEXT,
+    file_size   TEXT,
+    file_type   TEXT,
+    file_path   TEXT,
+    created_at  TIMESTAMPTZ DEFAULT NOW(),
+    updated_at  TIMESTAMPTZ DEFAULT NOW()
+);

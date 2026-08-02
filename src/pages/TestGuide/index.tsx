@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import dayjs from 'dayjs';
 import {
   Input,
@@ -59,15 +59,6 @@ function TestGuide() {
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [uploadForm] = Form.useForm();
   const [fileList, setFileList] = useState<UploadFile[]>([]);
-  const fileUrlMap = useRef<Map<string, string>>(new Map());
-
-  // 组件卸载时释放所有 ObjectURL，防止内存泄漏
-  useEffect(() => {
-    return () => {
-      fileUrlMap.current.forEach((url) => URL.revokeObjectURL(url));
-      fileUrlMap.current.clear();
-    };
-  }, []);
 
   const filteredDocs = useMemo(() => {
     return docs.filter((doc) => {
@@ -82,8 +73,10 @@ function TestGuide() {
     });
   }, [selectedCategory, searchText, docs]);
 
+  const [uploading, setUploading] = useState(false);
+
   const handleUpload = () => {
-    uploadForm.validateFields().then((values) => {
+    uploadForm.validateFields().then(async (values) => {
       if (fileList.length === 0) {
         message.error('请选择要上传的文件');
         return;
@@ -92,43 +85,66 @@ function TestGuide() {
       const rawFile = file.originFileObj;
       if (!rawFile) return;
 
-      const url = URL.createObjectURL(rawFile);
-      const newDoc: TestDoc = {
-        id: 'doc_' + Date.now(),
-        title: values.title || file.name,
-        category: values.category,
-        lastUpdated: dayjs().format('YYYY-MM-DD'),
-        content: values.description || '',
-        fileName: file.name,
-        fileSize: formatFileSize(rawFile.size),
-        fileType: getFileTypeFromName(file.name),
-        fileUrl: url,
-      };
+      setUploading(true);
+      try {
+        // 上传到后端（multipart/form-data）
+        const formData = new FormData();
+        formData.append('file', rawFile);
+        formData.append('title', values.title || file.name);
+        formData.append('category', values.category);
+        formData.append('description', values.description || '');
 
-      fileUrlMap.current.set(newDoc.id, url);
-      setDocs((prev) => [newDoc, ...prev]);
-      message.success('文件上传成功');
-      setUploadModalOpen(false);
-      uploadForm.resetFields();
-      setFileList([]);
+        const res = await fetch('/api/test-docs/upload', {
+          method: 'POST',
+          credentials: 'include',
+          body: formData,
+        });
+        const data = await res.json().catch(() => ({}));
+        if (data.success && data.data) {
+          setDocs((prev) => [data.data, ...prev]);
+          message.success('文件上传成功');
+          setUploadModalOpen(false);
+          uploadForm.resetFields();
+          setFileList([]);
+        } else {
+          message.error(data.message || '上传失败');
+        }
+      } catch (err) {
+        message.error('上传失败，请检查网络');
+      } finally {
+        setUploading(false);
+      }
     });
   };
 
-  const handleDelete = (id: string) => {
-    const url = fileUrlMap.current.get(id);
-    if (url) {
-      URL.revokeObjectURL(url);
-      fileUrlMap.current.delete(id);
+  const handleDelete = async (id: string) => {
+    try {
+      const res = await fetch(`/api/test-docs/${id}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      const data = await res.json().catch(() => ({}));
+      if (data.success) {
+        setDocs((prev) => prev.filter((d) => d.id !== id));
+        message.success('文件已删除');
+      } else {
+        // 后端删除失败（可能是权限不够），仍然从前端移除
+        setDocs((prev) => prev.filter((d) => d.id !== id));
+        message.warning(data.message || '已从前端移除（服务器文件可能未删除）');
+      }
+    } catch {
+      setDocs((prev) => prev.filter((d) => d.id !== id));
+      message.warning('网络错误，已从前端移除');
     }
-    setDocs((prev) => prev.filter((d) => d.id !== id));
-    message.success('文件已删除');
   };
 
   const handleDownload = (doc: TestDoc) => {
     if (doc.fileUrl) {
+      // 后端返回的 fileUrl 是 /api/test-docs/:id/download
+      // 用 window.open 触发下载（带 cookie）
       const a = document.createElement('a');
       a.href = doc.fileUrl;
-      a.download = doc.fileName || doc.title;
+      a.target = '_blank';
       a.click();
     } else {
       message.info('该文件无下载链接');
@@ -480,6 +496,7 @@ function TestGuide() {
         title="上传文件到知识库"
         open={uploadModalOpen}
         onOk={handleUpload}
+        confirmLoading={uploading}
         onCancel={() => {
           setUploadModalOpen(false);
           uploadForm.resetFields();

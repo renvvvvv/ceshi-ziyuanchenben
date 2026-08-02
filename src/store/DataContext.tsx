@@ -222,11 +222,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     (async () => {
       try {
-        const [projRes, memRes, histRes, attRes] = await Promise.all([
+        const [projRes, memRes, histRes, attRes, docsRes] = await Promise.all([
           projectsApi.list({ page: 1, size: 500 }),
           teamMembersApi.list(),
           historyProjectsApi.list(),
           attendanceAdjustmentsApi.list(),
+          fetch('/api/test-docs', { credentials: 'include' }).then((r) => r.json()).catch(() => null),
         ]);
         if (cancelled) return;
 
@@ -260,6 +261,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
           if (Object.keys(map).length > 0) {
             setAttendanceAdjustments(map);
           }
+        }
+
+        // TestDocs：后端有数据 → 用后端覆盖本地（实现多用户共享）
+        if (docsRes?.success && Array.isArray(docsRes.data) && docsRes.data.length > 0) {
+          setTestDocs(docsRes.data);
         }
 
         // 全部成功 → 数据源 = api；任意失败 → cache（用 localStorage 兜底）
