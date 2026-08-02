@@ -591,8 +591,9 @@ function Attendance() {
             />
           </Form.Item>
           <Form.Item name="projectName" label="选择项目" rules={[{ required: true, message: '请选择项目' }]}>
-            <Select placeholder={manualMember ? '请选择项目' : '请先选择人员'} disabled={!manualMember}
+            <Select placeholder={manualMember ? '搜索或选择项目' : '请先选择人员'} disabled={!manualMember}
               onChange={handleProjectChange}
+              showSearch optionFilterProp="label"
               options={manualMemberProjects.map((p) => ({ value: p, label: p }))}
             />
           </Form.Item>
@@ -802,8 +803,10 @@ function StatisticsView(props: {
         </Radio.Group>
         <DatePicker picker="month" value={monthFilter} onChange={(v) => v && setMonthFilter(v)} allowClear={false} style={{ width: 140 }} />
         <Select value={projectFilter} onChange={setProjectFilter} style={{ width: 200 }}
+          showSearch optionFilterProp="label"
           options={projectOptions.map((v) => ({ value: v, label: v }))} />
         <Select value={memberFilter} onChange={setMemberFilter} style={{ width: 140 }}
+          showSearch optionFilterProp="label"
           options={memberOptions.map((v) => ({ value: v, label: v }))} />
       </div>
 
@@ -943,12 +946,13 @@ function ProjectEntryView(props: {
       {/* 选择器条 */}
       <div style={{ display: 'flex', gap: 12, marginBottom: 16, alignItems: 'center', flexWrap: 'wrap' }}>
         <Select
-          placeholder="选择项目进行考勤录入"
+          placeholder="🔍 搜索或选择项目进行考勤录入"
           value={selectedProject || undefined}
           onChange={(v) => setSelectedProject(v || '')}
-          style={{ width: 320 }}
+          style={{ width: 360 }}
           showSearch
           optionFilterProp="label"
+          filterSort={(a, b) => (a.label as string).localeCompare(b.label as string, 'zh-CN')}
           options={projectOptions.filter((v) => v !== '全部').map((v) => ({ value: v, label: v }))}
         />
         <Radio.Group value={props.cycleType} onChange={(e) => props.setCycleType(e.target.value)} optionType="button" buttonStyle="solid" size="small">
