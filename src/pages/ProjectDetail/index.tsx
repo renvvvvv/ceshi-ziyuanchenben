@@ -53,7 +53,7 @@ function ProjectDetail() {
   const [modalOpen, setModalOpen] = useState(false);
   const [docLinkInput, setDocLinkInput] = useState('');
 
-  const project = projects.find((p) => p.id === id);
+  const project = projects.find((p) => String(p.id) === String(id));
 
   // 当项目切换时同步测试管理链接输入框
   useEffect(() => {

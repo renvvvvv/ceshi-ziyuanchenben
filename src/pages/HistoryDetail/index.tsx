@@ -49,7 +49,7 @@ function HistoryDetail() {
   const navigate = useNavigate();
   const { historyProjects, historyPhases, setHistoryPhases } = useData();
 
-  const project = useMemo(() => historyProjects.find((p) => p.id === id), [historyProjects, id]);
+  const project = useMemo(() => historyProjects.find((p) => String(p.id) === String(id)), [historyProjects, id]);
 
   /** 获取项目的阶段数据，无数据则返回空模板（全部阶段均支持上传） */
   const phases: ProjectPhase[] = useMemo(() => {
