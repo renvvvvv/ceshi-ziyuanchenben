@@ -5,7 +5,7 @@ import { DownloadOutlined, EyeOutlined, CalendarOutlined, PrinterOutlined, Folde
 import dayjs from 'dayjs';
 import * as XLSX from 'xlsx';
 import { useData } from '../../store/DataContext';
-import type { TeamMember } from '../../types';
+import type { TeamMember, Project, HistoricalProject } from '../../types';
 
 // ============================================================
 // 岗位配置
@@ -46,7 +46,7 @@ function dutyRange(pStart: string, pEnd: string, cStart: string, cEnd: string, t
 }
 
 function Attendance() {
-  const { teamMembers, attendanceAdjustments, setAttendanceAdjustments, updateTeamMember } = useData();
+  const { teamMembers, projects, historyProjects, attendanceAdjustments, setAttendanceAdjustments, updateTeamMember } = useData();
   const [monthFilter, setMonthFilter] = useState(() => {
     // 反推今天属于哪个"19日~次月18日"的考勤周期
     // 周期定义：[上月19日, 本月18日]，monthFilter 应为"本月"（cycleEnd 所在月）
@@ -99,9 +99,16 @@ function Attendance() {
   const memberOptions = useMemo(() => ['全部', ...teamMembers.map((m) => m.name)], [teamMembers]);
   const projectOptions = useMemo(() => {
     const set = new Set<string>();
-    teamMembers.forEach((m) => (m.projects || []).forEach((p) => set.add(p.projectName)));
-    return ['全部', ...Array.from(set)];
-  }, [teamMembers]);
+    // 1. 进行中的项目
+    projects.forEach((p) => { if (p.name) set.add(p.name); });
+    // 2. 历史项目（已完成）
+    historyProjects.forEach((p) => { if (p.name) set.add(p.name); });
+    // 3. 人员当前/即将参与的项目（兜底，确保不遗漏）
+    teamMembers.forEach((m) => {
+      [...(m.projects || []), ...(m.upcomingProjects || [])].forEach((p) => { if (p.projectName) set.add(p.projectName); });
+    });
+    return ['全部', ...Array.from(set).sort((a, b) => a.localeCompare(b, 'zh-CN'))];
+  }, [projects, historyProjects, teamMembers]);
 
   // 人员 - 项目选项（人工校准用）
   const manualMemberProjects = useMemo(() => {
@@ -510,6 +517,8 @@ function Attendance() {
             label: <span><EditOutlined /> 项目考勤录入</span>,
             children: <ProjectEntryView
               teamMembers={teamMembers}
+              projects={projects}
+              historyProjects={historyProjects}
               attendanceAdjustments={attendanceAdjustments}
               setAttendanceAdjustments={setAttendanceAdjustments}
               cycleType={cycleType} setCycleType={setCycleType}
@@ -828,6 +837,8 @@ function StatisticsView(props: {
 // ============== 项目考勤录入组件（新视图）==============
 function ProjectEntryView(props: {
   teamMembers: TeamMember[];
+  projects: Project[];
+  historyProjects: HistoricalProject[];
   attendanceAdjustments: Record<string, { projectStart?: string; projectEnd?: string; leaveDays?: number; position?: string; attendDays?: number }>;
   setAttendanceAdjustments: (updater: Record<string, any> | ((prev: Record<string, any>) => Record<string, any>)) => void;
   cycleType: CycleType; setCycleType: (v: CycleType) => void;
@@ -835,7 +846,7 @@ function ProjectEntryView(props: {
   cycleStart: string; cycleEnd: string; cycleLabel: string;
   projectOptions: string[];
 }) {
-  const { teamMembers, attendanceAdjustments, setAttendanceAdjustments, cycleStart, cycleEnd, cycleLabel, projectOptions } = props;
+  const { teamMembers, projects, historyProjects, attendanceAdjustments, setAttendanceAdjustments, cycleStart, cycleEnd, cycleLabel, projectOptions } = props;
   const [selectedProject, setSelectedProject] = useState<string>('');
   const [editing, setEditing] = useState<Record<string, { attendDays?: number; leaveDays?: number; position?: string }>>({});
   const [saving, setSaving] = useState(false);
@@ -847,14 +858,28 @@ function ProjectEntryView(props: {
   const projectRows = useMemo(() => {
     if (!selectedProject || dayjs(cycleStart).isAfter(today)) return [];
     const rows: Array<{ memberId: string; memberName: string; onDutyDays: number; attendDays: number; leaveDays: number; position: string; entered: boolean }> = [];
+
+    // 先从 projects/historyProjects 找到项目本身（取项目周期作为兜底）
+    const proj = projects.find((p) => p.name === selectedProject) ||
+                 historyProjects.find((p) => p.name === selectedProject);
+    const fallbackStart = proj?.startDate;
+    const fallbackEnd = proj?.endDate;
+
     teamMembers.forEach((m) => {
-      const p = (m.projects || []).find((x) => x.projectName === selectedProject);
-      if (!p) return;
+      // 从多个来源查找该人员在选中项目的参与记录
+      const allProjs = [...(m.projects || []), ...(m.upcomingProjects || [])];
+      const p = allProjs.find((x) => x.projectName === selectedProject);
+      // 如果人员 projects 里没找到，但项目的 assignedMemberIds 包含该人员，用项目本身的时间兜底
+      const isAssigned = proj?.assignedMemberIds?.includes(m.id);
+      if (!p && !isAssigned) return;
+
+      const projStart = p?.startDate || fallbackStart || cycleStart;
+      const projEnd = p?.endDate || fallbackEnd || cycleEnd;
       const key = `${m.id}-${selectedProject}-${cycleStart}`;
       const adj = attendanceAdjustments[key];
-      const projStart = adj?.projectStart ?? p.startDate;
-      const projEnd = adj?.projectEnd ?? p.endDate;
-      const duty = dutyRange(projStart, projEnd, cycleStart, cycleEnd, today);
+      const finalStart = adj?.projectStart ?? projStart;
+      const finalEnd = adj?.projectEnd ?? projEnd;
+      const duty = dutyRange(finalStart, finalEnd, cycleStart, cycleEnd, today);
       if (!duty) return;
       const onDutyDays = daysBetween(duty.start, duty.end);
       let baseLeave = 0;
@@ -866,7 +891,7 @@ function ProjectEntryView(props: {
       rows.push({ memberId: m.id, memberName: m.name, onDutyDays, attendDays, leaveDays, position, entered: adj?.attendDays != null });
     });
     return rows;
-  }, [selectedProject, teamMembers, attendanceAdjustments, cycleStart, cycleEnd, today]);
+  }, [selectedProject, teamMembers, projects, historyProjects, attendanceAdjustments, cycleStart, cycleEnd, today]);
 
   // 初始化 editing（切换项目时从现有数据加载）
   useEffect(() => {
