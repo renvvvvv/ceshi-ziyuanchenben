@@ -273,8 +273,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
           }
         }
 
-        // TestDocs：后端有数据 → 用后端覆盖本地（实现多用户共享）
-        if (docsRes?.success && Array.isArray(docsRes.data) && docsRes.data.length > 0) {
+        // TestDocs：后端 API 成功就覆盖本地（即使为空也覆盖，清除 mock 兜底数据）
+        if (docsRes?.success && Array.isArray(docsRes.data)) {
           setTestDocs(docsRes.data);
         }
 
