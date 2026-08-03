@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { Table, Select, DatePicker, Button, Modal, Tag, Empty, Radio, message, InputNumber, Form, Tabs, Input, Space } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { DownloadOutlined, EyeOutlined, CalendarOutlined, PrinterOutlined, FolderOutlined, UserOutlined, EditOutlined, ThunderboltOutlined, ToolOutlined } from '@ant-design/icons';
+import { DownloadOutlined, EyeOutlined, CalendarOutlined, PrinterOutlined, FolderOutlined, UserOutlined, EditOutlined, ThunderboltOutlined, ToolOutlined, PlusOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import * as XLSX from 'xlsx';
 import { useData } from '../../store/DataContext';
@@ -854,6 +854,18 @@ function ProjectEntryView(props: {
   const [editing, setEditing] = useState<Record<string, { attendDays?: number; leaveDays?: number; position?: string }>>({});
   const [saving, setSaving] = useState(false);
   const [savedKeys, setSavedKeys] = useState<Set<string>>(new Set());
+  // 手动添加的自定义项目（不在 projects/historyProjects 列表里的）
+  const [customProjects, setCustomProjects] = useState<string[]>([]);
+  const [addProjectOpen, setAddProjectOpen] = useState(false);
+  const [newProjectName, setNewProjectName] = useState('');
+  const [newProjectStart, setNewProjectStart] = useState<dayjs.Dayjs | null>(null);
+  const [newProjectEnd, setNewProjectEnd] = useState<dayjs.Dayjs | null>(null);
+
+  // 合并已有项目 + 自定义项目
+  const allProjectOptions = useMemo(() => {
+    const set = new Set([...projectOptions, ...customProjects]);
+    return Array.from(set);
+  }, [projectOptions, customProjects]);
 
   const today = dayjs().format('YYYY-MM-DD');
 
@@ -865,8 +877,10 @@ function ProjectEntryView(props: {
     // 先从 projects/historyProjects 找到项目本身（取项目周期作为兜底）
     const proj = projects.find((p) => p.name === selectedProject) ||
                  historyProjects.find((p) => p.name === selectedProject);
-    const fallbackStart = proj?.startDate;
-    const fallbackEnd = proj?.endDate;
+    // 自定义项目（手动添加的）也可能有周期
+    const isCustom = customProjects.includes(selectedProject);
+    const fallbackStart = proj?.startDate || (isCustom ? newProjectStart?.format('YYYY-MM-DD') : undefined) || cycleStart;
+    const fallbackEnd = proj?.endDate || (isCustom ? newProjectEnd?.format('YYYY-MM-DD') : undefined) || cycleEnd;
 
     teamMembers.forEach((m) => {
       // 从多个来源查找该人员在选中项目的参与记录
@@ -874,7 +888,8 @@ function ProjectEntryView(props: {
       const p = allProjs.find((x) => x.projectName === selectedProject);
       // 如果人员 projects 里没找到，但项目的 assignedMemberIds 包含该人员，用项目本身的时间兜底
       const isAssigned = proj?.assignedMemberIds?.includes(m.id);
-      if (!p && !isAssigned) return;
+      // 自定义项目：所有团队成员都列出（因为没有人员-项目关联）
+      if (!p && !isAssigned && !isCustom) return;
 
       const projStart = p?.startDate || fallbackStart || cycleStart;
       const projEnd = p?.endDate || fallbackEnd || cycleEnd;
@@ -953,8 +968,14 @@ function ProjectEntryView(props: {
           showSearch
           optionFilterProp="label"
           filterSort={(a, b) => (a.label as string).localeCompare(b.label as string, 'zh-CN')}
-          options={projectOptions.filter((v) => v !== '全部').map((v) => ({ value: v, label: v }))}
+          options={allProjectOptions.filter((v) => v !== '全部').map((v) => ({
+            value: v, label: customProjects.includes(v) ? `${v}（自定义）` : v,
+          }))}
         />
+        <Button icon={<PlusOutlined />} onClick={() => { setNewProjectName(''); setNewProjectStart(null); setNewProjectEnd(null); setAddProjectOpen(true); }}
+          style={{ borderRadius: 8, borderColor: 'rgba(77,159,255,0.3)', color: '#4d9fff', background: 'rgba(77,159,255,0.06)' }}>
+          添加项目
+        </Button>
         <Radio.Group value={props.cycleType} onChange={(e) => props.setCycleType(e.target.value)} optionType="button" buttonStyle="solid" size="small">
           <Radio.Button value="cycle19">19日周期</Radio.Button>
           <Radio.Button value="month">自然月</Radio.Button>
@@ -1051,6 +1072,42 @@ function ProjectEntryView(props: {
           </div>
         </>
       )}
+
+      {/* 添加自定义项目弹窗 */}
+      <Modal
+        title="添加项目（用于考勤录入）"
+        open={addProjectOpen}
+        onCancel={() => setAddProjectOpen(false)}
+        onOk={() => {
+          const name = newProjectName.trim();
+          if (!name) { message.warning('请输入项目名称'); return; }
+          if (allProjectOptions.includes(name)) { message.warning('该项目已存在'); return; }
+          setCustomProjects((prev) => [...prev, name]);
+          setSelectedProject(name);
+          setAddProjectOpen(false);
+          message.success(`已添加「${name}」，下方列出全部团队成员，请录入考勤`);
+        }}
+        okText="添加"
+        cancelText="取消"
+        width={480}
+      >
+        <div style={{ marginBottom: 12, padding: '8px 12px', background: 'rgba(77,159,255,0.06)', border: '1px solid rgba(77,159,255,0.15)', borderRadius: 6, fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>
+          💡 手动添加一个不在系统列表中的项目（如历史项目、临时项目）。添加后会列出全部团队成员，你可以录入每个人的考勤。
+        </div>
+        <Form layout="vertical">
+          <Form.Item label="项目名称" required>
+            <Input placeholder="如：XX数据中心一期测试" value={newProjectName} onChange={(e) => setNewProjectName(e.target.value)} autoFocus />
+          </Form.Item>
+          <div style={{ display: 'flex', gap: 12 }}>
+            <Form.Item label="项目开始时间（选填）" style={{ flex: 1 }}>
+              <DatePicker value={newProjectStart} onChange={(v) => setNewProjectStart(v)} style={{ width: '100%' }} placeholder="选填" />
+            </Form.Item>
+            <Form.Item label="项目结束时间（选填）" style={{ flex: 1 }}>
+              <DatePicker value={newProjectEnd} onChange={(v) => setNewProjectEnd(v)} style={{ width: '100%' }} placeholder="选填" />
+            </Form.Item>
+          </div>
+        </Form>
+      </Modal>
     </div>
   );
 }
