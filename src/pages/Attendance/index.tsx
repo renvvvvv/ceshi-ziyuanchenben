@@ -851,7 +851,7 @@ function ProjectEntryView(props: {
 }) {
   const { teamMembers, projects, historyProjects, attendanceAdjustments, setAttendanceAdjustments, cycleStart, cycleEnd, cycleLabel, projectOptions } = props;
   const [selectedProject, setSelectedProject] = useState<string>('');
-  const [editing, setEditing] = useState<Record<string, { attendDays?: number; leaveDays?: number; position?: string }>>({});
+  const [editing, setEditing] = useState<Record<string, { projectStart?: string; projectEnd?: string; leaveDays?: number; position?: string }>>({});
   const [saving, setSaving] = useState(false);
   const [savedKeys, setSavedKeys] = useState<Set<string>>(new Set());
   // 手动添加到该项目的人员 ID（不在系统关联里、但实际参与了的人）
@@ -870,7 +870,7 @@ function ProjectEntryView(props: {
   // 选中项目后，计算该项目所有人员的考勤行
   const projectRows = useMemo(() => {
     if (!selectedProject || dayjs(cycleStart).isAfter(today)) return [];
-    const rows: Array<{ memberId: string; memberName: string; onDutyDays: number; attendDays: number; leaveDays: number; position: string; entered: boolean }> = [];
+    const rows: Array<{ memberId: string; memberName: string; projectStart: string; projectEnd: string; onDutyDays: number; attendDays: number; leaveDays: number; position: string; entered: boolean }> = [];
 
     // 先从 projects/historyProjects 找到项目本身（取项目周期作为兜底）
     const proj = projects.find((p) => p.name === selectedProject) ||
@@ -908,16 +908,24 @@ function ProjectEntryView(props: {
       const memberPos = m.position || POSITION_MAP[m.id] || '测试工程师';
       const position = adj?.position || memberPos;
       const attendDays = adj?.attendDays != null ? Math.min(adj.attendDays, onDutyDays) : Math.max(onDutyDays - leaveDays, 0);
-      rows.push({ memberId: m.id, memberName: m.name, onDutyDays, attendDays, leaveDays, position, entered: adj?.attendDays != null });
+      rows.push({ memberId: m.id, memberName: m.name, projectStart: finalStart, projectEnd: finalEnd, onDutyDays, attendDays, leaveDays, position, entered: adj?.attendDays != null });
     });
     return rows;
   }, [selectedProject, teamMembers, projects, historyProjects, attendanceAdjustments, cycleStart, cycleEnd, today, manualMemberIds]);
 
-  // 初始化 editing（仅在切换项目/周期时执行，不依赖 projectRows.length 避免添加人员时全量重置）
+  // 初始化 editing（仅在切换项目/周期时执行）
   useEffect(() => {
-    const init: Record<string, { attendDays?: number; leaveDays?: number; position?: string }> = {};
+    const init: Record<string, { projectStart?: string; projectEnd?: string; leaveDays?: number; position?: string }> = {};
     projectRows.forEach((r) => {
-      init[r.memberId] = { attendDays: r.attendDays, leaveDays: r.leaveDays, position: r.position };
+      // 从 attendanceAdjustments 或 projectRows 拿到当前的项目开始/结束时间
+      const adjKey = `${r.memberId}-${selectedProject}-${cycleStart}`;
+      const adj = attendanceAdjustments[adjKey];
+      init[r.memberId] = {
+        projectStart: adj?.projectStart ?? r.projectStart,
+        projectEnd: adj?.projectEnd ?? r.projectEnd,
+        leaveDays: r.leaveDays,
+        position: r.position,
+      };
     });
     setEditing(init);
     setSavedKeys(new Set());
@@ -932,19 +940,19 @@ function ProjectEntryView(props: {
       if (!edit) return;
       const key = `${r.memberId}-${selectedProject}-${cycleStart}`;
       const hasChange =
-        (edit.attendDays !== undefined && edit.attendDays !== r.attendDays) ||
+        (edit.projectStart !== undefined && edit.projectStart !== r.projectStart) ||
+        (edit.projectEnd !== undefined && edit.projectEnd !== r.projectEnd) ||
         (edit.leaveDays !== undefined && edit.leaveDays !== r.leaveDays) ||
         (edit.position !== undefined && edit.position !== r.position);
       if (!hasChange) return;
       setAttendanceAdjustments((prev) => ({
         ...prev,
         [key]: {
-          ...prev[key],
-          projectStart: prev[key]?.projectStart,
-          projectEnd: prev[key]?.projectEnd,
+          projectStart: edit.projectStart ?? prev[key]?.projectStart ?? r.projectStart,
+          projectEnd: edit.projectEnd ?? prev[key]?.projectEnd ?? r.projectEnd,
           leaveDays: edit.leaveDays ?? prev[key]?.leaveDays ?? r.leaveDays,
           position: edit.position ?? prev[key]?.position ?? r.position,
-          attendDays: edit.attendDays ?? prev[key]?.attendDays,
+          attendDays: prev[key]?.attendDays,
         },
       }));
       setSavedKeys((prev) => new Set(prev).add(r.memberId));
@@ -954,10 +962,6 @@ function ProjectEntryView(props: {
     if (count === 0) message.info('未检测到修改');
     else message.success(`已保存 ${count} 人的考勤数据`);
   };
-
-  const totalOnDuty = projectRows.reduce((s, r) => s + r.onDutyDays, 0);
-  const totalAttend = projectRows.reduce((s, r) => s + (editing[r.memberId]?.attendDays ?? r.attendDays), 0);
-  const avgRate = totalOnDuty > 0 ? totalAttend / totalOnDuty : 0;
 
   return (
     <div style={{ marginTop: 16 }}>
@@ -1018,11 +1022,10 @@ function ProjectEntryView(props: {
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <span style={{ color: 'rgba(255,255,255,0.9)', fontSize: 13 }}>{name}</span>
                       {savedKeys.has(r.memberId) && <Tag color="success" style={{ margin: 0, fontSize: 10 }}>已保存</Tag>}
-                      {r.entered && !savedKeys.has(r.memberId) && <Tag style={{ background: 'rgba(77,159,255,0.1)', color: '#4d9fff', border: 'none', margin: 0, fontSize: 10 }}>已录入</Tag>}
                     </div>
                   ),
                 },
-                { title: '项目岗位', dataIndex: 'position', width: 150,
+                { title: '项目岗位', dataIndex: 'position', width: 140,
                   render: (_: unknown, r: any) => (
                     <Select
                       size="small" value={editing[r.memberId]?.position ?? r.position}
@@ -1032,34 +1035,52 @@ function ProjectEntryView(props: {
                     />
                   ),
                 },
-                { title: '应出勤(天)', dataIndex: 'onDutyDays', width: 100, align: 'center' as const,
-                  render: (v: number) => <span style={{ color: 'rgba(255,255,255,0.5)' }}>{v}</span>,
-                },
-                { title: '实际出勤(天)', dataIndex: 'attendDays', width: 120, align: 'center' as const,
-                  render: (_v: unknown, r: any) => (
-                    <InputNumber
-                      size="small" min={0} max={r.onDutyDays}
-                      value={editing[r.memberId]?.attendDays ?? r.attendDays}
-                      onChange={(nv) => setEditing((prev) => ({ ...prev, [r.memberId]: { ...prev[r.memberId], attendDays: nv ?? 0 } }))}
-                      style={{ width: 80 }}
+                { title: '开始时间', key: 'start', width: 140,
+                  render: (_: unknown, r: any) => (
+                    <DatePicker
+                      size="small" value={editing[r.memberId]?.projectStart ? dayjs(editing[r.memberId].projectStart) : (r.projectStart ? dayjs(r.projectStart) : null)}
+                      onChange={(v) => setEditing((prev) => ({ ...prev, [r.memberId]: { ...prev[r.memberId], projectStart: v ? v.format('YYYY-MM-DD') : undefined } }))}
+                      style={{ width: '100%' }}
                     />
                   ),
                 },
-                { title: '请假(天)', dataIndex: 'leaveDays', width: 110, align: 'center' as const,
-                  render: (_v: unknown, r: any) => (
+                { title: '结束时间', key: 'end', width: 140,
+                  render: (_: unknown, r: any) => (
+                    <DatePicker
+                      size="small" value={editing[r.memberId]?.projectEnd ? dayjs(editing[r.memberId].projectEnd) : (r.projectEnd ? dayjs(r.projectEnd) : null)}
+                      onChange={(v) => setEditing((prev) => ({ ...prev, [r.memberId]: { ...prev[r.memberId], projectEnd: v ? v.format('YYYY-MM-DD') : undefined } }))}
+                      style={{ width: '100%' }}
+                    />
+                  ),
+                },
+                { title: '请假(天)', key: 'leave', width: 90, align: 'center' as const,
+                  render: (_: unknown, r: any) => (
                     <InputNumber
-                      size="small" min={0} max={r.onDutyDays}
+                      size="small" min={0} max={365}
                       value={editing[r.memberId]?.leaveDays ?? r.leaveDays}
                       onChange={(nv) => setEditing((prev) => ({ ...prev, [r.memberId]: { ...prev[r.memberId], leaveDays: nv ?? 0 } }))}
                       style={{ width: 70 }}
                     />
                   ),
                 },
-                { title: '出勤率', key: 'rate', width: 90, align: 'center' as const,
-                  render: (_v: unknown, r: any) => {
-                    const attend = editing[r.memberId]?.attendDays ?? r.attendDays;
-                    const rate = r.onDutyDays > 0 ? attend / r.onDutyDays : 0;
-                    const pct = (rate * 100).toFixed(1) + '%';
+                { title: '应出勤(天)', key: 'onduty', width: 90, align: 'center' as const,
+                  render: (_: unknown, r: any) => {
+                    // 自动算：结束-开始+1
+                    const s = editing[r.memberId]?.projectStart ?? r.projectStart;
+                    const e = editing[r.memberId]?.projectEnd ?? r.projectEnd;
+                    const duty = (s && e) ? daysBetween(s, e) : 0;
+                    return <span style={{ color: 'rgba(255,255,255,0.6)' }}>{duty}</span>;
+                  },
+                },
+                { title: '出勤率', key: 'rate', width: 80, align: 'center' as const,
+                  render: (_: unknown, r: any) => {
+                    const s = editing[r.memberId]?.projectStart ?? r.projectStart;
+                    const e = editing[r.memberId]?.projectEnd ?? r.projectEnd;
+                    const duty = (s && e) ? daysBetween(s, e) : 0;
+                    const leave = editing[r.memberId]?.leaveDays ?? r.leaveDays ?? 0;
+                    const attend = Math.max(duty - leave, 0);
+                    const rate = duty > 0 ? attend / duty : 0;
+                    const pct = (rate * 100).toFixed(0) + '%';
                     const color = rate >= 0.95 ? '#52c41a' : rate >= 0.9 ? '#faad14' : '#ff4d4f';
                     return <span style={{ color, fontWeight: 600 }}>{pct}</span>;
                   },
@@ -1068,12 +1089,11 @@ function ProjectEntryView(props: {
               summary={() => (
                 <Table.Summary fixed>
                   <Table.Summary.Row>
-                    <Table.Summary.Cell index={0} colSpan={3}>
+                    <Table.Summary.Cell index={0} colSpan={5}>
                       <span style={{ color: '#4d9fff', fontWeight: 600 }}>项目汇总（{projectRows.length} 人）</span>
                     </Table.Summary.Cell>
-                    <Table.Summary.Cell index={3} align="center"><span style={{ color: '#52c41a', fontWeight: 600 }}>{totalAttend}</span></Table.Summary.Cell>
-                    <Table.Summary.Cell index={4} align="center"><span style={{ color: 'rgba(255,255,255,0.5)' }}>-</span></Table.Summary.Cell>
-                    <Table.Summary.Cell index={5} align="center"><span style={{ color: '#4d9fff', fontWeight: 600 }}>{(avgRate * 100).toFixed(1)}%</span></Table.Summary.Cell>
+                    <Table.Summary.Cell index={5} align="center"><span style={{ color: 'rgba(255,255,255,0.5)' }}>{projectRows.reduce((s, r) => { const st = editing[r.memberId]?.projectStart ?? r.projectStart; const en = editing[r.memberId]?.projectEnd ?? r.projectEnd; return s + ((st && en) ? daysBetween(st, en) : 0); }, 0)}</span></Table.Summary.Cell>
+                    <Table.Summary.Cell index={6} align="center"><span style={{ color: '#4d9fff', fontWeight: 600 }}>-</span></Table.Summary.Cell>
                   </Table.Summary.Row>
                 </Table.Summary>
               )}
@@ -1097,10 +1117,10 @@ function ProjectEntryView(props: {
           if (selectedNewMembers.length === 0) { message.warning('请至少选择一人'); return; }
           setManualMemberIds((prev) => [...new Set([...prev, ...selectedNewMembers])]);
           // 批量初始化 editing（一次 setState，避免 N 次重渲染）
-          const newEntries: Record<string, { attendDays?: number; leaveDays?: number; position?: string }> = {};
+          const newEntries: Record<string, { projectStart?: string; projectEnd?: string; leaveDays?: number; position?: string }> = {};
           selectedNewMembers.forEach((mid) => {
             const m = teamMembers.find((x) => x.id === mid);
-            if (m) newEntries[mid] = { attendDays: 0, leaveDays: 0, position: m.position || '测试工程师' };
+            if (m) newEntries[mid] = { projectStart: cycleStart, projectEnd: cycleEnd, leaveDays: 0, position: m.position || '测试工程师' };
           });
           if (Object.keys(newEntries).length > 0) {
             setEditing((prev) => ({ ...prev, ...newEntries }));
