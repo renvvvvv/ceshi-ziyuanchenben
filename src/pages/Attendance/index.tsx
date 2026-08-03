@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { Table, Select, DatePicker, Button, Modal, Tag, Empty, Radio, message, InputNumber, Form, Tabs, Input, Space } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { DownloadOutlined, EyeOutlined, CalendarOutlined, PrinterOutlined, FolderOutlined, UserOutlined, EditOutlined, ThunderboltOutlined, ToolOutlined } from '@ant-design/icons';
+import { DownloadOutlined, EyeOutlined, CalendarOutlined, PrinterOutlined, FolderOutlined, UserOutlined, EditOutlined, ThunderboltOutlined, ToolOutlined, PlusOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import * as XLSX from 'xlsx';
 import { useData } from '../../store/DataContext';
@@ -854,6 +854,16 @@ function ProjectEntryView(props: {
   const [editing, setEditing] = useState<Record<string, { attendDays?: number; leaveDays?: number; position?: string }>>({});
   const [saving, setSaving] = useState(false);
   const [savedKeys, setSavedKeys] = useState<Set<string>>(new Set());
+  // 手动添加到该项目的人员 ID（不在系统关联里、但实际参与了的人）
+  const [manualMemberIds, setManualMemberIds] = useState<string[]>([]);
+  const [addMemberOpen, setAddMemberOpen] = useState(false);
+  const [selectedNewMembers, setSelectedNewMembers] = useState<string[]>([]);
+
+  // 切换项目时清空手动添加的人员
+  useEffect(() => {
+    setManualMemberIds([]);
+    setSavedKeys(new Set());
+  }, [selectedProject, cycleStart]);
 
   const today = dayjs().format('YYYY-MM-DD');
 
@@ -874,7 +884,9 @@ function ProjectEntryView(props: {
       const p = allProjs.find((x) => x.projectName === selectedProject);
       // 如果人员 projects 里没找到，但项目的 assignedMemberIds 包含该人员，用项目本身的时间兜底
       const isAssigned = proj?.assignedMemberIds?.includes(m.id);
-      if (!p && !isAssigned) return;
+      // 手动添加的人员也列出
+      const isManual = manualMemberIds.includes(m.id);
+      if (!p && !isAssigned && !isManual) return;
 
       const projStart = p?.startDate || fallbackStart || cycleStart;
       const projEnd = p?.endDate || fallbackEnd || cycleEnd;
@@ -894,7 +906,7 @@ function ProjectEntryView(props: {
       rows.push({ memberId: m.id, memberName: m.name, onDutyDays, attendDays, leaveDays, position, entered: adj?.attendDays != null });
     });
     return rows;
-  }, [selectedProject, teamMembers, projects, historyProjects, attendanceAdjustments, cycleStart, cycleEnd, today]);
+  }, [selectedProject, teamMembers, projects, historyProjects, attendanceAdjustments, cycleStart, cycleEnd, today, manualMemberIds]);
 
   // 初始化 editing（切换项目时从现有数据加载）
   useEffect(() => {
@@ -966,11 +978,23 @@ function ProjectEntryView(props: {
       {!selectedProject ? (
         <Empty description={<span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 13 }}>请选择一个项目进行考勤录入</span>} style={{ padding: 60 }} />
       ) : projectRows.length === 0 ? (
-        <Empty description={<span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 13 }}>该项目在本周期内无在岗人员</span>} style={{ padding: 60 }} />
+        <div style={{ textAlign: 'center', padding: 60 }}>
+          <Empty description={<span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 13 }}>该项目在本周期内无在岗人员</span>} />
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => { setSelectedNewMembers([]); setAddMemberOpen(true); }}
+            style={{ marginTop: 16, borderRadius: 8 }}>
+            添加人员录入考勤
+          </Button>
+        </div>
       ) : (
         <>
-          <div style={{ background: 'rgba(77,159,255,0.06)', border: '1px solid rgba(77,159,255,0.15)', borderRadius: 8, padding: '10px 14px', marginBottom: 12, fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>
-            💡 应出勤 = 项目周期 ∩ 考勤周期（自动推算，含周末）· 实际出勤和岗位可直接编辑 · 修改后点击「一键保存」
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <div style={{ background: 'rgba(77,159,255,0.06)', border: '1px solid rgba(77,159,255,0.15)', borderRadius: 8, padding: '8px 14px', fontSize: 12, color: 'rgba(255,255,255,0.6)', flex: 1, marginRight: 12 }}>
+              💡 应出勤 = 项目周期 ∩ 考勤周期（自动推算，含周末）· 实际出勤和岗位可直接编辑 · 修改后点击「一键保存」
+            </div>
+            <Button icon={<PlusOutlined />} onClick={() => { setSelectedNewMembers([]); setAddMemberOpen(true); }}
+              style={{ borderRadius: 8, borderColor: 'rgba(77,159,255,0.3)', color: '#4d9fff', background: 'rgba(77,159,255,0.06)', whiteSpace: 'nowrap' }}>
+              添加人员
+            </Button>
           </div>
           <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, overflow: 'hidden' }}>
             <Table
@@ -1051,6 +1075,45 @@ function ProjectEntryView(props: {
           </div>
         </>
       )}
+
+      {/* 添加人员弹窗 */}
+      <Modal
+        title={`往「${selectedProject}」添加人员`}
+        open={addMemberOpen}
+        onCancel={() => setAddMemberOpen(false)}
+        onOk={() => {
+          if (selectedNewMembers.length === 0) { message.warning('请至少选择一人'); return; }
+          setManualMemberIds((prev) => [...new Set([...prev, ...selectedNewMembers])]);
+          // 同步初始化 editing
+          selectedNewMembers.forEach((mid) => {
+            const m = teamMembers.find((x) => x.id === mid);
+            if (m && !editing[mid]) {
+              setEditing((prev) => ({ ...prev, [mid]: { attendDays: 0, leaveDays: 0, position: m.position || '测试工程师' } }));
+            }
+          });
+          message.success(`已添加 ${selectedNewMembers.length} 人，请录入考勤`);
+          setAddMemberOpen(false);
+        }}
+        okText="添加"
+        cancelText="取消"
+        width={520}
+      >
+        <div style={{ marginBottom: 12, padding: '8px 12px', background: 'rgba(77,159,255,0.06)', border: '1px solid rgba(77,159,255,0.15)', borderRadius: 6, fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>
+          从团队池选择人员添加到本项目，添加后可录入其出勤天数和岗位。已在本项目列表中的人员不会重复显示。
+        </div>
+        <Select
+          mode="multiple"
+          placeholder="搜索并选择人员"
+          value={selectedNewMembers}
+          onChange={setSelectedNewMembers}
+          style={{ width: '100%' }}
+          showSearch
+          optionFilterProp="label"
+          options={teamMembers
+            .filter((m) => !projectRows.some((r) => r.memberId === m.id))
+            .map((m) => ({ value: m.id, label: `${m.name}（${m.employeeId || m.id}）` }))}
+        />
+      </Modal>
     </div>
   );
 }
