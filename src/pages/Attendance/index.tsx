@@ -894,7 +894,12 @@ function ProjectEntryView(props: {
       const adj = attendanceAdjustments[key];
       const finalStart = adj?.projectStart ?? projStart;
       const finalEnd = adj?.projectEnd ?? projEnd;
-      const duty = dutyRange(finalStart, finalEnd, cycleStart, cycleEnd, today);
+      let duty = dutyRange(finalStart, finalEnd, cycleStart, cycleEnd, today);
+      // 手动添加的人员：如果项目周期与考勤周期无交集（如历史项目），
+      // 用考勤周期本身作为应出勤区间，确保人员能显示出来
+      if (!duty && isManual) {
+        duty = { start: cycleStart, end: cycleEnd };
+      }
       if (!duty) return;
       const onDutyDays = daysBetween(duty.start, duty.end);
       let baseLeave = 0;
