@@ -967,6 +967,12 @@ function ProjectEntryView(props: {
           filterSort={(a, b) => (a.label as string).localeCompare(b.label as string, 'zh-CN')}
           options={projectOptions.filter((v) => v !== '全部').map((v) => ({ value: v, label: v }))}
         />
+        {selectedProject && (
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => { setSelectedNewMembers([]); setAddMemberOpen(true); }}
+            style={{ borderRadius: 8, fontWeight: 500 }}>
+            添加人员
+          </Button>
+        )}
         <Radio.Group value={props.cycleType} onChange={(e) => props.setCycleType(e.target.value)} optionType="button" buttonStyle="solid" size="small">
           <Radio.Button value="cycle19">19日周期</Radio.Button>
           <Radio.Button value="month">自然月</Radio.Button>
