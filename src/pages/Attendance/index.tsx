@@ -908,7 +908,7 @@ function ProjectEntryView(props: {
     return rows;
   }, [selectedProject, teamMembers, projects, historyProjects, attendanceAdjustments, cycleStart, cycleEnd, today, manualMemberIds]);
 
-  // 初始化 editing（切换项目时从现有数据加载）
+  // 初始化 editing（仅在切换项目/周期时执行，不依赖 projectRows.length 避免添加人员时全量重置）
   useEffect(() => {
     const init: Record<string, { attendDays?: number; leaveDays?: number; position?: string }> = {};
     projectRows.forEach((r) => {
@@ -916,7 +916,8 @@ function ProjectEntryView(props: {
     });
     setEditing(init);
     setSavedKeys(new Set());
-  }, [selectedProject, cycleStart, projectRows.length]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedProject, cycleStart]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -1004,7 +1005,7 @@ function ProjectEntryView(props: {
           </div>
           <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, overflow: 'hidden' }}>
             <Table
-              size="small" pagination={false}
+              size="small" pagination={{ pageSize: 20, showSizeChanger: false, showTotal: (t) => `共 ${t} 人` }}
               dataSource={projectRows} rowKey="memberId"
               columns={[
                 { title: '人员', dataIndex: 'memberName', width: 100,
@@ -1090,13 +1091,15 @@ function ProjectEntryView(props: {
         onOk={() => {
           if (selectedNewMembers.length === 0) { message.warning('请至少选择一人'); return; }
           setManualMemberIds((prev) => [...new Set([...prev, ...selectedNewMembers])]);
-          // 同步初始化 editing
+          // 批量初始化 editing（一次 setState，避免 N 次重渲染）
+          const newEntries: Record<string, { attendDays?: number; leaveDays?: number; position?: string }> = {};
           selectedNewMembers.forEach((mid) => {
             const m = teamMembers.find((x) => x.id === mid);
-            if (m && !editing[mid]) {
-              setEditing((prev) => ({ ...prev, [mid]: { attendDays: 0, leaveDays: 0, position: m.position || '测试工程师' } }));
-            }
+            if (m) newEntries[mid] = { attendDays: 0, leaveDays: 0, position: m.position || '测试工程师' };
           });
+          if (Object.keys(newEntries).length > 0) {
+            setEditing((prev) => ({ ...prev, ...newEntries }));
+          }
           message.success(`已添加 ${selectedNewMembers.length} 人，请录入考勤`);
           setAddMemberOpen(false);
         }}
