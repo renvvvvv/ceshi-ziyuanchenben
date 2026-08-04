@@ -2,6 +2,20 @@
 -- 数据中心测试验证管理平台 - PostgreSQL 数据库初始化
 -- =============================================
 
+-- pgvector 扩展（AI 知识库向量检索）
+CREATE EXTENSION IF NOT EXISTS vector;
+
+-- 知识向量表（AI 测试专家 RAG 检索）
+CREATE TABLE IF NOT EXISTS knowledge_embeddings (
+    id          TEXT PRIMARY KEY,
+    file        TEXT NOT NULL,
+    title       TEXT NOT NULL,
+    content     TEXT NOT NULL,
+    embedding   vector(1024)
+);
+CREATE INDEX IF NOT EXISTS idx_knowledge_embedding
+ON knowledge_embeddings USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+
 -- 资源计算历史记录
 CREATE TABLE IF NOT EXISTS resource_calc_history (
     id              SERIAL PRIMARY KEY,

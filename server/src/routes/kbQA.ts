@@ -2,17 +2,19 @@
  * 知识库 AI 问答路由
  *
  * 基于 datacenter-test-expert skill 的专业知识库（server/knowledge/references/），
- * 做轻量 RAG 检索 + MiniMax-M3 多轮对话。
+ * 做 pgvector 向量检索 + GLM-5.2 多轮对话。
  *
  * 流程：
- *   1. 启动时加载 references/*.md，按 ## 标题切成知识块，构建关键词索引
- *   2. 用户提问 → 关键词命中数排序 → 取 top-3 知识块作为参考资料
- *   3. System prompt（人设 + 参考资料）+ 多轮对话历史 → 调 MiniMax → 返回
+ *   1. 启动时加载 references/*.md → 智谱 embedding-3 生成向量 → 存入 knowledge_embeddings 表
+ *   2. 用户提问 → embedding → pgvector 余弦相似度排序 → 取 top-3
+ *   3. System prompt（人设 + 参考资料）+ 多轮对话历史 → 调 GLM-5.2 → 返回
+ *   4. embedding 失败时降级到关键词匹配（extractKeywords + indexOf）
  */
 import { Router } from 'express';
 import { readFileSync, readdirSync, writeFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import db from '../database.js';
 import { requireAuth } from './auth.js';
 
 const router = Router();
@@ -124,9 +126,9 @@ function extractKeywords(text: string): string[] {
 }
 
 /**
- * RAG 检索：按用户问题与知识块的关键词重合度排序，取 top-N
+ * 关键词匹配检索（降级方案）：按用户问题与知识块的关键词重合度排序，取 top-N
  */
-function retrieveKnowledge(question: string, topN: number = 3): KnowledgeChunk[] {
+function retrieveKeyword(question: string, topN: number = 3): KnowledgeChunk[] {
   if (knowledgeChunks.length === 0) return [];
   const questionKeywords = new Set(extractKeywords(question));
   if (questionKeywords.size === 0) return [];
@@ -144,6 +146,143 @@ function retrieveKnowledge(question: string, topN: number = 3): KnowledgeChunk[]
     .sort((a, b) => b.score - a.score)
     .slice(0, topN)
     .map(s => s.chunk);
+}
+
+// ============== 向量检索（pgvector + 智谱 embedding-3）==============
+
+/** 向量是否已初始化（DB 里已有知识块向量） */
+let vectorReady = false;
+
+/**
+ * 调智谱 embedding-3 API 生成文本向量
+ */
+async function getEmbedding(text: string): Promise<number[]> {
+  const apiKey = process.env.ZHIPU_API_KEY;
+  if (!apiKey) throw new Error('ZHIPU_API_KEY 未设置');
+  const resp = await fetch('https://open.bigmodel.cn/api/paas/v4/embeddings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+    body: JSON.stringify({ model: 'embedding-3', input: text, dimensions: 1024 }),
+  });
+  if (!resp.ok) throw new Error(`embedding HTTP ${resp.status}`);
+  const data: any = await resp.json();
+  return data.data?.[0]?.embedding || [];
+}
+
+/**
+ * 批量生成向量（每次最多 64 条）
+ */
+async function batchEmbeddings(texts: string[]): Promise<number[][]> {
+  const results: number[][] = [];
+  const batchSize = 64;
+  for (let i = 0; i < texts.length; i += batchSize) {
+    const batch = texts.slice(i, i + batchSize);
+    const apiKey = process.env.ZHIPU_API_KEY;
+    if (!apiKey) throw new Error('ZHIPU_API_KEY 未设置');
+    const resp = await fetch('https://open.bigmodel.cn/api/paas/v4/embeddings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+      body: JSON.stringify({ model: 'embedding-3', input: batch, dimensions: 1024 }),
+    });
+    if (!resp.ok) throw new Error(`batch embedding HTTP ${resp.status}`);
+    const data: any = await resp.json();
+    for (const item of data.data || []) {
+      results.push(item.embedding);
+    }
+  }
+  return results;
+}
+
+/**
+ * 启动时：把知识块向量化存入 knowledge_embeddings 表（仅首次或内容变更时执行）
+ */
+async function initVectorIndex(): Promise<void> {
+  try {
+    // 检查 DB 里是否已有向量数据
+    const rows = await db.allAsync('SELECT count(*) as cnt FROM knowledge_embeddings') as any[];
+    const dbCount = Number(rows[0]?.cnt || 0);
+
+    if (dbCount > 0 && dbCount >= knowledgeChunks.length) {
+      // 已有足够数据，跳过（内容变更检测可后续用 hash 实现）
+      console.log(`[KB-QA] 向量索引已就绪（${dbCount} 条向量）`);
+      vectorReady = true;
+      return;
+    }
+
+    // 需要生成向量
+    console.log(`[KB-QA] 开始向量化 ${knowledgeChunks.length} 个知识块（智谱 embedding-3）...`);
+
+    // 清空旧数据
+    await db.runAsync('DELETE FROM knowledge_embeddings');
+
+    // 批量生成 embedding
+    const texts = knowledgeChunks.map(c => `${c.title}\n${c.content.slice(0, 1000)}`); // 截断防超 token
+    const embeddings = await batchEmbeddings(texts);
+
+    // 存入 DB（pgvector 接收字符串格式的向量 '[0.1,0.2,...]'）
+    let inserted = 0;
+    for (let i = 0; i < knowledgeChunks.length; i++) {
+      const chunk = knowledgeChunks[i];
+      const embedding = embeddings[i];
+      if (!embedding || embedding.length === 0) continue;
+      const id = `${chunk.file}-${i}`;
+      const vecStr = `[${embedding.join(',')}]`;
+      await db.runAsync(
+        `INSERT INTO knowledge_embeddings (id, file, title, content, embedding) VALUES ($1, $2, $3, $4, $5::vector)`,
+        id, chunk.file, chunk.title, chunk.content, vecStr,
+      );
+      inserted++;
+    }
+
+    console.log(`[KB-QA] 向量化完成，已存入 ${inserted} 条`);
+    vectorReady = true;
+  } catch (err: any) {
+    console.warn('[KB-QA] 向量索引初始化失败，将降级到关键词检索:', err.message);
+    vectorReady = false;
+  }
+}
+
+/**
+ * 向量检索：用 pgvector 余弦相似度找 top-N
+ */
+async function retrieveVector(question: string, topN: number = 3): Promise<KnowledgeChunk[]> {
+  if (!vectorReady) return [];
+  try {
+    const queryEmbedding = await getEmbedding(question);
+    if (queryEmbedding.length === 0) return [];
+    const vecStr = `[${queryEmbedding.join(',')}]`;
+
+    // pgvector 余弦距离排序（<=> 是余弦距离，越小越相似）
+    const rows = await db.allAsync(
+      `SELECT file, title, content, embedding <=> $1::vector AS distance
+       FROM knowledge_embeddings
+       ORDER BY embedding <=> $1::vector
+       LIMIT $2`,
+      vecStr, topN,
+    ) as any[];
+
+    return rows.map(r => ({
+      file: r.file, title: r.title, content: r.content, keywords: [],
+    }));
+  } catch (err: any) {
+    console.warn('[KB-QA] 向量检索失败，降级到关键词:', err.message);
+    return [];
+  }
+}
+
+/**
+ * 统一检索入口：向量优先，降级到关键词
+ */
+async function retrieveKnowledge(question: string, topN: number = 3): Promise<KnowledgeChunk[]> {
+  // 优先向量检索
+  const vectorResults = await retrieveVector(question, topN);
+  if (vectorResults.length > 0) {
+    console.log(`[KB-QA] 向量检索命中 ${vectorResults.length} 条`);
+    return vectorResults;
+  }
+  // 降级到关键词
+  console.log('[KB-QA] 使用关键词检索（降级）');
+  return retrieveKeyword(question, topN);
 }
 
 // ============== GLM-5.2 调用（思考强度高 + 联网搜索）==============
@@ -286,8 +425,10 @@ function buildLearnedPrompt(question: string): string {
 
 // ============== 路由 ==============
 
-// 启动时加载知识库 + 自学习库
+// 启动时加载知识库 + 向量索引 + 自学习库
 loadKnowledge();
+// 异步初始化向量索引（不阻塞启动，完成后 vectorReady=true）
+initVectorIndex().catch(err => console.warn('[KB-QA] 向量索引初始化异常:', err.message));
 loadLearned();
 
 /**
@@ -313,8 +454,8 @@ router.post('/', requireAuth, async (req, res) => {
   }
 
   try {
-    // 1. RAG 检索相关知识
-    const relevant = retrieveKnowledge(question, 3);
+    // 1. RAG 检索相关知识（向量优先，降级关键词）
+    const relevant = await retrieveKnowledge(question, 3);
     const sources = relevant.map(c => ({ title: c.title, file: c.file }));
 
     // 2. 拼装 system prompt：人设 + 检索到的知识 + 自学习库
