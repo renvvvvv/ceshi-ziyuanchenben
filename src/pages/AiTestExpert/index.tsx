@@ -102,24 +102,69 @@ function ChatArea() {
 
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 175000); // 175s，对齐 nginx 180s，给后端150s+余量
+      const timeoutId = setTimeout(() => controller.abort(), 175000);
+
+      // 先创建一个空的 assistant 消息，流式更新
+      const assistantIdx = messages.length + 1; // userMsg 占 messages.length
+      setMessages(prev => [...prev, {
+        role: 'assistant', content: '', reasoning: '', sources: [],
+        webSearch: null, _question: question,
+      } as any]);
+
       const res = await fetch('/api/kb/qa', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({ messages: history, question }),
         signal: controller.signal,
-      }).finally(() => clearTimeout(timeoutId));
-      const data = await res.json().catch(() => ({}));
-      if (res.status === 401) { message.error(data.message || '登录已失效，请重新登录'); return; }
-      if (res.ok && data.success) {
-        setMessages(prev => [...prev, {
-          role: 'assistant', content: data.answer, reasoning: data.reasoning,
-          sources: data.sources, webSearch: data.webSearch, _question: question,
-        } as any]);
-      } else {
-        message.error(data.message || `AI 问答失败（HTTP ${res.status}）`);
+      });
+
+      if (res.status === 401) { message.error('登录已失效，请重新登录'); clearTimeout(timeoutId); return; }
+      if (!res.ok) { message.error(`AI 问答失败（HTTP ${res.status}）`); clearTimeout(timeoutId); return; }
+
+      // 流式读取 SSE
+      const reader = res.body?.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let fullContent = '';
+      let fullReasoning = '';
+      let sources: any[] = [];
+      let webSearch: any = null;
+
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith('data:')) continue;
+            try {
+              const data = JSON.parse(trimmed.slice(5).trim());
+              if (data.type === 'sources') {
+                sources = data.sources || [];
+                setMessages(prev => prev.map((m, i) => i === assistantIdx ? { ...m, sources } : m));
+              } else if (data.type === 'content') {
+                fullContent += data.text;
+                setMessages(prev => prev.map((m, i) => i === assistantIdx ? { ...m, content: fullContent } : m));
+              } else if (data.type === 'reasoning') {
+                fullReasoning += data.text;
+                setMessages(prev => prev.map((m, i) => i === assistantIdx ? { ...m, reasoning: fullReasoning } : m));
+              } else if (data.type === 'done') {
+                fullReasoning = data.reasoning || fullReasoning;
+                webSearch = data.webSearch || null;
+                setMessages(prev => prev.map((m, i) => i === assistantIdx ? {
+                  ...m, content: fullContent, reasoning: fullReasoning, webSearch,
+                } : m));
+              }
+            } catch {}
+          }
+        }
       }
+      clearTimeout(timeoutId);
     } catch (err: any) {
       if (err?.name === 'AbortError') message.warning('AI 回答超时（GLM-5.2 思考+联网搜索耗时较长），请稍后重试');
       else message.error('问答请求失败，请确认后端服务正常');
@@ -142,7 +187,8 @@ function ChatArea() {
           ) : (
             <>
               {messages.map((msg, i) => <MessageBubble key={i} msg={msg} />)}
-              {asking && (
+              {/* 流式模式下：asking 但最后一条消息还没有 content 时显示 loading */}
+              {asking && messages.length > 0 && !messages[messages.length - 1]?.content && (
                 <div style={{ display: 'flex', marginBottom: 16 }}>
                   <div style={{
                     background: 'rgba(255,255,255,0.06)', borderRadius: '12px 12px 12px 2px',

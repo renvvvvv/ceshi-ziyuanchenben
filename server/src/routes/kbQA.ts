@@ -367,6 +367,102 @@ async function callGLMChat(
   }
 }
 
+/**
+ * 流式调用 GLM-5.2（stream=true，逐 chunk 回调）
+ * onChunk: 每收到一段内容就回调（实时推送给前端）
+ */
+async function callGLMChatStream(
+  apiKey: string,
+  systemPrompt: string,
+  messages: ChatMessage[],
+  onChunk: (data: { content?: string; reasoning?: string; done?: boolean }) => void,
+): Promise<{ reasoning: string; webSearch: any[] | null }> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 150000);
+
+  try {
+    const response = await fetch('https://open.bigmodel.cn/api/paas/v4/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'glm-5.2',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          ...messages.map(m => ({ role: m.role, content: m.content })),
+        ],
+        thinking: { type: 'enabled' },
+        reasoning_effort: 'max',
+        tools: [{
+          type: 'web_search',
+          web_search: { enable: true, search_engine: 'search_pro', search_result: true, count: 5 },
+        }],
+        temperature: 1.0,
+        max_tokens: 8192,
+        stream: true,  // 流式输出
+      }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`GLM-5.2 HTTP ${response.status}: ${errText.slice(0, 300)}`);
+    }
+
+    // 逐行读取 SSE 流
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error('无法读取响应流');
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let fullReasoning = '';
+    let webSearch: any[] | null = null;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      // 按行处理 SSE
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || ''; // 最后一行可能不完整，留到下次
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || !trimmed.startsWith('data:')) continue;
+        const jsonStr = trimmed.slice(5).trim();
+        if (jsonStr === '[DONE]') continue;
+
+        try {
+          const chunk: any = JSON.parse(jsonStr);
+          const delta = chunk.choices?.[0]?.delta || {};
+          const content = delta.content || '';
+          const reasoning = delta.reasoning_content || '';
+          const wsData = delta.web_search || chunk.web_search;
+
+          if (wsData && Array.isArray(wsData)) webSearch = wsData;
+          if (reasoning) fullReasoning += reasoning;
+          if (content) onChunk({ content });
+          if (reasoning) onChunk({ reasoning });
+        } catch {
+          // JSON 解析失败（不完整的 chunk），跳过
+        }
+      }
+    }
+
+    onChunk({ done: true });
+    return { reasoning: fullReasoning, webSearch };
+  } catch (err: any) {
+    clearTimeout(timeout);
+    if (err.name === 'AbortError') {
+      throw new Error('AI 回答超时（150s，含思考+联网搜索），请稍后重试');
+    }
+    throw err;
+  }
+}
+
 // ============== 自学习库（用户纠错入库）==============
 
 interface LearnedEntry {
@@ -481,31 +577,36 @@ router.post('/', requireAuth, async (req, res) => {
       .slice(-20); // 最近 20 条消息（约 10 轮）
     const messages: ChatMessage[] = [...recentHistory, { role: 'user', content: question }];
 
-    // 4. 调 GLM-5.2（思考强度高 + 联网搜索）
-    const { content: answer, reasoning, webSearch } = await callGLMChat(apiKey, systemPrompt, messages);
+    // 4. 设置 SSE 响应头（流式输出）
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
 
-    if (!answer || answer.trim().length === 0) {
-      return res.json({
-        success: true,
-        answer: '抱歉，我暂时无法回答这个问题，请尝试换一种问法。',
-        reasoning: '',
-        sources,
-        webSearch: null,
-      });
-    }
+    // 先发送来源信息（前端立即展示知识来源）
+    res.write(`data: ${JSON.stringify({ type: 'sources', sources })}\n\n`);
 
-    // 5. 解析搜索结果摘要（取标题+链接）
-    const searchResults = Array.isArray(webSearch)
-      ? webSearch.slice(0, 5).map((s: any) => ({ title: s.title || '', link: s.link || s.url || '', media: s.media || '' }))
-      : null;
-
-    res.json({
-      success: true,
-      answer: answer.trim(),
-      reasoning: reasoning || '',           // 思考过程
-      sources,                              // RAG 知识来源
-      webSearch: searchResults,             // 联网搜索来源
-    });
+    // 5. 流式调 GLM-5.2，逐 chunk 转发给前端
+    let fullAnswer = '';
+    const { reasoning, webSearch } = await callGLMChatStream(
+      apiKey,
+      systemPrompt,
+      messages,
+      (chunk) => {
+        if (chunk.content) {
+          fullAnswer += chunk.content;
+          res.write(`data: ${JSON.stringify({ type: 'content', text: chunk.content })}\n\n`);
+        } else if (chunk.reasoning) {
+          res.write(`data: ${JSON.stringify({ type: 'reasoning', text: chunk.reasoning })}\n\n`);
+        } else if (chunk.done) {
+          // 解析搜索结果
+          const searchResults = Array.isArray(webSearch)
+            ? webSearch.slice(0, 5).map((s: any) => ({ title: s.title || '', link: s.link || s.url || '', media: s.media || '' }))
+            : null;
+          res.write(`data: ${JSON.stringify({ type: 'done', reasoning, webSearch: searchResults })}\n\n`);
+          res.end();
+        }
+      },
+    );
   } catch (err: any) {
     const errMsg = err?.message || 'AI 问答失败';
     console.error('[KB-QA] 问答失败:', errMsg);
