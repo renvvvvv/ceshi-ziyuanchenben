@@ -102,7 +102,7 @@ function ChatArea() {
 
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 120000);
+      const timeoutId = setTimeout(() => controller.abort(), 175000); // 175s，对齐 nginx 180s，给后端150s+余量
       const res = await fetch('/api/kb/qa', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -121,7 +121,7 @@ function ChatArea() {
         message.error(data.message || `AI 问答失败（HTTP ${res.status}）`);
       }
     } catch (err: any) {
-      if (err?.name === 'AbortError') message.warning('AI 回答超时，请稍后重试');
+      if (err?.name === 'AbortError') message.warning('AI 回答超时（GLM-5.2 思考+联网搜索耗时较长），请稍后重试');
       else message.error('问答请求失败，请确认后端服务正常');
     } finally {
       setAsking(false);

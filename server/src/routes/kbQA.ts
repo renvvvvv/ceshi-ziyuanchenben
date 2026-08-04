@@ -310,7 +310,7 @@ async function callGLMChat(
   messages: ChatMessage[],
 ): Promise<GLMResponse> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 90000); // 90s 超时（思考+搜索较慢）
+  const timeout = setTimeout(() => controller.abort(), 150000); // 150s 超时（思考max+联网搜索可能需要60-120s）
 
   try {
     const response = await fetch('https://open.bigmodel.cn/api/paas/v4/chat/completions', {
@@ -361,7 +361,7 @@ async function callGLMChat(
   } catch (err: any) {
     clearTimeout(timeout);
     if (err.name === 'AbortError') {
-      throw new Error('AI 回答超时（90s，含思考+联网搜索），请稍后重试');
+      throw new Error('AI 回答超时（150s，含思考+联网搜索），请稍后重试');
     }
     throw err;
   }
