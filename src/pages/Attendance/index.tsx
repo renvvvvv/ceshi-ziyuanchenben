@@ -208,45 +208,44 @@ function Attendance() {
     setBatchOpen(true);
   };
 
-  // 保存批量校准
+  // 保存批量校准（优化：先组装再一次性 setState，避免循环里 N 次重渲染）
   const handleBatchSave = () => {
     let adjCount = 0;
     let posCount = 0;
 
-    // 1) 写入批量考勤
+    // 预建查找 Map，O(n²) → O(n)
+    const rowMap = new Map<string, AttendanceRow>();
+    filteredRows.forEach((r) => { rowMap.set(`${r.memberId}|${r.projectName}`, r); });
+
+    // 1) 组装批量考勤变更
+    const adjUpdates: Record<string, { projectStart: string; projectEnd: string; leaveDays: number }> = {};
     Object.entries(batchAdj).forEach(([compositeKey, v]) => {
-      // 仅当用户修改过（原值与当前 allRows 计算值不同时）才落库
-      // 用 indexOf 而非 split('|')，避免 projectName 含 | 时丢字符
       const sepIdx = compositeKey.indexOf('|');
       if (sepIdx < 0) return;
       const memberId = compositeKey.slice(0, sepIdx);
       const projectName = compositeKey.slice(sepIdx + 1);
-      const original = filteredRows.find((r) => r.memberId === memberId && r.projectName === projectName);
+      const original = rowMap.get(compositeKey);
       if (!original) return;
       const onDutyChanged = v.onDutyDays !== undefined && v.onDutyDays !== original.onDutyDays;
       const leaveChanged = v.leaveDays !== undefined && v.leaveDays !== original.leaveDays;
       if (!onDutyChanged && !leaveChanged) return;
 
-      // 落库 key（与单点校准一致）：{memberId}-{projectName}-{cycleStart}
       const adjKey = `${memberId}-${projectName}-${cycleStart}`;
-      setAttendanceAdjustments((prev) => {
-        const existing = prev[adjKey];
-        // 应出勤通过 projectStart/projectEnd 推算；这里直接转成"调整 leaveDays / 标记"
-        const projStart = existing?.projectStart ?? original.projectStart;
-        const projEnd = existing?.projectEnd ?? original.projectEnd;
-        return {
-          ...prev,
-          [adjKey]: {
-            projectStart: projStart,
-            projectEnd: projEnd,
-            leaveDays: v.leaveDays ?? existing?.leaveDays ?? original.leaveDays,
-          },
-        };
-      });
+      const existing = attendanceAdjustments[adjKey];
+      adjUpdates[adjKey] = {
+        projectStart: existing?.projectStart ?? original.projectStart,
+        projectEnd: existing?.projectEnd ?? original.projectEnd,
+        leaveDays: v.leaveDays ?? existing?.leaveDays ?? original.leaveDays,
+      };
       adjCount++;
     });
 
-    // 2) 写入批量岗位
+    // 一次性写入考勤变更（替代循环里 N 次 setAttendanceAdjustments）
+    if (adjCount > 0) {
+      setAttendanceAdjustments((prev) => ({ ...prev, ...adjUpdates }));
+    }
+
+    // 2) 批量岗位变更（收集后逐个调 updateTeamMember，但因岗位变更通常很少）
     Object.entries(batchPos).forEach(([memberId, newPos]) => {
       const m = teamMembers.find((x) => x.id === memberId);
       if (!m) return;
@@ -652,7 +651,7 @@ function Attendance() {
                   </div>
                   <Table<AttendanceRow>
                     size="small"
-                    pagination={false}
+                    pagination={{ pageSize: 50, showTotal: (t) => `共 ${t} 条` }}
                     scroll={{ y: 360 }}
                     dataSource={filteredRows}
                     rowKey={(r) => `${r.memberId}|${r.projectName}`}
@@ -812,8 +811,10 @@ function StatisticsView(props: {
 
       <style>{`.att-row-low > td { background: rgba(255,77,79,0.04) !important; }`}</style>
       <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, overflow: 'hidden' }}>
-        <Table<AttendanceNode> columns={columns} dataSource={treeData} pagination={false} size="small" scroll={{ x: 1050 }}
-          expandable={{ defaultExpandAllRows: true, childrenColumnName: 'children' }}
+        <Table<AttendanceNode> columns={columns} dataSource={treeData}
+          pagination={{ pageSize: 20, showSizeChanger: true, pageSizeOptions: ['10', '20', '50'], showTotal: (t) => `共 ${t} 条` }}
+          size="small" scroll={{ x: 1050 }}
+          expandable={{ defaultExpandAllRows: false, childrenColumnName: 'children' }}
           rowClassName={(record) => (record.children || record.rate >= 0.9) ? '' : 'att-row-low'}
           summary={() => {
             if (filteredRows.length === 0) return null;
@@ -935,6 +936,11 @@ function ProjectEntryView(props: {
   const handleSave = async () => {
     setSaving(true);
     let count = 0;
+
+    // 优化：先组装所有变更，再一次性 setState（避免循环里 N 次重渲染）
+    const adjUpdates: Record<string, { projectStart: string; projectEnd: string; leaveDays: number; position?: string; attendDays?: number }> = {};
+    const newSaved = new Set(savedKeys);
+
     projectRows.forEach((r) => {
       const edit = editing[r.memberId];
       if (!edit) return;
@@ -945,19 +951,22 @@ function ProjectEntryView(props: {
         (edit.leaveDays !== undefined && edit.leaveDays !== r.leaveDays) ||
         (edit.position !== undefined && edit.position !== r.position);
       if (!hasChange) return;
-      setAttendanceAdjustments((prev) => ({
-        ...prev,
-        [key]: {
-          projectStart: edit.projectStart ?? prev[key]?.projectStart ?? r.projectStart,
-          projectEnd: edit.projectEnd ?? prev[key]?.projectEnd ?? r.projectEnd,
-          leaveDays: edit.leaveDays ?? prev[key]?.leaveDays ?? r.leaveDays,
-          position: edit.position ?? prev[key]?.position ?? r.position,
-          attendDays: prev[key]?.attendDays,
-        },
-      }));
-      setSavedKeys((prev) => new Set(prev).add(r.memberId));
+      const existing = attendanceAdjustments[key];
+      adjUpdates[key] = {
+        projectStart: edit.projectStart ?? existing?.projectStart ?? r.projectStart,
+        projectEnd: edit.projectEnd ?? existing?.projectEnd ?? r.projectEnd,
+        leaveDays: edit.leaveDays ?? existing?.leaveDays ?? r.leaveDays,
+        position: edit.position ?? existing?.position ?? r.position,
+        attendDays: existing?.attendDays,
+      };
+      newSaved.add(r.memberId);
       count++;
     });
+
+    if (count > 0) {
+      setAttendanceAdjustments((prev) => ({ ...prev, ...adjUpdates }));
+      setSavedKeys(newSaved);
+    }
     setSaving(false);
     if (count === 0) message.info('未检测到修改');
     else message.success(`已保存 ${count} 人的考勤数据`);

@@ -55,7 +55,7 @@ function History() {
   }, [historyProjects]);
 
   const filteredData = useMemo(() => {
-    return historyProjects.filter((p) => {
+    const list = historyProjects.filter((p) => {
       if (yearFilter !== '全部') {
         const year = p.startDate ? dayjs(p.startDate).year() : null;
         if (year?.toString() !== yearFilter) return false;
@@ -77,6 +77,8 @@ function History() {
       }
       return true;
     });
+    // 默认排序：按开始日期倒序（近期项目在前，最远在后）
+    return [...list].sort((a, b) => (b.startDate || '').localeCompare(a.startDate || ''));
   }, [historyProjects, yearFilter, cityFilter, customerFilter, searchText]);
 
   const handleAdd = () => {
@@ -164,7 +166,6 @@ function History() {
         title: '项目名称',
         dataIndex: 'name',
         key: 'name',
-        fixed: 'left',
         width: 220,
         render: (text: string, record: HistoricalProject) => (
           <a onClick={() => navigate(`/history/${record.id}`)} style={{ color: '#7cb8ff', fontWeight: 500 }}>{text}</a>
@@ -227,17 +228,17 @@ function History() {
         title: '实际交付',
         dataIndex: 'actualDeliveryDate',
         key: 'actualDeliveryDate',
-        width: 130,
+        width: 180,
         sorter: (a, b) => (a.actualDeliveryDate || '').localeCompare(b.actualDeliveryDate || ''),
         render: (text?: string, record?: HistoricalProject) => {
           if (!text) return <span style={{ color: 'rgba(255,255,255,0.3)' }}>-</span>;
-          // 对比计划交付日期，显示提前/延期
+          // 对比计划交付日期，显示提前/延期（nowrap 防止日期+标签溢出列宽与固定操作列叠压）
           if (record?.plannedDeliveryDate) {
             const isEarly = text < record.plannedDeliveryDate;
             const isOnTime = text === record.plannedDeliveryDate;
             if (isOnTime) {
               return (
-                <span>
+                <span style={{ whiteSpace: 'nowrap' }}>
                   <span style={{ color: 'rgba(255,255,255,0.6)' }}>{text}</span>
                   <Tag style={{ marginLeft: 6, fontSize: 10, background: 'rgba(82,196,26,0.15)', color: '#52c41a', border: '1px solid rgba(82,196,26,0.3)', borderRadius: 4, padding: '0 4px' }}>准时</Tag>
                 </span>
@@ -245,14 +246,14 @@ function History() {
             }
             if (isEarly) {
               return (
-                <span>
+                <span style={{ whiteSpace: 'nowrap' }}>
                   <span style={{ color: 'rgba(255,255,255,0.6)' }}>{text}</span>
                   <Tag style={{ marginLeft: 6, fontSize: 10, background: 'rgba(82,196,26,0.15)', color: '#52c41a', border: '1px solid rgba(82,196,26,0.3)', borderRadius: 4, padding: '0 4px' }}>提前</Tag>
                 </span>
               );
             }
             return (
-              <span>
+              <span style={{ whiteSpace: 'nowrap' }}>
                 <span style={{ color: 'rgba(255,255,255,0.6)' }}>{text}</span>
                 <Tag style={{ marginLeft: 6, fontSize: 10, background: 'rgba(255,77,79,0.15)', color: '#ff4d4f', border: '1px solid rgba(255,77,79,0.3)', borderRadius: 4, padding: '0 4px' }}>延期</Tag>
               </span>
@@ -282,7 +283,9 @@ function History() {
         dataIndex: 'businessType',
         key: 'businessType',
         width: 110,
-        render: (text?: string) => <span style={{ color: 'rgba(255,255,255,0.6)' }}>{text || '-'}</span>,
+        render: (text?: string) => text
+          ? <Tag style={{ margin: 0, borderRadius: 4, fontSize: 12, color: 'rgba(255,255,255,0.75)', background: 'rgba(77,159,255,0.1)', border: '1px solid rgba(77,159,255,0.25)' }}>{text}</Tag>
+          : <span style={{ color: 'rgba(255,255,255,0.3)' }}>-</span>,
       },
       {
         title: '项目描述',
@@ -310,7 +313,6 @@ function History() {
         title: '操作',
         key: 'action',
         width: 150,
-        fixed: 'right' as const,
         render: (_: unknown, record: HistoricalProject) => (
           <Space size={0} split={null}>
             <Tooltip title="查看详情">
@@ -426,7 +428,7 @@ function History() {
             showTotal: (total) => `共 ${total} 个历史项目`,
             size: 'small' as const,
           }}
-          scroll={{ x: 1900, y: 'calc(100vh - 340px)' }}
+          scroll={{ x: 2050, y: 'calc(100vh - 340px)' }}
           size="middle"
           locale={{
             emptyText: (

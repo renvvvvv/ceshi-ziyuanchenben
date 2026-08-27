@@ -45,6 +45,21 @@ function ReportReview() {
   const [manageLibOpen, setManageLibOpen] = useState(false);
   const [learnedItems, setLearnedItems] = useState<Array<{original:string;suggestion:string;count:number;lastSeen:string;source?:string}>>([]);
   const [learnedSearch, setLearnedSearch] = useState('');
+  // 审核流程可视化：phase 跟踪当前阶段，elapsed 记录已耗时（秒）
+  const [reviewPhase, setReviewPhase] = useState<'idle' | 'parsing' | 'dict' | 'ai' | 'done'>('idle');
+  const [elapsed, setElapsed] = useState(0);
+  const phaseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // 审核中计时器（每秒 +1）
+  useEffect(() => {
+    if (reviewPhase === 'parsing' || reviewPhase === 'dict' || reviewPhase === 'ai') {
+      const t = setInterval(() => setElapsed((s) => s + 1), 1000);
+      return () => clearInterval(t);
+    }
+  }, [reviewPhase]);
+
+  // 清理阶段定时器
+  useEffect(() => () => { if (phaseTimerRef.current) clearTimeout(phaseTimerRef.current); }, []);
   const previewRef = useRef<HTMLDivElement>(null);
   const jumpTimersRef = useRef<number[]>([]);
 
@@ -130,6 +145,10 @@ function ReportReview() {
 
   const reviewText = useCallback(async (text: string) => {
     setReviewing(true); setReviewed(false);
+    // 流程可视化：先进入词典扫描阶段，3 秒后切入 AI 审核阶段（后端实际是并行/串行一体，此处为展示节奏）
+    setReviewPhase('dict');
+    if (phaseTimerRef.current) clearTimeout(phaseTimerRef.current);
+    phaseTimerRef.current = setTimeout(() => setReviewPhase((p) => (p === 'dict' ? 'ai' : p)), 3000);
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 180000);
@@ -142,6 +161,7 @@ function ReportReview() {
       if (res.ok && data.success && Array.isArray(data.errors)) {
         setErrors(data.errors.map((e: TypoError, i: number) => ({ ...e, fixed: false, id: i + 1 })));
         setReviewed(true);
+        setReviewPhase('done');
         if (data.stats) setReviewStats(data.stats);
         const strategy = data.stats?.strategy; const textLen = data.stats?.textLength;
         if (strategy === 'hybrid') message.success(`文档 ${textLen} 字，已采用智能审核（词典全量+AI抽审前3万字），发现 ${data.errors.length} 处错别字`);
@@ -150,10 +170,12 @@ function ReportReview() {
         const ruleCount = data.ruleErrorsOnly;
         if (typeof ruleCount === 'number' && ruleCount > 0) message.warning(`${data.message || 'AI 审核异常'}（但词典扫描仍发现 ${ruleCount} 处疑似错别字，建议缩短文档后重试）`);
         else message.error(data.message || data.error || `AI 审核失败（HTTP ${res.status}）`);
+        setReviewPhase('idle');
       }
     } catch (err: any) {
       if (err?.name === 'AbortError') message.warning('审核超时（180秒），可能文档过长或 AI 服务繁忙，请缩短文档后重试');
       else { const detail = err instanceof Error ? err.message : ''; message.error(detail ? `审核请求失败：${detail}` : '审核请求失败，请确认后端服务已启动'); }
+      setReviewPhase('idle');
     } finally { setReviewing(false); }
   }, [logout]);
 
@@ -168,12 +190,13 @@ function ReportReview() {
     beforeUpload: async (file) => {
       setFileName(file.name); setFileSize(formatFileSize(file.size));
       setRawText(''); setOriginalFile(file); setErrors([]); setReviewed(false);
+      setReviewPhase('parsing'); setElapsed(0);
       try {
         const text = await parseDocument(file);
         setRawText(text);
         message.success(`已解析「${file.name}」（${text.length} 字）`);
         await reviewText(text);
-      } catch (err) { console.error(err); message.error('文档解析失败，请检查文件格式'); }
+      } catch (err) { console.error(err); message.error('文档解析失败，请检查文件格式'); setReviewPhase('idle'); }
       return false;
     },
   };
@@ -351,6 +374,7 @@ function ReportReview() {
 
   const handleReset = () => {
     setFileName(''); setFileSize(''); setRawText(''); setOriginalFile(null); setErrors([]); setReviewed(false);
+    setReviewPhase('idle'); setElapsed(0);
   };
 
   const fixedCount = errors.filter((e) => e.fixed).length;
@@ -366,17 +390,19 @@ function ReportReview() {
         fileName={fileName} fileSize={fileSize} rawTextLen={rawText.length}
         errors={errors} fixedCount={fixedCount} unfixedCount={unfixedCount} fixProgress={fixProgress}
         reviewStats={reviewStats} learnedSize={learnedSize}
-        exporting={exporting} onExport={handleExport} onReset={handleReset}
+        exporting={exporting} phase={reviewPhase} elapsed={elapsed}
+        onExport={handleExport} onReset={handleReset}
         onFixAll={handleFixAll} onManageLib={openManageLib}
       />
 
-      {/* ===== 双栏主体 ===== */}
-      {hasFile || reviewing ? (
+      {/* ===== 双栏主体（解析/审核中也进入，保证流程可视化全程可见）===== */}
+      {hasFile || reviewing || reviewPhase === 'parsing' ? (
         <div style={{ flex: 1, display: 'flex', gap: 12, minHeight: 0, marginTop: 12 }}>
           {/* 左侧：错别字列表 */}
           <ErrorList
             errors={errors} reviewing={reviewing} reviewed={reviewed} hasFile={hasFile}
             fixedCount={fixedCount} activeErrorId={activeErrorId}
+            phase={reviewPhase} elapsed={elapsed}
             onJump={handleJumpToError} onFix={handleFixOne} onAdopt={handleAdoptOnly}
           />
           {/* 右侧：文档预览 */}
@@ -394,10 +420,7 @@ function ReportReview() {
             </div>
             <div ref={previewRef} style={{ flex: 1, overflowY: 'auto', padding: '20px 28px' }}>
               {reviewing ? (
-                <div style={{ textAlign: 'center', padding: 80 }}>
-                  <Spin size="large" />
-                  <div style={{ marginTop: 16, color: 'rgba(255,255,255,0.5)', fontSize: 13 }}>解析文档中...</div>
-                </div>
+                <ReviewFlow phase={reviewPhase} fileName={fileName} fileSize={fileSize} textLen={rawText.length} elapsed={elapsed} />
               ) : highlightedContent}
             </div>
           </div>
@@ -405,7 +428,7 @@ function ReportReview() {
       ) : null}
 
       {/* ===== 空态：上传引导 ===== */}
-      {!hasFile && !reviewing && (
+      {!hasFile && !reviewing && reviewPhase !== 'parsing' && (
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: 12 }}>
           <div style={{ width: '100%', maxWidth: 560 }}>
             <Dragger {...uploadProps} style={{ background: 'rgba(77,159,255,0.02)', borderRadius: 12 }}>
@@ -456,19 +479,151 @@ function ReportReview() {
   );
 }
 
+// ============== 审核流程可视化组件 ==============
+function ReviewFlow(props: {
+  phase: 'idle' | 'parsing' | 'dict' | 'ai' | 'done';
+  fileName: string; fileSize: string; textLen: number; elapsed: number;
+}) {
+  const { phase, fileName, fileSize, textLen, elapsed } = props;
+  if (phase === 'idle') return null;
+
+  const steps = [
+    { key: 'upload', icon: <InboxOutlined />, label: '上传文档', desc: fileName ? `${fileName} · ${fileSize}` : '' },
+    { key: 'parse', icon: <FileTextOutlined />, label: '解析内容', desc: textLen > 0 ? `${textLen.toLocaleString()} 字` : '' },
+    { key: 'dict', icon: <BookOutlined />, label: '词典扫描', desc: '300+ 类常见错字' },
+    { key: 'ai', icon: <BulbOutlined />, label: 'AI 智能审核', desc: textLen > 30000 ? '长文档 · 智能抽审' : '全量精审' },
+    { key: 'done', icon: <CheckCircleOutlined />, label: '汇总结果', desc: '' },
+  ];
+  const phaseIdx: Record<string, number> = { parsing: 1, dict: 2, ai: 3, done: 5 };
+  const activeIdx = phaseIdx[phase] ?? 0; // parsing 时高亮"解析内容"，dict→词典，ai→AI，done→全部完成
+  const isFinished = phase === 'done';
+
+  // 深度审核提示文案（根据文档长度与耗时动态变化）
+  const phaseHint = phase === 'parsing' ? '正在提取文档内容...'
+    : phase === 'dict' ? '正在使用错字词典快速扫描全文...'
+    : phase === 'ai' ? (elapsed > 30 ? 'AI 深度审核中，长文档需要更多时间，请耐心等待...' : 'AI 正在逐段深度审核...')
+    : '审核完成';
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 380, padding: '40px 24px' }}>
+      {/* 文档卡片 */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 14, padding: '14px 22px', marginBottom: 44,
+        background: 'rgba(77,159,255,0.05)', border: '1px solid rgba(77,159,255,0.15)', borderRadius: 12,
+      }}>
+        <div style={{
+          width: 44, height: 44, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: 'rgba(77,159,255,0.12)', color: '#4d9fff', fontSize: 20,
+        }}><FileTextOutlined /></div>
+        <div>
+          <div style={{ color: 'rgba(255,255,255,0.9)', fontSize: 14, fontWeight: 600, maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {fileName}
+          </div>
+          <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12, marginTop: 3 }}>
+            {fileSize}{textLen > 0 ? ` · ${textLen.toLocaleString()} 字` : ''}
+            {!isFinished && phase !== 'parsing' ? ` · 已用时 ${elapsed}s` : ''}
+          </div>
+        </div>
+      </div>
+
+      {/* 步骤流程条 */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', width: '100%', maxWidth: 720 }}>
+        {steps.map((s, i) => {
+          const stepState = i < activeIdx || isFinished ? 'finish' : i === activeIdx ? 'active' : 'wait';
+          return (
+            <div key={s.key} style={{ flex: i === steps.length - 1 ? '0 0 auto' : 1, display: 'flex', alignItems: 'flex-start' }}>
+              {/* 步骤节点 */}
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 64 }}>
+                <div style={{
+                  width: 40, height: 40, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 17, transition: 'all 0.4s',
+                  background: stepState === 'finish' ? 'rgba(82,196,26,0.15)'
+                    : stepState === 'active' ? 'rgba(77,159,255,0.18)'
+                    : 'rgba(255,255,255,0.04)',
+                  border: `1.5px solid ${stepState === 'finish' ? 'rgba(82,196,26,0.5)'
+                    : stepState === 'active' ? '#4d9fff'
+                    : 'rgba(255,255,255,0.12)'}`,
+                  color: stepState === 'finish' ? '#52c41a'
+                    : stepState === 'active' ? '#4d9fff'
+                    : 'rgba(255,255,255,0.25)',
+                  boxShadow: stepState === 'active' ? '0 0 0 0 rgba(77,159,255,0.35)' : 'none',
+                  animation: stepState === 'active' ? 'reviewPulse 1.6s ease-out infinite' : 'none',
+                }}>{s.icon}</div>
+                <div style={{
+                  marginTop: 8, fontSize: 12, fontWeight: stepState === 'active' ? 600 : 400, textAlign: 'center',
+                  color: stepState === 'finish' ? 'rgba(82,196,26,0.9)'
+                    : stepState === 'active' ? '#7cb8ff'
+                    : 'rgba(255,255,255,0.35)',
+                }}>{s.label}</div>
+                {s.desc && stepState !== 'wait' && (
+                  <div style={{ marginTop: 2, fontSize: 10.5, color: 'rgba(255,255,255,0.3)', textAlign: 'center', maxWidth: 80, lineHeight: 1.4 }}>{s.desc}</div>
+                )}
+              </div>
+              {/* 连接线 */}
+              {i < steps.length - 1 && (
+                <div style={{ flex: 1, height: 1.5, marginTop: 20, margin: '20px 4px 0', background: i < activeIdx || isFinished ? 'rgba(82,196,26,0.4)' : 'rgba(255,255,255,0.08)', transition: 'background 0.4s' }} />
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* 阶段提示 + 进度光带 */}
+      <div style={{ marginTop: 36, width: '100%', maxWidth: 560, textAlign: 'center' }}>
+        <div style={{
+          color: isFinished ? '#52c41a' : 'rgba(255,255,255,0.65)', fontSize: 13.5, fontWeight: 500,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+        }}>
+          {!isFinished && phase !== 'parsing' && <Spin size="small" />}
+          {phaseHint}
+        </div>
+        {/* 动态进度条（未完成时流动光带） */}
+        <div style={{
+          marginTop: 16, height: 4, borderRadius: 2, overflow: 'hidden',
+          background: 'rgba(255,255,255,0.06)',
+        }}>
+          {isFinished ? (
+            <div style={{ width: '100%', height: '100%', background: 'linear-gradient(90deg, rgba(82,196,26,0.7), #52c41a)', borderRadius: 2, transition: 'width 0.6s' }} />
+          ) : (
+            <div style={{
+              width: '36%', height: '100%', borderRadius: 2,
+              background: 'linear-gradient(90deg, transparent, #4d9fff, transparent)',
+              animation: 'reviewFlow 1.8s ease-in-out infinite',
+            }} />
+          )}
+        </div>
+      </div>
+
+      {/* 呼吸点动画 keyframes */}
+      <style>{`
+        @keyframes reviewPulse {
+          0% { box-shadow: 0 0 0 0 rgba(77,159,255,0.35); }
+          70% { box-shadow: 0 0 0 10px rgba(77,159,255,0); }
+          100% { box-shadow: 0 0 0 0 rgba(77,159,255,0); }
+        }
+        @keyframes reviewFlow {
+          0% { transform: translateX(-120%); }
+          100% { transform: translateX(320%); }
+        }
+      `}</style>
+    </div>
+  );
+}
+
 // ============== 顶部信息条组件 ==============
 function TopBar(props: {
   hasFile: boolean; reviewing: boolean; reviewed: boolean;
   fileName: string; fileSize: string; rawTextLen: number;
   errors: TypoError[]; fixedCount: number; unfixedCount: number; fixProgress: number;
   reviewStats: { aiErrors: number; ruleErrors: number; merged: number }; learnedSize: number;
-  exporting: boolean; onExport: () => void; onReset: () => void; onFixAll: () => void; onManageLib: () => void;
+  exporting: boolean; phase?: string; elapsed?: number;
+  onExport: () => void; onReset: () => void; onFixAll: () => void; onManageLib: () => void;
 }) {
-  const { hasFile, reviewing, reviewed, fileName, fileSize, rawTextLen, errors, fixedCount, unfixedCount, fixProgress, reviewStats, learnedSize, exporting, onExport, onReset, onFixAll, onManageLib } = props;
+  const { hasFile, reviewing, reviewed, fileName, fileSize, rawTextLen, errors, fixedCount, unfixedCount, fixProgress, reviewStats, learnedSize, exporting, phase, elapsed, onExport, onReset, onFixAll, onManageLib } = props;
 
   return (
     <div style={{
-      display: 'flex', alignItems: 'center', gap: 16, padding: '14px 18px',
+      display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 14, rowGap: 10, padding: '14px 18px',
       background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12,
     }}>
       {/* 文件信息 */}
@@ -490,12 +645,14 @@ function TopBar(props: {
       {reviewing ? (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <Spin size="small" />
-          <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: 13 }}>AI 审核中...</span>
+          <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: 13 }}>
+            {phase === 'parsing' ? '解析文档中...' : phase === 'dict' ? '词典扫描中...' : `AI 深度审核中... ${elapsed != null ? `${elapsed}s` : ''}`}
+          </span>
         </div>
       ) : reviewed ? (
         <>
           {/* 错别字数量 */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
             {errors.length > 0 ? (
               <Tag color="error" style={{ fontSize: 13, padding: '2px 10px', borderRadius: 6, margin: 0 }}>{errors.length} 处错别字</Tag>
             ) : (
@@ -503,46 +660,45 @@ function TopBar(props: {
             )}
             {reviewStats.merged > 0 && (
               <Tooltip title={`AI 检出 ${reviewStats.aiErrors} / 词典 ${reviewStats.ruleErrors} / 去重 ${reviewStats.merged}`}>
-                <span style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12, cursor: 'help' }}>（AI {reviewStats.aiErrors} · 词典 {reviewStats.ruleErrors}）</span>
+                <span style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12, cursor: 'help', whiteSpace: 'nowrap' }}>（AI {reviewStats.aiErrors} · 词典 {reviewStats.ruleErrors}）</span>
               </Tooltip>
             )}
           </div>
 
           {/* 修复进度条 */}
           {errors.length > 0 && (
-            <div style={{ flex: 1, maxWidth: 280, display: 'flex', alignItems: 'center', gap: 10 }}>
-              <Progress percent={fixProgress} size="small" strokeColor={fixProgress === 100 ? '#52c41a' : '#4d9fff'} trailColor="rgba(255,255,255,0.08)" style={{ flex: 1, margin: 0 }} />
+            <div style={{ flex: '1 1 160px', maxWidth: 280, minWidth: 140, display: 'flex', alignItems: 'center', gap: 10 }}>
+              <Progress percent={fixProgress} size="small" strokeColor={fixProgress === 100 ? '#52c41a' : '#4d9fff'} trailColor="rgba(255,255,255,0.08)" style={{ flex: 1, margin: 0, minWidth: 0 }} />
               <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, whiteSpace: 'nowrap' }}>{fixedCount}/{errors.length}</span>
             </div>
           )}
 
-          <div style={{ flex: 1 }} />
-
-          {/* 操作按钮 */}
-          <Tooltip title="点击管理已学习的纠错">
-            <Button size="middle" icon={<BookOutlined />} onClick={onManageLib} style={{ borderRadius: 8, color: 'rgba(255,255,255,0.65)', borderColor: 'rgba(255,255,255,0.12)', background: 'rgba(82,196,26,0.06)' }}>
-              学习库 {learnedSize}
-            </Button>
-          </Tooltip>
-          {unfixedCount > 0 && (
-            <Popconfirm title="一键修改全部错别字？" description={`将修改 ${unfixedCount} 处错别字并加入学习库，此操作不可撤销。`} onConfirm={onFixAll} okText="确认修改" cancelText="取消" okButtonProps={{ style: { background: '#faad14', borderColor: '#faad14' } }}>
-              <Button icon={<WarningOutlined />} style={{ borderRadius: 8, borderColor: 'rgba(250,173,20,0.4)', color: '#faad14', background: 'rgba(250,173,20,0.08)' }}>
-                一键修改（{unfixedCount}）
+          {/* 操作按钮组：整体不可压缩、不换行，空间不足时随外层换行到下一行，绝不与数据重叠 */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginLeft: 'auto', flexShrink: 0, flexWrap: 'nowrap' }}>
+            <Tooltip title="点击管理已学习的纠错">
+              <Button size="middle" icon={<BookOutlined />} onClick={onManageLib} style={{ borderRadius: 8, color: 'rgba(255,255,255,0.65)', borderColor: 'rgba(255,255,255,0.12)', background: 'rgba(82,196,26,0.06)', flexShrink: 0 }}>
+                学习库 {learnedSize}
               </Button>
-            </Popconfirm>
-          )}
-          <Button type="primary" icon={<DownloadOutlined />} loading={exporting} onClick={onExport} style={{ borderRadius: 8, fontWeight: 500 }}>导出文档</Button>
-          <Button icon={<ReloadOutlined />} onClick={onReset} style={{ borderRadius: 8, color: 'rgba(255,255,255,0.5)', borderColor: 'rgba(255,255,255,0.1)' }}>重新上传</Button>
+            </Tooltip>
+            {unfixedCount > 0 && (
+              <Popconfirm title="一键修改全部错别字？" description={`将修改 ${unfixedCount} 处错别字并加入学习库，此操作不可撤销。`} onConfirm={onFixAll} okText="确认修改" cancelText="取消" okButtonProps={{ style: { background: '#faad14', borderColor: '#faad14' } }}>
+                <Button icon={<WarningOutlined />} style={{ borderRadius: 8, borderColor: 'rgba(250,173,20,0.4)', color: '#faad14', background: 'rgba(250,173,20,0.08)', flexShrink: 0 }}>
+                  一键修改（{unfixedCount}）
+                </Button>
+              </Popconfirm>
+            )}
+            <Button type="primary" icon={<DownloadOutlined />} loading={exporting} onClick={onExport} style={{ borderRadius: 8, fontWeight: 500, flexShrink: 0 }}>导出文档</Button>
+            <Button icon={<ReloadOutlined />} onClick={onReset} style={{ borderRadius: 8, color: 'rgba(255,255,255,0.5)', borderColor: 'rgba(255,255,255,0.1)', flexShrink: 0 }}>重新上传</Button>
+          </div>
         </>
       ) : hasFile ? null : (
-        <>
-          <div style={{ flex: 1 }} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginLeft: 'auto', flexShrink: 0 }}>
           <Tooltip title="点击管理已学习的纠错">
-            <Button size="middle" icon={<BookOutlined />} onClick={onManageLib} style={{ borderRadius: 8, color: 'rgba(255,255,255,0.65)', borderColor: 'rgba(255,255,255,0.12)', background: 'rgba(82,196,26,0.06)' }}>
+            <Button size="middle" icon={<BookOutlined />} onClick={onManageLib} style={{ borderRadius: 8, color: 'rgba(255,255,255,0.65)', borderColor: 'rgba(255,255,255,0.12)', background: 'rgba(82,196,26,0.06)', flexShrink: 0 }}>
               学习库 {learnedSize}
             </Button>
           </Tooltip>
-        </>
+        </div>
       )}
     </div>
   );
@@ -551,10 +707,14 @@ function TopBar(props: {
 // ============== 错别字列表组件 ==============
 function ErrorList(props: {
   errors: TypoError[]; reviewing: boolean; reviewed: boolean; hasFile: boolean;
-  fixedCount: number; activeErrorId: number | null;
+  fixedCount: number; activeErrorId: number | null; phase?: string; elapsed?: number;
   onJump: (id: number) => void; onFix: (id: number) => void; onAdopt: (id: number) => void;
 }) {
-  const { errors, reviewing, reviewed, hasFile, activeErrorId, onJump, onFix, onAdopt } = props;
+  const { errors, reviewing, reviewed, hasFile, activeErrorId, phase, elapsed, onJump, onFix, onAdopt } = props;
+  const phaseText = phase === 'parsing' ? '解析文档中...'
+    : phase === 'dict' ? '词典扫描中...'
+    : phase === 'ai' ? `AI 深度审核中... ${elapsed != null ? `(${elapsed}s)` : ''}`
+    : 'AI 审核中...';
 
   return (
     <div style={{ width: 340, flexShrink: 0, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -573,7 +733,7 @@ function ErrorList(props: {
         {reviewing ? (
           <div style={{ textAlign: 'center', padding: 50 }}>
             <Spin size="small" />
-            <div style={{ marginTop: 12, color: 'rgba(255,255,255,0.5)', fontSize: 13 }}>AI 审核中...</div>
+            <div style={{ marginTop: 12, color: 'rgba(255,255,255,0.5)', fontSize: 13 }}>{phaseText}</div>
           </div>
         ) : !reviewed ? (
           <div style={{ textAlign: 'center', padding: 50, color: 'rgba(255,255,255,0.3)', fontSize: 13 }}>

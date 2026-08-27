@@ -159,12 +159,30 @@ function ChatArea() {
                 setMessages(prev => prev.map((m, i) => i === assistantIdx ? {
                   ...m, content: fullContent, reasoning: fullReasoning, webSearch,
                 } : m));
+              } else if (data.type === 'error') {
+                // 后端在流式过程中出错，已通过 SSE 通知（而非 HTTP 500）
+                if (data.partial) fullContent = data.partial;
+                const errMsg = data.message || 'AI 回答过程中出现异常';
+                setMessages(prev => prev.map((m, i) => i === assistantIdx ? {
+                  ...m,
+                  content: fullContent || `⚠️ ${errMsg}`,
+                  reasoning: fullReasoning,
+                } : m));
+                message.error(errMsg);
               }
             } catch {}
           }
         }
       }
       clearTimeout(timeoutId);
+
+      // 兜底：流已关闭但 content 仍为空（GLM 返回了空响应）
+      if (!fullContent.trim()) {
+        setMessages(prev => prev.map((m, i) => i === assistantIdx ? {
+          ...m,
+          content: '⚠️ AI 未返回有效内容，请稍后重试或换一种问法。',
+        } : m));
+      }
     } catch (err: any) {
       if (err?.name === 'AbortError') message.warning('AI 回答超时（GLM-5.2 思考+联网搜索耗时较长），请稍后重试');
       else message.error('问答请求失败，请确认后端服务正常');

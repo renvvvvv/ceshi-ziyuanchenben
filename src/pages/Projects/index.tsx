@@ -30,7 +30,7 @@ function Projects() {
   //   - 默认 statusFilter='全部' 时仍隐藏已完成（避免与历史项目板块混淆）
   //   - 用户切到"已完成"Tab 时可见
   const filteredProjects = useMemo(() => {
-    return projects.filter((p) => {
+    const list = projects.filter((p) => {
       // 默认隐藏已完成（保留原有 UX）
       if (statusFilter === '全部' && p.status === '已完成') return false;
       if (statusFilter !== '全部' && p.status !== statusFilter) return false;
@@ -40,6 +40,8 @@ function Projects() {
       }
       return true;
     });
+    // 默认排序：时间正序（开始日期从早到晚，最早开始的排最前）
+    return [...list].sort((a, b) => (a.startDate || '9999-12-31').localeCompare(b.startDate || '9999-12-31'));
   }, [projects, statusFilter, searchText]);
 
   // 统计信息
@@ -201,7 +203,7 @@ function Projects() {
       title: '实际交付日期',
       dataIndex: 'actualDeliveryDate',
       key: 'actualDeliveryDate',
-      width: 150,
+      width: 180,
       sorter: (a, b) => (a.actualDeliveryDate || '').localeCompare(b.actualDeliveryDate || ''),
       render: (text?: string, record?: Project) => {
         if (!text) return <span style={{ color: 'rgba(255,255,255,0.3)' }}>-</span>;
@@ -213,7 +215,7 @@ function Projects() {
             : isEarly
               ? <Tag style={{ marginLeft: 6, fontSize: 10, background: 'rgba(82,196,26,0.15)', color: '#52c41a', border: '1px solid rgba(82,196,26,0.3)', borderRadius: 4, padding: '0 4px' }}>提前</Tag>
               : <Tag style={{ marginLeft: 6, fontSize: 10, background: 'rgba(255,77,79,0.15)', color: '#ff4d4f', border: '1px solid rgba(255,77,79,0.3)', borderRadius: 4, padding: '0 4px' }}>延期</Tag>;
-          return <span><span style={{ color: 'rgba(255,255,255,0.6)' }}>{text}</span>{tag}</span>;
+          return <span style={{ whiteSpace: 'nowrap' }}><span style={{ color: 'rgba(255,255,255,0.6)' }}>{text}</span>{tag}</span>;
         }
         return <span style={{ color: 'rgba(255,255,255,0.6)' }}>{text}</span>;
       },
@@ -232,7 +234,9 @@ function Projects() {
       dataIndex: 'businessType',
       key: 'businessType',
       width: 110,
-      render: (text?: string) => <span style={{ color: 'rgba(255,255,255,0.6)' }}>{text || '-'}</span>,
+      render: (text?: string) => text
+        ? <Tag style={{ margin: 0, borderRadius: 4, fontSize: 12, color: 'rgba(255,255,255,0.75)', background: 'rgba(77,159,255,0.1)', border: '1px solid rgba(77,159,255,0.25)' }}>{text}</Tag>
+        : <span style={{ color: 'rgba(255,255,255,0.3)' }}>-</span>,
     },
     {
       title: '测试管理链接',
@@ -252,7 +256,6 @@ function Projects() {
       title: '操作',
       key: 'action',
       width: 170,
-      fixed: 'right' as const,
       render: (_: unknown, record: Project) => (
         <Space size={0} split={null}>
           <Tooltip title="查看详情">
@@ -377,7 +380,7 @@ function Projects() {
             showTotal: (total) => `共 ${total} 个项目`,
             size: 'small' as const,
           }}
-          scroll={{ x: 1700, y: 'calc(100vh - 340px)' }}
+          scroll={{ x: 2300, y: 'calc(100vh - 340px)' }}
           size="middle"
         />
       </div>

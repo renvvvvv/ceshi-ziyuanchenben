@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback, useRef, type ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo, type ReactNode } from 'react';
 import dayjs from 'dayjs';
 import {
   projectsApi,
@@ -61,12 +61,22 @@ function saveToStorage<T>(key: string, value: T): void {
   }
 }
 
-/** 持久化 useState：首次加载从 localStorage 读取，变更时自动写入 */
+/** 持久化 useState：首次加载从 localStorage 读取，变更时防抖写入（避免大对象同步阻塞主线程） */
 function usePersistentState<T>(key: string, initial: T): [T, (value: T | ((prev: T) => T)) => void] {
   const [state, setState] = useState<T>(() => loadFromStorage(key, initial));
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const stateRef = useRef(state);
+  stateRef.current = state;
 
   useEffect(() => {
-    saveToStorage(key, state);
+    // 防抖写盘：500ms 内无新变更才写入，避免连续 setState 导致的同步 JSON.stringify 阻塞
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => {
+      saveToStorage(key, stateRef.current);
+    }, 500);
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
   }, [key, state]);
 
   return [state, setState];
@@ -735,7 +745,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     setHistoryPhases(mergedHistoryPhases);
   }, [setProjects, setHistoryProjects, setTeamMembers, setTestDocs, setProjectPhases, setHistoryPhases]);
 
-  const value: DataContextValue = {
+  const value: DataContextValue = useMemo(() => ({
     dataSource,
     projects,
     setProjects,
@@ -772,7 +782,17 @@ export function DataProvider({ children }: { children: ReactNode }) {
     syncMembersFromProjects,
     attendanceAdjustments,
     setAttendanceAdjustments,
-  };
+  }), [
+    dataSource, projects, setProjects, addProject, updateProject, deleteProject,
+    getProjectById, archiveProject, historyProjects, setHistoryProjects,
+    addHistoryProject, updateHistoryProject, deleteHistoryProject, getHistoryProjectById,
+    teamMembers, setTeamMembers, addTeamMember, updateTeamMember, deleteTeamMember,
+    testDocs, setTestDocs, addTestDoc, updateTestDoc, deleteTestDoc,
+    projectPhases, setProjectPhases, historyPhases, setHistoryPhases,
+    mockRegionMwOutput, docCategories, resetToDefaults,
+    autoProcessProjects, autoProcessMembers, syncMembersFromProjects,
+    attendanceAdjustments, setAttendanceAdjustments,
+  ]);
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
 }
