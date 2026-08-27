@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useRef, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Tag, Tooltip } from 'antd';
 import dayjs from 'dayjs';
@@ -111,8 +111,53 @@ function isMajorTick(date: dayjs.Dayjs, unit: GanttUnit): boolean {
 
 function GanttChart({ projects, unit = 'day' }: GanttChartProps) {
   const navigate = useNavigate();
-  const dayWidth = UNIT_DAY_WIDTH[unit];
   const tickInterval = UNIT_TICK[unit].interval;
+
+  // 过滤无效日期项目（缺开始日期的会渲染出 Invalid Date 且条形像素为 NaN）
+  const validProjects = useMemo(
+    () => projects.filter((p) => p.startDate && dayjs(p.startDate).isValid()),
+    [projects],
+  );
+  const skippedCount = projects.length - validProjects.length;
+
+  // 容器宽度：dayWidth 自适应（时间轴一屏放下，条形比例真实，不再超宽滚动）
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [containerWidth, setContainerWidth] = useState(0);
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const update = () => setContainerWidth(el.clientWidth);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  // 时间范围（不依赖 dayWidth，先独立计算）
+  const range = useMemo(() => {
+    if (validProjects.length === 0) return null;
+    const allStarts = validProjects.map((p) => dayjs(p.startDate));
+    const allEnds = validProjects.map((p) => dayjs(p.endDate || dayjs().add(1, 'month')));
+    const globalStart = allStarts
+      .reduce((a, b) => (a.isBefore(b) ? a : b))
+      .subtract(2, 'day')
+      .startOf('day');
+    const globalEnd = allEnds
+      .reduce((a, b) => (a.isAfter(b) ? a : b))
+      .add(2, 'day')
+      .startOf('day');
+    return { globalStart, globalEnd, daysTotal: Math.max(globalEnd.diff(globalStart, 'day'), 1) };
+  }, [validProjects]);
+
+  // 自适应每日像素：优先按容器宽平铺（最小 3px/天），上限为该时间单位的默认宽度
+  const dayWidth = useMemo(() => {
+    const base = UNIT_DAY_WIDTH[unit];
+    if (containerWidth > 0 && range && range.daysTotal > 0) {
+      const fit = (containerWidth - 16) / range.daysTotal;
+      return Math.max(3, Math.min(base, fit));
+    }
+    return base;
+  }, [containerWidth, range, unit]);
 
   const {
     ticks,
@@ -123,7 +168,7 @@ function GanttChart({ projects, unit = 'day' }: GanttChartProps) {
     todayOffsetPx,
     todayTickIndex,
   } = useMemo(() => {
-    if (projects.length === 0) {
+    if (validProjects.length === 0 || !range) {
       return {
         ticks: [] as Tick[],
         majorGroups: [] as MajorGroup[],
@@ -135,18 +180,8 @@ function GanttChart({ projects, unit = 'day' }: GanttChartProps) {
       };
     }
 
-    // 计算全局时间范围，两端各留余量
-    const allStarts = projects.map((p) => dayjs(p.startDate));
-    const allEnds = projects.map((p) => dayjs(p.endDate || dayjs().add(1, 'month')));
-    const globalStart = allStarts
-      .reduce((a, b) => (a.isBefore(b) ? a : b))
-      .subtract(2, 'day')
-      .startOf('day');
-    const globalEnd = allEnds
-      .reduce((a, b) => (a.isAfter(b) ? a : b))
-      .add(2, 'day')
-      .startOf('day');
-    const daysTotal = Math.max(globalEnd.diff(globalStart, 'day'), 1);
+    // 全局时间范围（已在上方 range 中计算）
+    const { globalStart, globalEnd, daysTotal } = range;
 
     // 生成刻度
     const tickArr: Tick[] = [];
@@ -226,8 +261,8 @@ function GanttChart({ projects, unit = 'day' }: GanttChartProps) {
       }
     }
 
-    // 项目条
-    const bars: ProjectBar[] = projects
+    // 项目条（仅含日期有效的项目，validProjects 已过滤）
+    const bars: ProjectBar[] = validProjects
       .map((project) => {
         const pStart = dayjs(project.startDate);
         const pEnd = dayjs(project.endDate || dayjs().add(1, 'month'));
@@ -256,22 +291,23 @@ function GanttChart({ projects, unit = 'day' }: GanttChartProps) {
       todayOffsetPx: todayDay * dayWidth,
       todayTickIndex: tIdx >= 0 ? tIdx : -1,
     };
-  }, [projects, unit, dayWidth, tickInterval]);
+  }, [validProjects, range, unit, dayWidth, tickInterval]);
 
-  if (projects.length === 0) {
+  if (validProjects.length === 0) {
     return (
       <div style={{ textAlign: 'center', padding: 48, color: 'rgba(255,255,255,0.4)' }}>
-        暂无进行中或未开始的项目
+        {projects.length === 0 ? '暂无进行中或未开始的项目' : '当前项目均未设置开始日期，无法绘制甘特图'}
       </div>
     );
   }
 
   const showToday = todayTickIndex >= 0 && todayOffsetPx <= totalWidth;
-  // 每个刻度的像素宽度
+  // 每个刻度的像素宽度；压缩显示时（tickWidth 过小）隐藏次要刻度文字防重叠
   const tickWidth = tickInterval * dayWidth;
+  const showMinorLabels = tickWidth >= 14;
 
   return (
-    <div className="gantt-container">
+    <div className="gantt-container" ref={containerRef}>
       {/* 图例 */}
       <div className="gantt-legend">
         <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11, marginRight: 16 }}>图例：</span>
@@ -302,6 +338,11 @@ function GanttChart({ projects, unit = 'day' }: GanttChartProps) {
           />
           <span style={{ color: '#ff4d4f' }}>今天</span>
         </span>
+        {skippedCount > 0 && (
+          <span style={{ marginLeft: 12, fontSize: 11, color: 'rgba(250,173,20,0.75)' }}>
+            ⚠ {skippedCount} 个项目未设置开始日期，未在图中展示
+          </span>
+        )}
       </div>
 
       {/* 甘特图主体（横向滚动容器） */}
@@ -375,20 +416,22 @@ function GanttChart({ projects, unit = 'day' }: GanttChartProps) {
                         : {}),
                     }}
                   >
-                    <span
-                      style={{
-                        fontSize: t.isMajor ? 10 : 9,
-                        whiteSpace: 'nowrap',
-                        color: t.isMajor ? 'rgba(255,255,255,0.75)' : 'rgba(255,255,255,0.35)',
-                        fontFamily: "'Outfit', 'Noto Sans SC', sans-serif",
-                        lineHeight: 1,
-                        ...(showToday && idx === todayTickIndex
-                          ? { color: '#ff4d4f', fontWeight: 700 }
-                          : {}),
-                      }}
-                    >
-                      {t.label}
-                    </span>
+                    {(t.isMajor || showMinorLabels) && (
+                      <span
+                        style={{
+                          fontSize: t.isMajor ? 10 : 9,
+                          whiteSpace: 'nowrap',
+                          color: t.isMajor ? 'rgba(255,255,255,0.75)' : 'rgba(255,255,255,0.35)',
+                          fontFamily: "'Outfit', 'Noto Sans SC', sans-serif",
+                          lineHeight: 1,
+                          ...(showToday && idx === todayTickIndex
+                            ? { color: '#ff4d4f', fontWeight: 700 }
+                            : {}),
+                        }}
+                      >
+                        {t.label}
+                      </span>
+                    )}
                   </div>
                 ))}
               </div>
