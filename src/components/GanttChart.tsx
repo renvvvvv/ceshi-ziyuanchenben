@@ -134,12 +134,16 @@ function GanttChart({ projects, unit = 'day' }: GanttChartProps) {
   }, []);
 
   // 时间范围（不依赖 dayWidth，先独立计算）
+  // 起点始终包含"今天"：全部项目都在未来时，今天红线仍应可见
   const range = useMemo(() => {
     if (validProjects.length === 0) return null;
     const allStarts = validProjects.map((p) => dayjs(p.startDate));
     const allEnds = validProjects.map((p) => dayjs(p.endDate || dayjs().add(1, 'month')));
-    const globalStart = allStarts
-      .reduce((a, b) => (a.isBefore(b) ? a : b))
+    const today = dayjs().startOf('day');
+    const globalStart = [
+      allStarts.reduce((a, b) => (a.isBefore(b) ? a : b)),
+      today,
+    ].reduce((a, b) => (a.isBefore(b) ? a : b))
       .subtract(2, 'day')
       .startOf('day');
     const globalEnd = allEnds
@@ -301,7 +305,8 @@ function GanttChart({ projects, unit = 'day' }: GanttChartProps) {
     );
   }
 
-  const showToday = todayTickIndex >= 0 && todayOffsetPx <= totalWidth;
+  // 今天红线：只要今天落在时间轴范围内就显示（不要求刻度恰好命中今天）
+  const showToday = todayOffsetPx >= 0 && todayOffsetPx <= totalWidth;
   // 每个刻度的像素宽度；压缩显示时（tickWidth 过小）隐藏次要刻度文字防重叠
   const tickWidth = tickInterval * dayWidth;
   const showMinorLabels = tickWidth >= 14;
