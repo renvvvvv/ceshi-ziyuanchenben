@@ -11,7 +11,7 @@
  *   4. embedding 失败时降级到关键词匹配（extractKeywords + indexOf）
  */
 import { Router } from 'express';
-import { readFileSync, readdirSync, writeFileSync } from 'fs';
+import { readFileSync, readdirSync, writeFileSync, mkdirSync, renameSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import db from '../database.js';
@@ -381,27 +381,23 @@ async function callGLMChatStream(
   const timeout = setTimeout(() => controller.abort(), 150000);
 
   try {
-    const response = await fetch('https://open.bigmodel.cn/api/paas/v4/chat/completions', {
+    // 2026-08-27 起改走 Anthropic 兼容端点（智谱 Coding Plan 套餐通道）。
+    // 标准 /paas/v4 端点下该套餐报 1113 余额不足；Anthropic 端点可用 glm-5.2（含思考+联网搜索）。
+    const response = await fetch('https://open.bigmodel.cn/api/anthropic/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
         model: 'glm-5.2',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          ...messages.map(m => ({ role: m.role, content: m.content })),
-        ],
+        system: systemPrompt,
+        messages: messages.map(m => ({ role: m.role, content: m.content })),
         thinking: { type: 'enabled' },
-        reasoning_effort: 'max',
-        tools: [{
-          type: 'web_search',
-          web_search: { enable: true, search_engine: 'search_pro', search_result: true, count: 5 },
-        }],
-        temperature: 1.0,
+        tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 }],
         max_tokens: 8192,
-        stream: true,  // 流式输出
+        stream: true,
       }),
       signal: controller.signal,
     });
@@ -412,7 +408,7 @@ async function callGLMChatStream(
       throw new Error(`GLM-5.2 HTTP ${response.status}: ${errText.slice(0, 300)}`);
     }
 
-    // 逐行读取 SSE 流
+    // 逐行读取 SSE 流（Anthropic 事件格式）
     const reader = response.body?.getReader();
     if (!reader) throw new Error('无法读取响应流');
     const decoder = new TextDecoder();
@@ -431,21 +427,49 @@ async function callGLMChatStream(
 
       for (const line of lines) {
         const trimmed = line.trim();
-        if (!trimmed || !trimmed.startsWith('data:')) continue;
+        if (!trimmed.startsWith('data:')) continue;
         const jsonStr = trimmed.slice(5).trim();
-        if (jsonStr === '[DONE]') continue;
+        if (!jsonStr) continue;
 
         try {
-          const chunk: any = JSON.parse(jsonStr);
-          const delta = chunk.choices?.[0]?.delta || {};
-          const content = delta.content || '';
-          const reasoning = delta.reasoning_content || '';
-          const wsData = delta.web_search || chunk.web_search;
+          const evt: any = JSON.parse(jsonStr);
 
-          if (wsData && Array.isArray(wsData)) webSearch = wsData;
-          if (reasoning) fullReasoning += reasoning;
-          if (content) onChunk({ content });
-          if (reasoning) onChunk({ reasoning });
+          if (evt.type === 'content_block_delta') {
+            const delta = evt.delta || {};
+            // 思考过程增量
+            if (delta.type === 'thinking_delta' && delta.thinking) {
+              fullReasoning += delta.thinking;
+              onChunk({ reasoning: delta.thinking });
+            }
+            // 正文增量
+            else if (delta.type === 'text_delta' && delta.text) {
+              onChunk({ content: delta.text });
+            }
+          }
+          // 联网搜索：服务端工具调用（web_search_prime / web_search 等）
+          else if (evt.type === 'content_block_start' && evt.content_block?.type === 'server_tool_use') {
+            const toolName = evt.content_block.name || '';
+            if (toolName.includes('web_search')) {
+              const q = evt.content_block.input?.search_query || '';
+              webSearch = webSearch || [];
+              webSearch.push({ title: q || '联网搜索', link: '', media: toolName });
+            }
+          }
+          // 搜索结果块：尽力提取来源标题/链接
+          else if (evt.type === 'content_block_start' && evt.content_block?.type === 'web_search_tool_result') {
+            try {
+              const raw = evt.content_block.content;
+              const items = typeof raw === 'string' ? JSON.parse(raw) : raw;
+              if (Array.isArray(items)) {
+                webSearch = webSearch || [];
+                for (const it of items.slice(0, 5)) {
+                  const t = it?.title || it?.url || it?.link || '';
+                  const l = it?.url || it?.link || '';
+                  if (t || l) webSearch.push({ title: String(t), link: String(l), media: 'web' });
+                }
+              }
+            } catch { /* 搜索结果格式异常时忽略，不影响正文 */ }
+          }
         } catch {
           // JSON 解析失败（不完整的 chunk），跳过
         }
@@ -489,13 +513,11 @@ function loadLearned(): void {
 
 function saveLearned(): void {
   try {
-    const { mkdirSync, writeFileSync: wf, renameSync, existsSync } = require('fs');
-    const { dirname } = require('path');
     // 原子写：先写 .tmp 再 rename，避免进程崩溃时写一半损坏 JSON
     const dir = dirname(LEARNED_FILE);
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
     const tmp = LEARNED_FILE + '.tmp';
-    wf(tmp, JSON.stringify(learnedCache, null, 2), 'utf-8');
+    writeFileSync(tmp, JSON.stringify(learnedCache, null, 2), 'utf-8');
     renameSync(tmp, LEARNED_FILE);
   } catch (e) {
     console.warn('[KB-QA] 保存自学习库失败:', (e as Error).message);
@@ -581,36 +603,93 @@ router.post('/', requireAuth, async (req, res) => {
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no'); // 禁止 nginx 缓冲（关键）
+    res.flushHeaders?.();
+
+    let streamEnded = false;
+    const safeWrite = (payload: string): boolean => {
+      if (streamEnded) return false;
+      try {
+        if (!res.writableEnded) {
+          res.write(payload);
+          return true;
+        }
+      } catch (e) {
+        console.warn('[KB-QA] res.write 失败:', (e as Error).message);
+      }
+      return false;
+    };
+    const safeEnd = () => {
+      if (streamEnded) return;
+      streamEnded = true;
+      try { if (!res.writableEnded) res.end(); } catch {}
+    };
 
     // 先发送来源信息（前端立即展示知识来源）
-    res.write(`data: ${JSON.stringify({ type: 'sources', sources })}\n\n`);
+    safeWrite(`data: ${JSON.stringify({ type: 'sources', sources })}\n\n`);
 
     // 5. 流式调 GLM-5.2，逐 chunk 转发给前端
     let fullAnswer = '';
-    const { reasoning, webSearch } = await callGLMChatStream(
-      apiKey,
-      systemPrompt,
-      messages,
-      (chunk) => {
-        if (chunk.content) {
-          fullAnswer += chunk.content;
-          res.write(`data: ${JSON.stringify({ type: 'content', text: chunk.content })}\n\n`);
-        } else if (chunk.reasoning) {
-          res.write(`data: ${JSON.stringify({ type: 'reasoning', text: chunk.reasoning })}\n\n`);
-        } else if (chunk.done) {
-          // 解析搜索结果
-          const searchResults = Array.isArray(webSearch)
-            ? webSearch.slice(0, 5).map((s: any) => ({ title: s.title || '', link: s.link || s.url || '', media: s.media || '' }))
-            : null;
-          res.write(`data: ${JSON.stringify({ type: 'done', reasoning, webSearch: searchResults })}\n\n`);
-          res.end();
-        }
-      },
-    );
+    try {
+      // 注意：done 事件必须在 await 返回后再发，
+      // 因为 reasoning/webSearch 来自返回值（回调中访问会触发 TDZ 错误）
+      const { reasoning, webSearch } = await callGLMChatStream(
+        apiKey,
+        systemPrompt,
+        messages,
+        (chunk) => {
+          if (chunk.content) {
+            fullAnswer += chunk.content;
+            safeWrite(`data: ${JSON.stringify({ type: 'content', text: chunk.content })}\n\n`);
+          } else if (chunk.reasoning) {
+            safeWrite(`data: ${JSON.stringify({ type: 'reasoning', text: chunk.reasoning })}\n\n`);
+          }
+          // 注意：这里不再处理 chunk.done —— 改为 await 返回后统一处理
+        },
+      );
+
+      // 兜底：若 GLM 没产出 content（例如被内容安全拦截），给前端一个可见提示
+      if (!fullAnswer.trim()) {
+        safeWrite(`data: ${JSON.stringify({
+          type: 'content',
+          text: '抱歉，本次回答未能生成内容（模型未返回有效内容，可能被内容安全策略拦截），请稍后重试或换一种问法。',
+        })}\n\n`);
+      }
+
+      // 解析联网搜索结果
+      const searchResults = Array.isArray(webSearch)
+        ? webSearch.slice(0, 5).map((s: any) => ({ title: s.title || '', link: s.link || s.url || '', media: s.media || '' }))
+        : null;
+
+      // 发送 done 事件（此时 reasoning/webSearch 已可用）
+      safeWrite(`data: ${JSON.stringify({ type: 'done', reasoning, webSearch: searchResults })}\n\n`);
+      safeEnd();
+    } catch (streamErr: any) {
+      const errMsg = streamErr?.message || 'AI 流式回答失败';
+      console.error('[KB-QA] 流式回答失败:', errMsg);
+      // 头部已发送，只能通过 SSE error 事件通知前端，绝不能 res.json（会抛 ERR_HTTP_HEADERS_SENT）
+      safeWrite(`data: ${JSON.stringify({
+        type: 'error',
+        message: errMsg,
+        partial: fullAnswer, // 已收到的部分内容（可能为空）
+      })}\n\n`);
+      safeEnd();
+    }
   } catch (err: any) {
     const errMsg = err?.message || 'AI 问答失败';
-    console.error('[KB-QA] 问答失败:', errMsg);
-    res.status(500).json({ success: false, message: errMsg });
+    console.error('[KB-QA] 问答失败（头部未发送）:', errMsg);
+    // 只有在 SSE 头部尚未发送时才能走 JSON 错误响应
+    if (!res.headersSent) {
+      res.status(500).json({ success: false, message: errMsg });
+    } else {
+      // 头部已发送，尝试通过 SSE 通知
+      try {
+        if (!res.writableEnded) {
+          res.write(`data: ${JSON.stringify({ type: 'error', message: errMsg })}\n\n`);
+          res.end();
+        }
+      } catch {}
+    }
   }
 });
 
