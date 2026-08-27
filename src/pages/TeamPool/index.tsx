@@ -37,7 +37,9 @@ function getAvatarText(name: string): string {
 
 /** 格式化为 MM-DD */
 function fmtShort(dateStr: string): string {
-  return dayjs(dateStr).format('MM-DD');
+  if (!dateStr) return '未定';
+  const d = dayjs(dateStr);
+  return d.isValid() ? d.format('MM-DD') : '未定';
 }
 
 /** 检测人员参与的项目时间是否有重叠冲突 */
@@ -50,7 +52,9 @@ interface TimeConflict {
 }
 
 function detectTimeConflicts(member: TeamMember): TimeConflict[] {
-  const all = [...(member.projects || []), ...(member.upcomingProjects || [])];
+  // 只对起止日期齐全的条目做重叠检测——无日期条目的 dayjs(undefined)=当下，会制造假冲突
+  const all = [...(member.projects || []), ...(member.upcomingProjects || [])]
+    .filter((p) => p.startDate && p.endDate);
   const conflicts: TimeConflict[] = [];
   for (let i = 0; i < all.length; i++) {
     for (let j = i + 1; j < all.length; j++) {
@@ -163,6 +167,17 @@ function TeamPool() {
           ...(becameIdle ? { projects: [], currentProjects: [], upcomingProjects: [] } : {}),
         };
         updateTeamMember(editingMember.id, updates);
+        // 转为空闲还必须把成员从各项目的 assignedMemberIds 中移除，
+        // 否则下次进人员池 syncMembersFromProjects 会按指派关系把状态"还原"回去
+        if (becameIdle) {
+          for (const proj of projects) {
+            if ((proj.assignedMemberIds || []).includes(editingMember.id)) {
+              updateProject(proj.id, {
+                assignedMemberIds: (proj.assignedMemberIds || []).filter((mid) => mid !== editingMember.id),
+              });
+            }
+          }
+        }
         message.success(`成员「${values.name}」更新成功`);
       } else {
         const newMember: TeamMember = {
@@ -925,6 +940,14 @@ function TeamPool() {
                     currentProjects: [],
                     upcomingProjects: [],
                   });
+                  // 同步移除项目指派，防止 syncMembersFromProjects 把状态还原回去
+                  for (const proj of projects) {
+                    if ((proj.assignedMemberIds || []).includes(editingMember.id)) {
+                      updateProject(proj.id, {
+                        assignedMemberIds: (proj.assignedMemberIds || []).filter((mid) => mid !== editingMember.id),
+                      });
+                    }
+                  }
                   message.success(`「${editingMember.name}」已转为空闲状态，项目信息已清除`);
                   setModalOpen(false);
                   form.resetFields();

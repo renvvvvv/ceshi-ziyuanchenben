@@ -73,22 +73,33 @@ router.post('/', requireAuth, requireRole(['管理者', '编辑者']), asyncHand
     start_date, end_date, it_output,
     business_type, description,
     planned_manpower, city, assigned_member_ids,
+    planned_delivery_date, actual_delivery_date, doc_link,
   } = req.body;
   if (!name || !customer) { res.status(400).json({ error: '项目名称和客户必填' }); return; }
+  // 日期格式校验：拒绝 'Invalid Date' 等脏值落库
+  const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+  for (const [label, v] of [['开始日期', start_date], ['结束日期', end_date], ['计划交付日期', planned_delivery_date], ['实际交付日期', actual_delivery_date]]) {
+    if (v != null && v !== '' && !DATE_RE.test(String(v))) {
+      res.status(400).json({ error: `${label}格式非法（应为 YYYY-MM-DD）：${String(v).slice(0, 20)}` });
+      return;
+    }
+  }
 
   const result = await db.runAsync(
     `INSERT INTO test_projects (
        name, customer, status, manager,
        start_date, end_date, it_output,
        business_type, description,
-       planned_manpower, city, assigned_member_ids
+       planned_manpower, city, assigned_member_ids,
+       planned_delivery_date, actual_delivery_date, doc_link
      )
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id`,
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING id`,
     name, customer, status || '未开始', manager || '',
     start_date || '', end_date || null, it_output || 0,
     business_type || null, description || null,
     planned_manpower || null, city || null,
     assigned_member_ids || null,
+    planned_delivery_date || null, actual_delivery_date || null, doc_link || null,
   );
 
   res.json({ success: true, id: result.lastInsertRowid });
@@ -98,7 +109,17 @@ router.post('/', requireAuth, requireRole(['管理者', '编辑者']), asyncHand
 router.put('/:id', requireAuth, requireRole(['管理者', '编辑者']), asyncHandler(async (req, res) => {
   const id = parseIdOrNull(req.params.id);
   if (id === null) { res.status(400).json({ error: 'id 必须为正整数' }); return; }
-  const partial = partialSetSql(req.body || {}, [
+  // 日期格式校验：拒绝 'Invalid Date' 等脏值落库
+  const b = req.body || {};
+  const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+  for (const key of ['start_date', 'end_date', 'planned_delivery_date', 'actual_delivery_date']) {
+    const v = b[key];
+    if (v != null && v !== '' && !DATE_RE.test(String(v))) {
+      res.status(400).json({ error: `${key} 格式非法（应为 YYYY-MM-DD）：${String(v).slice(0, 20)}` });
+      return;
+    }
+  }
+  const partial = partialSetSql(b, [
     'name', 'customer', 'status', 'manager',
     'start_date', 'end_date', 'it_output',
     'business_type', 'description',

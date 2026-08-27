@@ -153,12 +153,16 @@ function GanttChart({ projects, unit = 'day' }: GanttChartProps) {
     return { globalStart, globalEnd, daysTotal: Math.max(globalEnd.diff(globalStart, 'day'), 1) };
   }, [validProjects]);
 
-  // 自适应每日像素：优先按容器宽平铺（最小 3px/天），上限为该时间单位的默认宽度
+  // 自适应每日像素：按容器宽平铺时必须扣除左侧项目名列与容器内边距，
+  // 否则 totalWidth + LABEL_WIDTH 恒超出容器，横向滚动条永远存在。
+  // 下限取 min(3, base)：year/quarter 单位的基础宽度小于 3 时不能强行抬高。
   const dayWidth = useMemo(() => {
     const base = UNIT_DAY_WIDTH[unit];
     if (containerWidth > 0 && range && range.daysTotal > 0) {
-      const fit = (containerWidth - 16) / range.daysTotal;
-      return Math.max(3, Math.min(base, fit));
+      const usable = containerWidth - LABEL_WIDTH - 56;
+      const fit = usable / range.daysTotal;
+      const floor = Math.min(3, base);
+      return Math.max(floor, Math.min(base, fit));
     }
     return base;
   }, [containerWidth, range, unit]);

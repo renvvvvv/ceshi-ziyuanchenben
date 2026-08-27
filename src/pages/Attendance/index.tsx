@@ -30,7 +30,10 @@ interface AttendanceRow {
 interface AttendanceNode extends AttendanceRow { children?: AttendanceRow[]; }
 type CycleType = 'month' | 'cycle19';
 
-function daysBetween(s: string, e: string) { return dayjs(e).diff(dayjs(s), 'day') + 1; }
+function daysBetween(s: string, e: string) {
+  if (!s || !e) return 0;
+  return dayjs(e).diff(dayjs(s), 'day') + 1;
+}
 function overlapDays(s1: string, e1: string, s2: string, e2: string) {
   const s = dayjs(s1).isAfter(s2) ? s1 : s2;
   const e = dayjs(e1).isBefore(e2) ? e1 : e2;
@@ -273,6 +276,11 @@ function Attendance() {
     teamMembers.forEach((m) => {
       const memberPosition = m.position || POSITION_MAP[m.id] || '测试工程师';
       for (const p of m.projects || []) {
+        // 缺日期的条目算出的应出勤/项目总天数不可靠（dayjs('') 无效、dayjs(undefined)=当下），
+        // 跳过统计；有该周期的人工校准（补录了起止日期）则照常参与
+        const adjKeyPre = `${m.id}-${p.projectName}-${cycleStart}`;
+        const hasAdjDates = attendanceAdjustments[adjKeyPre]?.projectStart && attendanceAdjustments[adjKeyPre]?.projectEnd;
+        if (!hasAdjDates && (!p.startDate || !p.endDate)) continue;
         // 应用人工校准（覆盖项目时间、请假天数、项目级岗位、实际出勤）
         const key = `${m.id}-${p.projectName}-${cycleStart}`;
         const adj = attendanceAdjustments[key];
@@ -852,7 +860,7 @@ function ProjectEntryView(props: {
 }) {
   const { teamMembers, projects, historyProjects, attendanceAdjustments, setAttendanceAdjustments, cycleStart, cycleEnd, cycleLabel, projectOptions } = props;
   const [selectedProject, setSelectedProject] = useState<string>('');
-  const [editing, setEditing] = useState<Record<string, { projectStart?: string; projectEnd?: string; leaveDays?: number; position?: string }>>({});
+  const [editing, setEditing] = useState<Record<string, { projectStart?: string; projectEnd?: string; leaveDays?: number; position?: string; attendDays?: number }>>({});
   const [saving, setSaving] = useState(false);
   const [savedKeys, setSavedKeys] = useState<Set<string>>(new Set());
   // 手动添加到该项目的人员 ID（不在系统关联里、但实际参与了的人）
@@ -945,11 +953,18 @@ function ProjectEntryView(props: {
       const edit = editing[r.memberId];
       if (!edit) return;
       const key = `${r.memberId}-${selectedProject}-${cycleStart}`;
+      // 实际出勤的默认值 = max(应出勤-请假, 0)，录入等于默认值时不视为修改
+      const dutyS = edit.projectStart ?? r.projectStart;
+      const dutyE = edit.projectEnd ?? r.projectEnd;
+      const dutyDays = (dutyS && dutyE) ? daysBetween(dutyS, dutyE) : 0;
+      const attendFallback = Math.max(dutyDays - (edit.leaveDays ?? r.leaveDays ?? 0), 0);
+      const attendChanged = edit.attendDays !== undefined && edit.attendDays !== attendFallback && edit.attendDays !== r.attendDays;
       const hasChange =
         (edit.projectStart !== undefined && edit.projectStart !== r.projectStart) ||
         (edit.projectEnd !== undefined && edit.projectEnd !== r.projectEnd) ||
         (edit.leaveDays !== undefined && edit.leaveDays !== r.leaveDays) ||
-        (edit.position !== undefined && edit.position !== r.position);
+        (edit.position !== undefined && edit.position !== r.position) ||
+        attendChanged;
       if (!hasChange) return;
       const existing = attendanceAdjustments[key];
       adjUpdates[key] = {
@@ -957,7 +972,7 @@ function ProjectEntryView(props: {
         projectEnd: edit.projectEnd ?? existing?.projectEnd ?? r.projectEnd,
         leaveDays: edit.leaveDays ?? existing?.leaveDays ?? r.leaveDays,
         position: edit.position ?? existing?.position ?? r.position,
-        attendDays: existing?.attendDays,
+        attendDays: edit.attendDays ?? existing?.attendDays,
       };
       newSaved.add(r.memberId);
       count++;
@@ -1081,13 +1096,33 @@ function ProjectEntryView(props: {
                     return <span style={{ color: 'rgba(255,255,255,0.6)' }}>{duty}</span>;
                   },
                 },
+                { title: '实际出勤(天)', key: 'attend', width: 110, align: 'center' as const,
+                  render: (_: unknown, r: any) => {
+                    const s = editing[r.memberId]?.projectStart ?? r.projectStart;
+                    const e = editing[r.memberId]?.projectEnd ?? r.projectEnd;
+                    const duty = (s && e) ? daysBetween(s, e) : 0;
+                    // 有录入值用录入值，否则按 应出勤-请假 推算
+                    const leave = editing[r.memberId]?.leaveDays ?? r.leaveDays ?? 0;
+                    const fallback = Math.max(duty - leave, 0);
+                    const entered = editing[r.memberId]?.attendDays ?? r.attendDays;
+                    return (
+                      <InputNumber
+                        size="small" min={0} max={duty || 365}
+                        value={entered != null ? entered : fallback}
+                        onChange={(nv) => setEditing((prev) => ({ ...prev, [r.memberId]: { ...prev[r.memberId], attendDays: nv ?? undefined } }))}
+                        style={{ width: 80 }}
+                      />
+                    );
+                  },
+                },
                 { title: '出勤率', key: 'rate', width: 80, align: 'center' as const,
                   render: (_: unknown, r: any) => {
                     const s = editing[r.memberId]?.projectStart ?? r.projectStart;
                     const e = editing[r.memberId]?.projectEnd ?? r.projectEnd;
                     const duty = (s && e) ? daysBetween(s, e) : 0;
                     const leave = editing[r.memberId]?.leaveDays ?? r.leaveDays ?? 0;
-                    const attend = Math.max(duty - leave, 0);
+                    const entered = editing[r.memberId]?.attendDays ?? r.attendDays;
+                    const attend = entered != null ? Math.min(entered, duty) : Math.max(duty - leave, 0);
                     const rate = duty > 0 ? attend / duty : 0;
                     const pct = (rate * 100).toFixed(0) + '%';
                     const color = rate >= 0.95 ? '#52c41a' : rate >= 0.9 ? '#faad14' : '#ff4d4f';

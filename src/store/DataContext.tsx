@@ -154,6 +154,8 @@ interface DataContextValue {
   // 自动化流程：人员状态管理
   autoProcessMembers: () => void;
   syncMembersFromProjects: () => void;
+  /** 重新从后端拉取全部数据（仪表盘"刷新"按钮用） */
+  reload: () => void;
   attendanceAdjustments: Record<string, AttendanceAdjustment>;
   setAttendanceAdjustments: (updater: Record<string, AttendanceAdjustment> | ((prev: Record<string, AttendanceAdjustment>) => Record<string, AttendanceAdjustment>)) => void;
 }
@@ -229,10 +231,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
   //      - 若 localStorage 有缓存 → 降级到 cache（UI 可用但提示"离线模式"）
   //      - 若无缓存且 USE_MOCK_FALLBACK=true → 用 mock（仅调试）
   //      - 若无缓存且禁用 mock → 标记 error，UI 显示"加载失败"
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
+  const loadFromBackend = useCallback(async () => {
+    try {
+      {
         const [projRes, memRes, histRes, attRes, docsRes] = await Promise.all([
           projectsApi.list({ page: 1, size: 500 }),
           teamMembersApi.list(),
@@ -240,7 +241,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
           attendanceAdjustmentsApi.list(),
           fetch('/api/test-docs', { credentials: 'include' }).then((r) => r.json()).catch(() => null),
         ]);
-        if (cancelled) return;
 
         // 诊断日志
         console.log('[DataContext] 后端加载结果:', {
@@ -291,22 +291,24 @@ export function DataProvider({ children }: { children: ReactNode }) {
         // 全部成功 → 数据源 = api；任意失败 → cache（用 localStorage 兜底）
         const allOk = projRes && memRes && histRes && attRes;
         setDataSource(allOk ? 'api' : 'cache');
-      } catch (err) {
-        console.warn('[DataContext] 后端拉取失败:', err);
-        if (cancelled) return;
-        // 检查 localStorage 是否有缓存数据
-        const hasCache = localStorage.getItem(STORAGE_PREFIX + 'projects');
-        if (hasCache) {
-          setDataSource('cache');
-        } else if (USE_MOCK_FALLBACK) {
-          setDataSource('mock');
-        } else {
-          setDataSource('error');
-        }
       }
-    })();
-    return () => { cancelled = true; };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    } catch (err) {
+      console.warn('[DataContext] 后端拉取失败:', err);
+      // 检查 localStorage 是否有缓存数据
+      const hasCache = localStorage.getItem(STORAGE_PREFIX + 'projects');
+      if (hasCache) {
+        setDataSource('cache');
+      } else if (USE_MOCK_FALLBACK) {
+        setDataSource('mock');
+      } else {
+        setDataSource('error');
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadFromBackend();
+  }, [loadFromBackend]);
 
   // ====== 初始化：自动去重 historyProjects（修复历史数据污染） ======
   useEffect(() => {
@@ -442,9 +444,19 @@ export function DataProvider({ children }: { children: ReactNode }) {
       if (res?.success && res.id) {
         const realId = String(res.id);
         setHistoryProjects((prev) => prev.map((p) => (p.id === project.id ? { ...p, id: realId } : p)));
+        // 阶段数据键同步迁移：archiveProject 先用旧 id 存了 historyPhases，
+        // 本地项目 id 被替换成后端新 id 后，阶段数据必须跟着换键，否则详情页查不到 + 被孤儿清理删除
+        setHistoryPhases((prev) => {
+          if (prev[project.id] && !prev[realId]) {
+            const next = { ...prev, [realId]: prev[project.id] };
+            delete next[project.id];
+            return next;
+          }
+          return prev;
+        });
       }
     });
-  }, [setHistoryProjects]);
+  }, [setHistoryProjects, setHistoryPhases]);
 
   const updateHistoryProject = useCallback((id: string, updates: Partial<HistoricalProject>) => {
     setHistoryProjects((prev) => prev.map((p) => (p.id === id ? { ...p, ...updates } : p)));
@@ -518,14 +530,17 @@ export function DataProvider({ children }: { children: ReactNode }) {
   //   - "已完成"项目保留在 projects 列表（被 Projects 页面过滤掉，但可通过"已完成"Tab 查看）
   //   - 显式归档用 archiveProject(id)，由 Projects 页面"归档到历史"按钮触发
   // 防止 autoProcess 在自身 setState 触发 useEffect 重跑时再次执行（循环依赖保护）
-  const isAutoProcessingRef = useRef(false);
+  // 注意：两个函数必须各用独立锁——共享锁 + setTimeout 异步释放会导致紧随其后
+  // 同步调用的 autoProcessMembers 永远看到锁被占用而直接返回（死代码）
+  const isAutoProcessingProjectsRef = useRef(false);
+  const isAutoProcessingMembersRef = useRef(false);
 
   // 设计变更（2026-07-19 晚）：
   //   - 之前只改前端 state 不调 API → 刷新后从 DB 拉回旧值，用户看到状态变回去
   //   - 现在改完后遍历 changed 调 projectsApi.update / teamMembersApi.update 同步到 DB
   const autoProcessProjects = useCallback(() => {
-    if (isAutoProcessingRef.current) return;
-    isAutoProcessingRef.current = true;
+    if (isAutoProcessingProjectsRef.current) return;
+    isAutoProcessingProjectsRef.current = true;
     try {
       const todayStr = dayjs().format('YYYY-MM-DD');
 
@@ -534,6 +549,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
       const changedIds: string[] = [];
 
       for (const p of projects) {
+        // 无开始日期的项目不参与自动流转（空字符串 <= 今天 恒为 true，会误转状态）
+        if (!p.startDate) { updatedProjects.push(p); continue; }
         if (p.status === '未开始' && p.startDate <= todayStr) {
           if (p.endDate && p.endDate < todayStr) {
             updatedProjects.push({ ...p, status: '已完成' as const, actualDeliveryDate: p.endDate, updatedAt: dayjs().format('YYYY-MM-DD') });
@@ -613,7 +630,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         });
       }
     } finally {
-      setTimeout(() => { isAutoProcessingRef.current = false; }, 0);
+      isAutoProcessingProjectsRef.current = false;
     }
   }, [projects, setProjects, setTeamMembers]);
 
@@ -634,7 +651,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     // 2. 从 projects 移除
     setProjects((prev) => prev.filter((p) => p.id !== id));
 
-    // 3. 转移阶段数据
+    // 3. 转移阶段数据（addHistoryProject 拿到后端真实 id 后会再迁移键）
     if (projectPhases[id]) {
       setHistoryPhases((prev) => ({ ...prev, [id]: projectPhases[id] }));
       setProjectPhases((prev) => {
@@ -644,23 +661,41 @@ export function DataProvider({ children }: { children: ReactNode }) {
       });
     }
 
+    // 4. 清理成员关联：从成员的 projects/currentProjects 移除本项目；
+    //    无其他进行中项目则转空闲（否则成员会永远卡在"测试中"）
+    //    DB 侧同步由 autoProcessMembers / 下次加载兜底
+    const memberIds = project.assignedMemberIds || [];
+    if (memberIds.length > 0) {
+      setTeamMembers((prev) => prev.map((m) => {
+        if (!memberIds.includes(m.id)) return m;
+        const restProjects = (m.projects || []).filter((mp) => mp.projectName !== project.name);
+        const restCurrent = (m.currentProjects || []).filter((cp) => cp !== project.name);
+        const restUpcoming = (m.upcomingProjects || []).filter((up) => up.projectName !== project.name);
+        const newStatus = m.status === '休假' ? m.status
+          : restProjects.length > 0 ? '测试中' as const : '空闲' as const;
+        return { ...m, projects: restProjects, currentProjects: restCurrent, upcomingProjects: restUpcoming, status: newStatus };
+      }));
+    }
+
     return true;
-  }, [projects, projectPhases, addHistoryProject, setProjects, setProjectPhases, setHistoryPhases]);
+  }, [projects, projectPhases, addHistoryProject, setProjects, setProjectPhases, setHistoryPhases, setTeamMembers]);
 
   // ====== 自动化流程：人员状态管理（2026-07-19 晚：同步 DB）======
   const autoProcessMembers = useCallback(() => {
-    if (isAutoProcessingRef.current) return;
+    if (isAutoProcessingMembersRef.current) return;
+    isAutoProcessingMembersRef.current = true;
+    try {
     const todayStr = dayjs().format('YYYY-MM-DD');
 
     setTeamMembers((prevMembers) => {
       const updates: { memberId: string; updates: Record<string, unknown> }[] = [];
 
       const updatedMembers = prevMembers.map((m) => {
-        // 1. 测试中 → 空闲（项目结束日期已过）
+        // 1. 测试中 → 空闲（项目结束日期已过；缺结束日期的项目条目不算已结束，避免误判）
         if (m.status === '测试中') {
           const projects = m.projects || [];
           const allProjectsFinished = projects.length > 0 && projects.every(
-            (p) => p.endDate < todayStr
+            (p) => p.endDate != null && p.endDate !== '' && p.endDate < todayStr
           );
           if (allProjectsFinished) {
             updates.push({ memberId: m.id, updates: { status: '空闲', currentProjects: [] } });
@@ -700,19 +735,27 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
       return updatedMembers;
     });
+    } finally {
+      isAutoProcessingMembersRef.current = false;
+    }
   }, [setTeamMembers]);
 
   // ====== 同步人员项目数据：根据 projects 的 assignedMemberIds + 项目时间自动生成人员的 projects/upcomingProjects/状态 ======
   const syncMembersFromProjects = useCallback(() => {
     const today = dayjs().format('YYYY-MM-DD');
-    // 进行中：非已完成 且 startDate <= today 且 endDate >= today
-    const activeProjs = projects.filter((p) => p.status !== '已完成' && p.startDate <= today && p.endDate >= today);
-    // 未开始：非已完成 且 startDate > today
-    const upcomingProjs = projects.filter((p) => p.status !== '已完成' && p.startDate > today);
+    // 日期有效的项目才参与同步（无日期项目的日期比较结果不可靠，会把测试中成员误清空）
+    const dated = projects.filter((p) => p.status !== '已完成' && p.startDate);
+    // 进行中：startDate <= today 且（endDate 缺失视为进行中 或 endDate >= today）；状态为"测试中"的无日期项目也视为进行中
+    const activeProjs = dated.filter((p) =>
+      p.startDate <= today && (!p.endDate || p.endDate >= today));
+    const undatedActive = projects.filter((p) => p.status === '测试中' && !p.startDate);
+    const activeAll = [...activeProjs, ...undatedActive];
+    // 未开始：startDate > today
+    const upcomingProjs = dated.filter((p) => p.startDate > today);
 
     setTeamMembers((prev) =>
       prev.map((m) => {
-        const memberActive = activeProjs.filter((p) => (p.assignedMemberIds || []).includes(m.id));
+        const memberActive = activeAll.filter((p) => (p.assignedMemberIds || []).includes(m.id));
         const memberUpcoming = upcomingProjs.filter((p) => (p.assignedMemberIds || []).includes(m.id));
 
         const newProjects = memberActive.map((p) => ({ projectName: p.name, startDate: p.startDate, endDate: p.endDate }));
@@ -780,12 +823,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
     autoProcessProjects,
     autoProcessMembers,
     syncMembersFromProjects,
+    reload: loadFromBackend,
     attendanceAdjustments,
     setAttendanceAdjustments,
   }), [
     dataSource, projects, setProjects, addProject, updateProject, deleteProject,
     getProjectById, archiveProject, historyProjects, setHistoryProjects,
-    addHistoryProject, updateHistoryProject, deleteHistoryProject, getHistoryProjectById,
+    addHistoryProject, updateHistoryProject, deleteHistoryProject, getHistoryProjectById, loadFromBackend,
     teamMembers, setTeamMembers, addTeamMember, updateTeamMember, deleteTeamMember,
     testDocs, setTestDocs, addTestDoc, updateTestDoc, deleteTestDoc,
     projectPhases, setProjectPhases, historyPhases, setHistoryPhases,

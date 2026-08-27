@@ -406,29 +406,32 @@ export function dbRowToProject(row: Record<string, unknown>): Project {
 
 /**
  * 前端 Project → 后端接收 body
+ *
+ * 关键约束：只携带"显式提供"的字段（undefined 的不生成键）。
+ * 后端 PUT 是按"键存在即更新"的部分更新——如果在这里给缺省字段填空值默认值
+ * （如 start_date: p.startDate || ''），"只改状态"的更新会把日期等字段全部清空。
+ * 创建（POST）需要默认值时，由调用方先补全对象再调用。
  */
 export function projectToDbBody(p: Partial<Project>): Record<string, unknown> {
-  const body: Record<string, unknown> = {
-    name: p.name,
-    customer: p.customer,
-    status: p.status || '未开始',
-    manager: p.manager || '',
-    start_date: p.startDate || '',
-    end_date: p.endDate || null,
-    it_output: p.itOutput ?? 0,
-    business_type: p.businessType || null,
-    description: p.description || null,
-    planned_manpower: p.plannedManpower ?? null,
-    city: p.city || null,
-    assigned_member_ids: p.assignedMemberIds && p.assignedMemberIds.length > 0
-      ? JSON.stringify(p.assignedMemberIds) : null,
-    planned_delivery_date: p.plannedDeliveryDate ?? null,
-    actual_delivery_date: p.actualDeliveryDate ?? null,
-    doc_link: p.docLink ?? null,
-  };
-  for (const k of Object.keys(body)) {
-    if (body[k] === undefined) delete body[k];
+  const body: Record<string, unknown> = {};
+  if (p.name !== undefined) body.name = p.name;
+  if (p.customer !== undefined) body.customer = p.customer;
+  if (p.status !== undefined) body.status = p.status;
+  if (p.manager !== undefined) body.manager = p.manager;
+  if (p.startDate !== undefined) body.start_date = p.startDate || null;
+  if (p.endDate !== undefined) body.end_date = p.endDate || null;
+  if (p.itOutput !== undefined) body.it_output = p.itOutput;
+  if (p.businessType !== undefined) body.business_type = p.businessType || null;
+  if (p.description !== undefined) body.description = p.description || null;
+  if (p.plannedManpower !== undefined) body.planned_manpower = p.plannedManpower;
+  if (p.city !== undefined) body.city = p.city || null;
+  if (p.assignedMemberIds !== undefined) {
+    body.assigned_member_ids = p.assignedMemberIds && p.assignedMemberIds.length > 0
+      ? JSON.stringify(p.assignedMemberIds) : null;
   }
+  if (p.plannedDeliveryDate !== undefined) body.planned_delivery_date = p.plannedDeliveryDate || null;
+  if (p.actualDeliveryDate !== undefined) body.actual_delivery_date = p.actualDeliveryDate || null;
+  if (p.docLink !== undefined) body.doc_link = p.docLink || null;
   return body;
 }
 

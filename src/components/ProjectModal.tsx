@@ -22,7 +22,8 @@ function ProjectModal({ open, project, teamMembers, onCancel, onSubmit }: Projec
       if (project) {
         form.setFieldsValue({
           ...project,
-          startDate: dayjs(project.startDate),
+          // 空字符串日期转 dayjs 会得到 Invalid 对象（绕过 required 校验且 format 产出 "Invalid Date" 落库），统一转 undefined
+          startDate: project.startDate ? dayjs(project.startDate) : undefined,
           endDate: project.endDate ? dayjs(project.endDate) : undefined,
           plannedDeliveryDate: project.plannedDeliveryDate ? dayjs(project.plannedDeliveryDate) : undefined,
           actualDeliveryDate: project.actualDeliveryDate ? dayjs(project.actualDeliveryDate) : undefined,
@@ -38,12 +39,17 @@ function ProjectModal({ open, project, teamMembers, onCancel, onSubmit }: Projec
   const handleOk = async () => {
     try {
       const values = await form.validateFields();
+      // 双保险：Invalid Date 对象能通过 required 校验（非空对象），format 前先拦截
+      if (values.startDate && !values.startDate.isValid?.()) {
+        form.setFields([{ name: 'startDate', errors: ['开始日期无效，请重新选择'] }]);
+        return;
+      }
       const data: Project = {
         ...values,
-        startDate: values.startDate.format('YYYY-MM-DD'),
-        endDate: values.endDate ? values.endDate.format('YYYY-MM-DD') : '',
-        plannedDeliveryDate: values.plannedDeliveryDate ? values.plannedDeliveryDate.format('YYYY-MM-DD') : '',
-        actualDeliveryDate: values.actualDeliveryDate ? values.actualDeliveryDate.format('YYYY-MM-DD') : '',
+        startDate: values.startDate ? values.startDate.format('YYYY-MM-DD') : '',
+        endDate: values.endDate && values.endDate.isValid?.() ? values.endDate.format('YYYY-MM-DD') : '',
+        plannedDeliveryDate: values.plannedDeliveryDate && values.plannedDeliveryDate.isValid?.() ? values.plannedDeliveryDate.format('YYYY-MM-DD') : '',
+        actualDeliveryDate: values.actualDeliveryDate && values.actualDeliveryDate.isValid?.() ? values.actualDeliveryDate.format('YYYY-MM-DD') : '',
         assignedMemberIds: targetKeys,
       };
       onSubmit(data);

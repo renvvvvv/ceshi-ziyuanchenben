@@ -38,7 +38,7 @@ function Dashboard() {
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>(['未开始', '测试中']);
   // 甘特图时间单位：天/周/月/季/年
   const [ganttUnit, setGanttUnit] = useState<GanttUnit>('day');
-  const { projects, historyProjects, regionMwOutput, autoProcessProjects, autoProcessMembers, dataSource } = useData();
+  const { projects, historyProjects, regionMwOutput, autoProcessProjects, autoProcessMembers, dataSource, reload } = useData();
   const navigate = useNavigate();
 
   // ===== 自动化流程：根据日期自动转换项目状态 =====
@@ -58,11 +58,16 @@ function Dashboard() {
     return () => clearInterval(timer);
   }, [autoProcessProjects, autoProcessMembers]);
 
-  const handleRefresh = () => {
+  const handleRefresh = async () => {
     setLoading(true);
-    autoProcessProjects();
-    autoProcessMembers();
-    setTimeout(() => setLoading(false), 300);
+    try {
+      // 真正重新拉取后端数据（之前只跑本地状态机，别人改的数据看不到）
+      await reload();
+      autoProcessProjects();
+      autoProcessMembers();
+    } finally {
+      setLoading(false);
+    }
   };
 
   // ===== 显示屏模块：进行中 + 即将开始 + 逾期预警 =====
@@ -73,9 +78,10 @@ function Dashboard() {
     // 进行中：status === '测试中'
     const activeProjects = projects.filter((p) => p.status === '测试中');
 
-    // 即将开始：status === '未开始' 且 startDate 在 10 天内
+    // 即将开始：status === '未开始' 且 startDate 在 10 天内（无日期/无效日期不参与，避免 NaN 天数）
     const upcomingProjects = projects.filter((p) => {
       if (p.status !== '未开始') return false;
+      if (!p.startDate || !dayjs(p.startDate).isValid()) return false;
       const start = dayjs(p.startDate);
       return !start.isBefore(today, 'day') && !start.isAfter(tenDaysLater, 'day');
     });
@@ -116,11 +122,12 @@ function Dashboard() {
   // ===== 筛选后的项目（用于甘特图和环形图） =====
   const filteredProjects = useMemo(() => {
     const all = [...projects, ...historyProjects];
-    // 按 ID 去重，保留第一个
+    // 按来源前缀去重（两表独立自增 id 会撞号，纯 id 去重会静默丢历史项目）
     const seen = new Set<string>();
     const unique = all.filter((p) => {
-      if (seen.has(p.id)) return false;
-      seen.add(p.id);
+      const key = (historyProjects.includes(p) ? 'h-' : 'p-') + p.id;
+      if (seen.has(key)) return false;
+      seen.add(key);
       return true;
     });
     const result = unique.filter((p) => selectedStatuses.includes(p.status));
@@ -130,15 +137,19 @@ function Dashboard() {
   }, [projects, historyProjects, selectedStatuses]);
 
   // 动态计算 KPI 数据
+  // 口径修正（2026-08-27）：2026-07-19 起"已完成"项目保留在 projects（手动归档才进历史），
+  // 已完成数/总IT产出/平均人力必须合并 projects + historyProjects 统计，否则全为 0
   const kpiData = useMemo(() => {
     const notStartedProjects = projects.filter((p) => p.status === '未开始').length;
-    const completedProjects = historyProjects.filter((p) => p.status === '已完成').length;
-    const totalItOutput = historyProjects
-      .filter((p) => p.status === '已完成')
-      .reduce((sum, p) => sum + (p.itOutput || 0), 0);
+    const completed = [
+      ...projects.filter((p) => p.status === '已完成'),
+      ...historyProjects.filter((p) => p.status === '已完成'),
+    ];
+    const completedProjects = completed.length;
+    const totalItOutput = completed.reduce((sum, p) => sum + (p.itOutput || 0), 0);
 
     // 平均投入人力：已完成项目的 plannedManpower 平均值
-    const completedWithManpower = historyProjects.filter((p) => p.status === '已完成' && (p.plannedManpower || 0) > 0);
+    const completedWithManpower = completed.filter((p) => (p.plannedManpower || 0) > 0);
     const avgManpower = completedWithManpower.length > 0
       ? Math.round(completedWithManpower.reduce((sum, p) => sum + (p.plannedManpower || 0), 0) / completedWithManpower.length)
       : 0;
