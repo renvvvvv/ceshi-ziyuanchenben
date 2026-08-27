@@ -259,6 +259,61 @@ export function requireRole(roles: SessionData['role'][]) {
 }
 
 // ============================================================
+// 密码安全：scrypt 哈希存储（对存量明文密码向后兼容，登录成功后自动升级）
+// ============================================================
+const PW_PREFIX = 'scrypt$';
+function hashPassword(pw: string): string {
+  const salt = crypto.randomBytes(16).toString('hex');
+  const hash = crypto.scryptSync(pw, salt, 32).toString('hex');
+  return `${PW_PREFIX}${salt}$${hash}`;
+}
+function verifyPassword(inputPw: string, stored: string): boolean {
+  if (stored.startsWith(PW_PREFIX)) {
+    const parts = stored.split('$');
+    if (parts.length !== 3) return false;
+    const [, salt, hash] = parts;
+    const calc = crypto.scryptSync(inputPw, salt, 32).toString('hex');
+    return calc.length === hash.length && crypto.timingSafeEqual(Buffer.from(calc), Buffer.from(hash));
+  }
+  // 存量明文（旧数据）：直接比对，登录成功后由调用方升级为哈希
+  return inputPw === stored;
+}
+
+// ============================================================
+// 登录限流：每 IP 5 分钟内最多 10 次失败尝试（防暴力破解）
+// ============================================================
+const loginFailures = new Map<string, { count: number; resetAt: number }>();
+const LOGIN_MAX_ATTEMPTS = 10;
+const LOGIN_WINDOW_MS = 5 * 60 * 1000;
+function isLoginRateLimited(ip: string): boolean {
+  const now = Date.now();
+  const rec = loginFailures.get(ip);
+  if (!rec || now > rec.resetAt) return false;
+  return rec.count >= LOGIN_MAX_ATTEMPTS;
+}
+function recordLoginFailure(ip: string): void {
+  const now = Date.now();
+  const rec = loginFailures.get(ip);
+  if (!rec || now > rec.resetAt) {
+    loginFailures.set(ip, { count: 1, resetAt: now + LOGIN_WINDOW_MS });
+  } else {
+    rec.count++;
+  }
+}
+function clearLoginFailures(ip: string): void {
+  loginFailures.delete(ip);
+}
+
+/** 吊销指定用户的全部 session（改角色/禁用账号后立即生效，不必等 24h 过期） */
+function revokeUserSessions(match: (s: SessionData) => boolean): void {
+  let changed = false;
+  for (const [tok, s] of sessions) {
+    if (match(s)) { sessions.delete(tok); changed = true; }
+  }
+  if (changed) persistSessions();
+}
+
+// ============================================================
 // POST /api/auth/login — 账号密码登录，颁发 token
 // ============================================================
 router.post('/login', asyncHandler(async (req, res) => {
@@ -267,15 +322,29 @@ router.post('/login', asyncHandler(async (req, res) => {
     res.status(400).json({ success: false, error: '账号和密码必填' });
     return;
   }
+  // 登录限流：防暴力破解
+  const clientIp = (req as any).ip || req.socket?.remoteAddress || 'unknown';
+  if (isLoginRateLimited(clientIp)) {
+    res.status(429).json({ success: false, error: '尝试次数过多，请 5 分钟后再试' });
+    return;
+  }
   const local = localUsers[username];
-  if (!local || local.password !== password) {
+  if (!local || !verifyPassword(password, local.password)) {
+    recordLoginFailure(clientIp);
     res.status(401).json({ success: false, error: '账号或密码错误' });
     return;
   }
   if (!local.active) {
+    recordLoginFailure(clientIp);
     res.status(403).json({ success: false, error: '账号已被禁用，请联系管理员' });
     return;
   }
+  // 存量明文密码自动升级为 scrypt 哈希（透明迁移）
+  if (!local.password.startsWith(PW_PREFIX)) {
+    local.password = hashPassword(password);
+    persistLocalUsers();
+  }
+  clearLoginFailures(clientIp);
   // 有效角色：优先 manualRole（管理员覆盖），否则用默认 role
   const effectiveRole = local.manualRole || local.role;
   // 生成 session token
@@ -379,7 +448,7 @@ router.get('/me', requireAuth, (req, res) => {
 // GET /api/auth/users — 列出可用账号（方便前端初始化）
 // 注意：此端点只返回 active 账密用户，不返回密码
 // ============================================================
-router.get('/users', (_req, res) => {
+router.get('/users', requireAuth, (_req, res) => {
   const users = Object.values(localUsers)
     .filter(u => u.active)
     .map(u => ({
@@ -792,6 +861,8 @@ router.put('/accounts/:type/:id', requireAuth, requireRole(['管理者']), (req,
     if (manualRole !== undefined) rec.manualRole = manualRole || undefined;
     if (manualPerms !== undefined) rec.manualPerms = manualPerms || undefined;
     persistFeishuUsers();
+    // 立即吊销该用户已有 session，新角色/权限下次登录生效
+    revokeUserSessions((s) => s.username === `feishu:${id}` || s.userId === id);
   } else if (type === 'local') {
     const rec = localUsers[id];
     if (!rec) {
@@ -803,6 +874,8 @@ router.put('/accounts/:type/:id', requireAuth, requireRole(['管理者']), (req,
     if (typeof active === 'boolean') rec.active = active;
     if (typeof name === 'string' && name.trim()) rec.name = name.trim();
     persistLocalUsers();
+    // 立即吊销该用户已有 session（禁用/降权立即生效，不必等 24h 过期）
+    revokeUserSessions((s) => s.username === id);
   } else {
     res.status(400).json({ success: false, error: 'type 必须是 feishu 或 local' });
     return;
@@ -834,8 +907,8 @@ router.post('/accounts/local', requireAuth, requireRole(['管理者']), (req, re
   }
   const rec: LocalUserRecord = {
     username,
-    password,
-    userId: `u${Date.now()}`,
+    password: hashPassword(password),
+    userId: `u${Date.now()}_${crypto.randomBytes(4).toString('hex')}`,
     name,
     role,
     active: true,

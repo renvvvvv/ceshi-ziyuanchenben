@@ -8,7 +8,8 @@ import { Router } from 'express';
 import multer from 'multer';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { existsSync, mkdirSync } from 'fs';
+import { existsSync, mkdirSync, unlinkSync } from 'fs';
+import { randomUUID } from 'crypto';
 import db from '../database.js';
 import { requireAuth, requireRole } from './auth.js';
 
@@ -26,9 +27,9 @@ if (!existsSync(UPLOAD_DIR)) {
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),
   filename: (_req, file, cb) => {
-    // 安全文件名：去掉路径，保留扩展名
+    // 安全文件名：去掉路径，保留扩展名；加随机前缀防同毫秒并发覆盖
     const safeName = file.originalname.replace(/[\\/]/g, '_').replace(/\s+/g, '_');
-    cb(null, `${Date.now()}_${safeName}`);
+    cb(null, `${Date.now()}_${randomUUID().slice(0, 8)}_${safeName}`);
   },
 });
 const upload = multer({
@@ -66,17 +67,19 @@ router.get('/', requireAuth, async (_req, res) => {
  * POST /api/test-docs/upload
  * multipart 上传：file(文件) + title + category + description
  */
-router.post('/upload', requireAuth, upload.single('file'), async (req, res) => {
+router.post('/upload', requireAuth, requireRole(['管理者', '编辑者']), upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ success: false, message: '未收到文件' });
     }
     const { title, category, description } = req.body;
     if (!title || !category) {
+      // 校验失败也要清理已落盘的文件，避免孤儿文件堆积
+      try { unlinkSync(req.file.path); } catch {}
       return res.status(400).json({ success: false, message: '标题和分类必填' });
     }
 
-    const id = 'doc_' + Date.now();
+    const id = 'doc_' + Date.now() + '_' + randomUUID().slice(0, 8);
     const fileName = req.file.originalname;
     const fileSize = formatFileSize(req.file.size);
     const fileType = (fileName.split('.').pop() || '').toLowerCase();
@@ -99,6 +102,8 @@ router.post('/upload', requireAuth, upload.single('file'), async (req, res) => {
       },
     });
   } catch (err: any) {
+    // DB 失败时同样清理已落盘文件
+    if (req.file) { try { unlinkSync(req.file.path); } catch {} }
     console.error('[TestDocs] 上传失败:', err.message);
     res.status(500).json({ success: false, message: err.message });
   }

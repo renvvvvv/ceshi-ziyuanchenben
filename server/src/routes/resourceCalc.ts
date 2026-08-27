@@ -5,6 +5,7 @@ import { requireAuth, requireRole } from './auth.js';
 import { fileURLToPath } from 'url';
 import { writeFileSync, unlinkSync } from 'fs';
 import { tmpdir } from 'os';
+import { randomUUID } from 'crypto';
 import db from '../database.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -24,7 +25,8 @@ const asyncHandler = (fn: (req: Request, res: Response, next: NextFunction) => P
 
 function runPy(jsonInput: Record<string, unknown>): Promise<string> {
   return new Promise((resolve, reject) => {
-    const tmpFile = join(tmpdir(), `rc_${Date.now()}.json`);
+    // 随机后缀防同毫秒并发共用临时文件互相覆盖
+    const tmpFile = join(tmpdir(), `rc_${Date.now()}_${randomUUID().slice(0, 8)}.json`);
     writeFileSync(tmpFile, JSON.stringify(jsonInput), 'utf-8');
     const script = join(SCRIPTS_DIR, 'resource_plan.py');
     execFile(
@@ -68,6 +70,18 @@ router.post('/', requireAuth, asyncHandler(async (req, res) => {
   const tc = input.total_cabinets || segs.reduce((s: number, seg: { count: number }) => s + seg.count, 0);
   const cp = input.cabinet_power || (segs.length === 1 ? segs[0].power : 0);
 
+  // 校验 it_transformers / power_transformers 格式（必须在调 Python 和写 DB 之前，避免无效请求消耗子进程并污染历史表）
+  const validateTransformers = (val: unknown): val is [number, number][] =>
+    Array.isArray(val) && val.every((t) => Array.isArray(t) && t.length >= 2 && typeof t[0] === 'number' && typeof t[1] === 'number');
+  if (!validateTransformers(input.it_transformers)) {
+    res.status(400).json({ error: 'it_transformers 必须为 [count, capacity][] 数组' });
+    return;
+  }
+  if (!validateTransformers(input.power_transformers)) {
+    res.status(400).json({ error: 'power_transformers 必须为 [count, capacity][] 数组' });
+    return;
+  }
+
   const pyInput: Record<string, unknown> = {
     total_mw: input.total_mw,
     total_duration: input.total_duration,
@@ -109,18 +123,6 @@ router.post('/', requireAuth, asyncHandler(async (req, res) => {
     JSON.stringify(report),
   );
 
-  // 校验 it_transformers / power_transformers 格式，避免 reduce 解构抛错
-  const validateTransformers = (val: unknown): val is [number, number][] =>
-    Array.isArray(val) && val.every((t) => Array.isArray(t) && t.length >= 2 && typeof t[0] === 'number' && typeof t[1] === 'number');
-  if (!validateTransformers(input.it_transformers)) {
-    res.status(400).json({ error: 'it_transformers 必须为 [count, capacity][] 数组' });
-    return;
-  }
-  if (!validateTransformers(input.power_transformers)) {
-    res.status(400).json({ error: 'power_transformers 必须为 [count, capacity][] 数组' });
-    return;
-  }
-
   const itCap = input.it_transformers.reduce((s: number, [c, n]: [number, number]) => s + c * n, 0);
   const pue = itCap > 0 ? input.total_mw / itCap : 1.3;
 
@@ -136,6 +138,11 @@ router.post('/batch', requireAuth, asyncHandler(async (req, res) => {
 
   if (!Array.isArray(inputs) || inputs.length === 0) {
     res.status(400).json({ error: '缺少输入数组（需 inputs 或 calculations 字段）' });
+    return;
+  }
+  // 批量上限：防止一次请求起上千个 Python 子进程拖垮服务
+  if (inputs.length > 200) {
+    res.status(400).json({ error: `单次群算最多 200 条（当前 ${inputs.length} 条），请分批提交` });
     return;
   }
 
@@ -202,7 +209,7 @@ router.post('/batch', requireAuth, asyncHandler(async (req, res) => {
 }));
 
 /** GET /api/resource-calc/history — 查询历史（已分组） */
-router.get('/history', asyncHandler(async (req, res) => {
+router.get('/history', requireAuth, asyncHandler(async (req, res) => {
   const page = parseInt(req.query.page as string) || 1;
   const size = parseInt(req.query.size as string) || 20;
   const filterDate = req.query.date as string || '';
@@ -240,7 +247,7 @@ router.get('/history', asyncHandler(async (req, res) => {
 }));
 
 /** GET /api/resource-calc/history/batch/:batchId */
-router.get('/history/batch/:batchId', asyncHandler(async (req, res) => {
+router.get('/history/batch/:batchId', requireAuth, asyncHandler(async (req, res) => {
   const rows = await db.allAsync(
     `SELECT id, total_mw, total_duration, cabinet_power, it_transformers, power_transformers,
     total_cabinets, ac_type, peak_staff, total_man_days, result_json, created_at
@@ -251,7 +258,7 @@ router.get('/history/batch/:batchId', asyncHandler(async (req, res) => {
 }));
 
 /** GET /api/resource-calc/history/:id */
-router.get('/history/:id', asyncHandler(async (req, res) => {
+router.get('/history/:id', requireAuth, asyncHandler(async (req, res) => {
   const row = await db.getAsync('SELECT * FROM resource_calc_history WHERE id=$1', req.params.id);
   if (!row) { res.status(404).json({ error: '记录不存在' }); return; }
   res.json({ success: true, data: row });

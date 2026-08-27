@@ -22,6 +22,24 @@ function parseIdOrNull(raw: string): number | null {
   return n;
 }
 
+/**
+ * 构造部分更新 SET 子句：只更新请求体中实际携带的字段（键存在于 body）。
+ * 缺省字段保持数据库原值——避免部分更新场景（如自动状态流转只传 status）
+ * 把 NOT NULL 列写成 NULL 导致 500，或把其他字段意外清空。
+ */
+function partialSetSql(body: Record<string, unknown>, fields: string[]): { setSql: string; values: unknown[] } | null {
+  const sets: string[] = [];
+  const values: unknown[] = [];
+  for (const f of fields) {
+    if (f in body) {
+      values.push(body[f] ?? null);
+      sets.push(`${f}=$${values.length}`);
+    }
+  }
+  if (sets.length === 0) return null;
+  return { setSql: sets.join(', '), values };
+}
+
 /** 限制分页参数边界 */
 function clampPageSize(rawPage: unknown, rawSize: unknown): { page: number; size: number; offset: number } {
   const page = Math.max(1, parseInt(String(rawPage ?? '1'), 10) || 1);
@@ -76,34 +94,23 @@ router.post('/', requireAuth, requireRole(['管理者', '编辑者']), asyncHand
   res.json({ success: true, id: result.lastInsertRowid });
 }));
 
-/** PUT /api/projects/:id — 更新项目 */
+/** PUT /api/projects/:id — 更新项目（部分更新：只改携带的字段，缺省保持原值） */
 router.put('/:id', requireAuth, requireRole(['管理者', '编辑者']), asyncHandler(async (req, res) => {
   const id = parseIdOrNull(req.params.id);
   if (id === null) { res.status(400).json({ error: 'id 必须为正整数' }); return; }
-  const {
-    name, customer, status, manager,
-    start_date, end_date, it_output,
-    business_type, description,
-    planned_manpower, city, assigned_member_ids,
-    planned_delivery_date, actual_delivery_date, doc_link,
-  } = req.body;
+  const partial = partialSetSql(req.body || {}, [
+    'name', 'customer', 'status', 'manager',
+    'start_date', 'end_date', 'it_output',
+    'business_type', 'description',
+    'planned_manpower', 'city', 'assigned_member_ids',
+    'planned_delivery_date', 'actual_delivery_date', 'doc_link',
+  ]);
+  if (!partial) { res.status(400).json({ error: '没有可更新的字段' }); return; }
+  partial.values.push(id);
   const result = await db.runAsync(
-    `UPDATE test_projects SET
-       name=$1, customer=$2, status=$3, manager=$4,
-       start_date=$5, end_date=$6, it_output=$7,
-       business_type=$8, description=$9,
-       planned_manpower=$10, city=$11, assigned_member_ids=$12,
-       planned_delivery_date=$13, actual_delivery_date=$14, doc_link=$15,
-       updated_at=NOW()
-     WHERE id=$16 RETURNING id`,
-    name, customer, status, manager,
-    start_date, end_date, it_output,
-    business_type, description,
-    planned_manpower, city, assigned_member_ids,
-    planned_delivery_date ?? null,
-    actual_delivery_date ?? null,
-    doc_link ?? null,
-    id,
+    `UPDATE test_projects SET ${partial.setSql}, updated_at=NOW()
+     WHERE id=$${partial.values.length} RETURNING id`,
+    ...partial.values,
   );
   if (result.changes === 0) { res.status(404).json({ error: '项目不存在' }); return; }
   res.json({ success: true, id: result.lastInsertRowid });
@@ -229,28 +236,18 @@ router.post('/members', requireAuth, requireRole(['管理者', '编辑者']), as
 router.put('/members/:id', requireAuth, requireRole(['管理者', '编辑者']), asyncHandler(async (req, res) => {
   const id = parseIdOrNull(req.params.id);
   if (id === null) { res.status(400).json({ error: 'id 必须为正整数' }); return; }
-  const { name, employee_id, status, skills, current_projects, email, phone, position, projects, upcoming_projects, leave_start_date, leave_end_date } = req.body;
+  // 部分更新：只改携带的字段（如考勤模块只改 position），避免把姓名/状态等意外清空
+  const partial = partialSetSql(req.body || {}, [
+    'name', 'employee_id', 'status', 'skills', 'current_projects',
+    'email', 'phone', 'position', 'projects', 'upcoming_projects',
+    'leave_start_date', 'leave_end_date',
+  ]);
+  if (!partial) { res.status(400).json({ error: '没有可更新的字段' }); return; }
+  partial.values.push(id);
   const result = await db.runAsync(
-    `UPDATE team_members SET
-       name=$1, employee_id=$2, status=$3,
-       skills=$4, current_projects=$5,
-       email=$6, phone=$7,
-       position=$8, projects=$9, upcoming_projects=$10,
-       leave_start_date=$11, leave_end_date=$12
-     WHERE id=$13 RETURNING id`,
-    name,
-    employee_id,
-    status || '空闲',
-    JSON.stringify(skills || []),
-    JSON.stringify(current_projects || []),
-    email || null,
-    phone || null,
-    position ?? null,
-    JSON.stringify(projects || []),
-    JSON.stringify(upcoming_projects || []),
-    leave_start_date ?? null,
-    leave_end_date ?? null,
-    id,
+    `UPDATE team_members SET ${partial.setSql}
+     WHERE id=$${partial.values.length} RETURNING id`,
+    ...partial.values,
   );
   if (result.changes === 0) { res.status(404).json({ error: '成员不存在' }); return; }
   res.json({ success: true, id: result.lastInsertRowid, changes: result.changes });
@@ -265,38 +262,21 @@ router.delete('/members/:id', requireRole(['管理者']), asyncHandler(async (re
   res.json({ success: true });
 }));
 
-/** PUT /api/projects/history/:id — 更新历史项目（2026-07-19 补全字段） */
+/** PUT /api/projects/history/:id — 更新历史项目（部分更新：只改携带的字段） */
 router.put('/history/:id', requireAuth, requireRole(['管理者', '编辑者']), asyncHandler(async (req, res) => {
   const id = parseIdOrNull(req.params.id);
   if (id === null) { res.status(400).json({ error: 'id 必须为正整数' }); return; }
-  const {
-    name, it_output, start_date, end_date, customer, doc_link,
-    city, manager, status, planned_delivery_date, actual_delivery_date,
-    planned_manpower, business_type, description,
-  } = req.body;
+  const partial = partialSetSql(req.body || {}, [
+    'name', 'it_output', 'start_date', 'end_date', 'customer', 'doc_link',
+    'city', 'manager', 'status', 'planned_delivery_date', 'actual_delivery_date',
+    'planned_manpower', 'business_type', 'description',
+  ]);
+  if (!partial) { res.status(400).json({ error: '没有可更新的字段' }); return; }
+  partial.values.push(id);
   const result = await db.runAsync(
-    `UPDATE historical_projects SET
-       name=$1, it_output=$2, start_date=$3,
-       end_date=$4, customer=$5, doc_link=$6,
-       city=$7, manager=$8, status=$9,
-       planned_delivery_date=$10, actual_delivery_date=$11,
-       planned_manpower=$12, business_type=$13, description=$14
-     WHERE id=$15 RETURNING id`,
-    name,
-    it_output ?? 0,
-    start_date || '',
-    end_date || '',
-    customer || '',
-    doc_link || null,
-    city || null,
-    manager || null,
-    status || '已完成',
-    planned_delivery_date || null,
-    actual_delivery_date || null,
-    planned_manpower ?? null,
-    business_type || null,
-    description || null,
-    id,
+    `UPDATE historical_projects SET ${partial.setSql}
+     WHERE id=$${partial.values.length} RETURNING id`,
+    ...partial.values,
   );
   if (result.changes === 0) { res.status(404).json({ error: '历史项目不存在' }); return; }
   res.json({ success: true, id: result.lastInsertRowid, changes: result.changes });

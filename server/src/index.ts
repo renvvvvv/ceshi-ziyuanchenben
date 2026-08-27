@@ -57,9 +57,8 @@ app.get('/api/health/deep', async (_req, res) => {
       'resource_calc_history',
       'kb_documents',
       'attendance_adjustments',
-      'learned_corrections',
-      'users',
-      'sessions',
+      'test_docs',
+      'knowledge_embeddings',
     ];
     const results: Array<{ table: string; rowCount: number; lastModified: string | null }> = [];
     for (const table of tables) {

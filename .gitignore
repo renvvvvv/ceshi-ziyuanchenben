@@ -15,5 +15,9 @@ vite.config.ts.timestamp-*
 # 学习纠错库（运行时生成，每台服务器独立）
 data/learned-corrections.json
 
+# 遗留的 SQLite 死库（已迁移到 PostgreSQL，不再使用）
+data/platform.db
+*.db
+
 # 服务器数据备份（手动同步，不入库）
 backups/

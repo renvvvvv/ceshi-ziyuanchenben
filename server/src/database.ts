@@ -19,7 +19,7 @@ const DB_CONFIG = {
 
 let pool: Pool | null = null;
 
-// ============ 兼容旧 API 的 wrapper（模拟 better-sqlite3 接口） ============
+// ============ PG 数据库封装（提供 async 方法，? → $N 占位符自动转换） ============
 
 interface Stmt {
   run: (...params: unknown[]) => { changes: number; lastInsertRowid: number };

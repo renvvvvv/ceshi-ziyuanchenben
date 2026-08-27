@@ -36,7 +36,7 @@ router.get('/:id', asyncHandler(async (req, res) => {
 }));
 
 /** POST /api/kb — 创建 KB 文档 */
-router.post('/', requireAuth, asyncHandler(async (req, res) => {
+router.post('/', requireAuth, requireRole(['管理者', '编辑者']), asyncHandler(async (req, res) => {
   const { parent_id, title, content_md, external_url, sort_order } = req.body || {};
   if (!title) {
     res.status(400).json({ error: '标题必填' });
@@ -65,7 +65,7 @@ router.post('/', requireAuth, asyncHandler(async (req, res) => {
 }));
 
 /** PUT /api/kb/:id — 更新 KB 文档 */
-router.put('/:id', requireAuth, asyncHandler(async (req, res) => {
+router.put('/:id', requireAuth, requireRole(['管理者', '编辑者']), asyncHandler(async (req, res) => {
   const id = parseIdOrNull(req.params.id);
   if (id === null) { res.status(400).json({ error: 'id 必须为正整数' }); return; }
   const { title, content_md, external_url, sort_order, parent_id } = req.body || {};
