@@ -50,7 +50,10 @@ function genId(): string {
 
 /**
  * 归一化 data JSONB：10 个子模块必须是数组；cert 三段补全。
- * 数值字段尽力转 number（原工具存过字符串）。返回 null 表示结构非法。
+ * 含旧格式迁移（对齐原工具 ensureProjectFields/ensurePersonnelLM 语义）：
+ *  - personnel 旧版只有 count+division 文本 → 解析出 lead/member（2026-08-22 改版前的备份）
+ *  - staff 旧版缺 total/role → total=survey+retest+test，role 按 post 派生
+ *  - labor 缺 workersCustom → false
  */
 function sanitizeData(raw: unknown): Record<string, unknown> | null {
   if (raw == null || typeof raw !== 'object' || Array.isArray(raw)) return null;
@@ -58,6 +61,39 @@ function sanitizeData(raw: unknown): Record<string, unknown> | null {
   for (const key of MODULE_ARRAYS) {
     const v = data[key];
     data[key] = Array.isArray(v) ? sanitizeRows(v) : [];
+  }
+  // personnel：旧格式迁移（从 division 文本解析主测/组员人数）
+  for (const r of data.personnel as Record<string, unknown>[]) {
+    const leadBlank = r.lead == null || r.lead === '';
+    const memberBlank = r.member == null || r.member === '';
+    if (leadBlank || memberBlank) {
+      const div = String(r.division || '');
+      const lm = /主测\s*(\d+)\s*人/.exec(div);
+      const mm = /组员\s*(\d+)\s*人/.exec(div);
+      if (leadBlank && lm) r.lead = parseInt(lm[1], 10);
+      if (memberBlank && mm) r.member = parseInt(mm[1], 10);
+    }
+    const lead = Number(r.lead) || 0;
+    const member = Number(r.member) || 0;
+    if (lead || member) r.count = lead + member; // 派生值以双列为准
+  }
+  // staff：total/role 迁移
+  for (const r of data.staff as Record<string, unknown>[]) {
+    if (r.total == null || r.total === '') {
+      r.total = (Number(r.survey) || 0) + (Number(r.retest) || 0) + (Number(r.test) || 0);
+    }
+    if (!r.role) {
+      const post = String(r.post || '');
+      if (post.includes('经理')) r.role = '经理';
+      else if (post.includes('主测') || post.includes('组长')) r.role = '主测';
+      else if (post.includes('工程师')) r.role = '测试工程师';
+      else r.role = '组员';
+    }
+  }
+  // labor：workersCustom 补默认
+  for (const r of data.labor as Record<string, unknown>[]) {
+    if (r.workersCustom == null) r.workersCustom = false;
+    if (r.mode == null) r.mode = 'auto';
   }
   // cert：三段结构补全
   const cert = (data.cert && typeof data.cert === 'object' && !Array.isArray(data.cert))

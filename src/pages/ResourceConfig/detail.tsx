@@ -240,6 +240,24 @@ function EditableTable({ rows, fields, onChange, extraColumns, addDefaults, sums
   );
 }
 
+/** 页头统计卡片（对齐原工具的 4 卡横排样式：大数字+小标签） */
+function StatCards({ items }: { items: Array<{ label: string; value: string | number; color?: string }> }) {
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(items.length, 5)}, 1fr)`, gap: 10, marginBottom: 14 }}>
+      {items.map((it, i) => (
+        <div key={i} style={{
+          background: 'linear-gradient(135deg, rgba(30,58,95,0.45), rgba(30,58,95,0.2))',
+          border: '1px solid rgba(77,159,255,0.18)',
+          borderRadius: 10, padding: '12px 16px',
+        }}>
+          <div style={{ fontSize: 22, fontWeight: 700, color: it.color || '#7cb8ff', lineHeight: 1.2 }}>{it.value}</div>
+          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 4 }}>{it.label}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ============== 主页面 ==============
 
 function ResourceConfigDetail() {
@@ -307,8 +325,11 @@ function ResourceConfigDetail() {
     const loadAlloc = calcLoadAllocation((data.loads || []) as LoadRow[], assets);
     const insAlloc = calcInstrumentAllocation((data.instruments || []) as any[], assets);
     const round1 = (v: number) => Math.round(v * 10) / 10;
+    // 投入明细总人天（岗位补贴的"关联天数"口径）
+    const staffDaysTotal = (data.staff || []).reduce(
+      (s, r) => s + (Number((r as any).survey) || 0) + (Number((r as any).retest) || 0) + (Number((r as any).test) || 0), 0);
     return {
-      laborCalc, loadAlloc, insAlloc, round1,
+      laborCalc, loadAlloc, insAlloc, round1, staffDaysTotal,
       loadRentTotal: round1(Object.values(loadAlloc).reduce((s, r) => s + r.rent, 0)),
       insRentTotal: Math.round(Object.values(insAlloc).reduce((s, r) => s + r.rent, 0)),
       laborManDays: round1(laborCalc.reduce((s, r) => s + r.manDays, 0)),
@@ -419,17 +440,87 @@ function ResourceConfigDetail() {
     } else if (m.key === 'consumables' || m.key === 'safety') {
       sums = [{ key: 'count' }];
     }
+
+    // 每模块的页头统计卡（对齐原工具的 4 卡横排）
+    const R = rows || [];
+    let statCards: React.ReactNode = null;
+    if (m.key === 'personnel') {
+      const totalP = R.reduce((s, r) => s + (Number(r.lead) || 0) + (Number(r.member) || 0), 0);
+      statCards = <StatCards items={[
+        { label: '岗位数', value: R.length },
+        { label: '主测合计', value: R.reduce((s, r) => s + (Number(r.lead) || 0), 0) },
+        { label: '组员合计', value: R.reduce((s, r) => s + (Number(r.member) || 0), 0) },
+        { label: '计划总人数', value: totalP, color: '#52c41a' },
+      ]} />;
+    } else if (m.key === 'staff') {
+      statCards = <StatCards items={[
+        { label: '投入人数', value: R.length },
+        { label: '踏勘人天', value: R.reduce((s, r) => s + (Number(r.survey) || 0), 0) },
+        { label: '复测人天', value: R.reduce((s, r) => s + (Number(r.retest) || 0), 0) },
+        { label: '测试人天', value: R.reduce((s, r) => s + (Number(r.test) || 0), 0) },
+        { label: '总人天', value: R.reduce((s, r) => s + (Number(r.survey) || 0) + (Number(r.retest) || 0) + (Number(r.test) || 0), 0), color: '#52c41a' },
+      ]} />;
+    } else if (m.key === 'subsidy') {
+      statCards = <StatCards items={[
+        { label: '补贴岗位类', value: R.length },
+        { label: '补贴人数合计', value: R.reduce((s, r) => s + (Number(r.count) || 0), 0) },
+        { label: '关联天数合计', value: derived.staffDaysTotal, color: '#4d9fff' },
+      ]} />;
+    } else if (m.key === 'external') {
+      statCards = <StatCards items={[
+        { label: '外部人员类', value: R.length },
+        { label: '需求总天数', value: R.reduce((s, r) => s + (Number(r.total) || 0), 0) },
+        { label: '数量合计', value: R.reduce((s, r) => s + (Number(r.count) || 0), 0) },
+      ]} />;
+    } else if (m.key === 'loads') {
+      const ownT = Object.values(derived.loadAlloc).reduce((s, r) => s + r.own, 0);
+      const rentDayT = (data.loads || []).reduce((s, l) => {
+        const a = derived.loadAlloc[l.id];
+        return s + (a ? a.rent * calcLoadDays(l) : 0);
+      }, 0);
+      statCards = <StatCards items={[
+        { label: '负载类型数', value: R.length },
+        { label: '需求总量(台)', value: derived.round1(R.reduce((s, r) => s + (Number(r.count) || 0) + (Number(r.ratio) || 0), 0)) },
+        { label: '自有可覆盖', value: derived.round1(ownT), color: '#52c41a' },
+        { label: '需租赁', value: derived.loadRentTotal, color: '#faad14' },
+        { label: '租赁台·天', value: Math.round(rentDayT), color: '#faad14' },
+      ]} />;
+    } else if (m.key === 'instruments') {
+      const vis = R.filter((r) => !r.hidden);
+      statCards = <StatCards items={[
+        { label: '仪表种类', value: vis.length },
+        { label: '需求总数', value: vis.reduce((s, r) => s + (Number(r.demand) || 0), 0) },
+        { label: '自有可覆盖', value: Object.values(derived.insAlloc).reduce((s, r) => s + r.own, 0), color: '#52c41a' },
+        { label: '需租赁', value: derived.insRentTotal, color: '#faad14' },
+      ]} />;
+    } else if (m.key === 'labor') {
+      statCards = <StatCards items={[
+        { label: '劳务人天合计', value: derived.laborManDays, color: '#4d9fff' },
+        { label: '劳务人数合计', value: derived.laborWorkers, color: '#4d9fff' },
+        { label: '工作项数', value: R.length },
+        { label: '强度驱动项', value: R.filter((r) => (r.mode || 'auto') === 'auto').length },
+      ]} />;
+    } else if (m.key === 'consumables' || m.key === 'safety') {
+      statCards = <StatCards items={[
+        { label: '类目数', value: R.length },
+        { label: '数量合计', value: derived.round1(R.reduce((s, r) => s + (Number(r.count) || 0), 0)) },
+      ]} />;
+    }
+
     return {
       key: m.key as string,
       label: `${m.label}（${(rows || []).length}）`,
       children: (
-        <EditableTable
-          rows={rows || []}
-          fields={m.fields}
-          extraColumns={extraColumns}
-          sums={sums}
-          onChange={(next) => setModule(m.key as string, next)}
-        />
+        <div>
+          {statCards}
+          <EditableTable
+            rows={rows || []}
+            fields={m.fields}
+            extraColumns={extraColumns}
+            sums={sums}
+            onChange={(next) => setModule(m.key as string, next)}
+          />
+        </div>
       ),
     };
   });
