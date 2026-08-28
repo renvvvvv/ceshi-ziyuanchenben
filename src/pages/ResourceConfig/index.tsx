@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Table, Button, Modal, Form, Input, InputNumber, DatePicker, Tag, message, Space,
-  Upload, Drawer, Select, Statistic, Row, Col, Popconfirm, Tooltip, Empty, Spin,
+  Upload, Drawer, Select, Statistic, Row, Col, Popconfirm, Tooltip, Empty, Spin, Tabs,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import {
@@ -13,6 +13,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../store/AuthContext';
 import type { ResourceConfigProject, AssetLibItem } from '../../types/resourceConfig';
 import { calcLabor, calcLoadAllocation, calcInstrumentAllocation, ASSET_CATEGORIES } from '../../types/resourceConfig';
+import { DeptMembersTab, AssetsTab, DeliveredTab } from './tabs';
 
 /** 列表行（后端列表接口不含 data 大字段） */
 interface RcRow {
@@ -331,6 +332,11 @@ function ResourceConfig() {
 
   return (
     <div style={{ padding: '0 4px' }}>
+      <Tabs
+        defaultActiveKey="projects"
+        items={[
+          { key: 'projects', label: `配置项目（${rows.length}）`, children: (
+    <div>
       {/* 顶部操作条 */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
         <AppstoreOutlined style={{ color: '#4d9fff', fontSize: 18 }} />
@@ -478,6 +484,13 @@ function ResourceConfig() {
           <FileOutlined /> 规格中的功率数字（如 6KW）会被自动识别，用于假负载的自有/租赁分配。
         </div>
       </Drawer>
+    </div>
+          )},
+          { key: 'dept', label: '部门人员库', children: <DeptMembersTab /> },
+          { key: 'assets', label: '自有资源库', children: <AssetsTab /> },
+          { key: 'delivered', label: '已完成项目', children: <DeliveredTab /> },
+        ]}
+      />
     </div>
   );
 }

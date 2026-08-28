@@ -246,3 +246,17 @@ CREATE TABLE IF NOT EXISTS rc_delivered (
     saved_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     snapshot    JSONB NOT NULL                    -- 完整 rc_projects 行快照
 );
+
+-- 部门人员库（收编自原工具，P4~P7 职级；导入时 P→T 归一，展示层再映射回 P）
+CREATE TABLE IF NOT EXISTS rc_dept_members (
+    id          SERIAL PRIMARY KEY,
+    name        TEXT NOT NULL,
+    level       TEXT NOT NULL DEFAULT 'T4',   -- 内部存 T4~T7（原工具双轨制）
+    post        TEXT DEFAULT '',
+    company     TEXT DEFAULT '',
+    phone       TEXT DEFAULT '',
+    skill       TEXT DEFAULT '',
+    note        TEXT DEFAULT '',
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_rc_dept_level ON rc_dept_members(level);

@@ -319,4 +319,100 @@ router.delete('/assets/:id', requireAuth, requireRole(['管理者']), asyncHandl
   res.json({ success: true });
 }));
 
+// ============== 部门人员库 ==============
+
+/** 职级归一：P4~P7 → T4~T7（原工具双轨制：库存 T、显示 P） */
+function normLevel(v: unknown): string {
+  const s = String(v || '').trim().toUpperCase();
+  const m = /^([PT])([3-7])$/.exec(s);
+  if (!m) return 'T4';
+  return 'T' + m[2];
+}
+
+/** GET /api/rc/dept-members — 列表（level 转显示值 P） */
+router.get('/dept-members', requireAuth, asyncHandler(async (_req, res) => {
+  const rows = await db.allAsync(
+    'SELECT id, name, level, post, company, phone, skill, note, updated_at FROM rc_dept_members ORDER BY level DESC, id',
+  );
+  res.json({ success: true, data: rows.map((r) => ({ ...r, level: String(r.level).replace(/^T/, 'P') })) });
+}));
+
+/** POST /api/rc/dept-members */
+router.post('/dept-members', requireAuth, requireRole(['管理者', '编辑者']), asyncHandler(async (req, res) => {
+  const b = req.body || {};
+  if (!b.name || typeof b.name !== 'string') { res.status(400).json({ error: '姓名必填' }); return; }
+  const result = await db.runAsync(
+    `INSERT INTO rc_dept_members (name, level, post, company, phone, skill, note)
+     VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
+    b.name, normLevel(b.level), String(b.post ?? ''), String(b.company ?? ''),
+    String(b.phone ?? ''), String(b.skill ?? ''), String(b.note ?? ''),
+  );
+  res.json({ success: true, id: result.lastInsertRowid });
+}));
+
+/** PUT /api/rc/dept-members/:id — 部分更新 */
+router.put('/dept-members/:id', requireAuth, requireRole(['管理者', '编辑者']), asyncHandler(async (req, res) => {
+  const id = parseIdOrNull(req.params.id);
+  if (id === null) { res.status(400).json({ error: 'id 必须为正整数' }); return; }
+  const b = req.body || {};
+  const sets: string[] = [];
+  const values: unknown[] = [];
+  const add = (col: string, val: unknown) => { values.push(val); sets.push(`${col}=$${values.length}`); };
+  if (b.name !== undefined) add('name', String(b.name));
+  if (b.level !== undefined) add('level', normLevel(b.level));
+  if (b.post !== undefined) add('post', String(b.post));
+  if (b.company !== undefined) add('company', String(b.company));
+  if (b.phone !== undefined) add('phone', String(b.phone));
+  if (b.skill !== undefined) add('skill', String(b.skill));
+  if (b.note !== undefined) add('note', String(b.note));
+  if (sets.length === 0) { res.status(400).json({ error: '没有可更新的字段' }); return; }
+  values.push(id);
+  const result = await db.runAsync(
+    `UPDATE rc_dept_members SET ${sets.join(', ')}, updated_at=NOW() WHERE id=$${values.length} RETURNING id`,
+    ...values,
+  );
+  if (result.changes === 0) { res.status(404).json({ error: '人员不存在' }); return; }
+  res.json({ success: true });
+}));
+
+/** DELETE /api/rc/dept-members/:id */
+router.delete('/dept-members/:id', requireAuth, requireRole(['管理者']), asyncHandler(async (req, res) => {
+  const id = parseIdOrNull(req.params.id);
+  if (id === null) { res.status(400).json({ error: 'id 必须为正整数' }); return; }
+  const result = await db.runAsync('DELETE FROM rc_dept_members WHERE id=$1 RETURNING id', id);
+  if (result.changes === 0) { res.status(404).json({ error: '人员不存在' }); return; }
+  res.json({ success: true });
+}));
+
+/**
+ * POST /api/rc/dept-members/import — 批量导入（原工具格式）
+ * body: { _type:'deptMembersLib', members:[{name,level(P/T),post,company,phone,skill,note}] }
+ * 按 姓名+手机号 去重（存在则更新）
+ */
+router.post('/dept-members/import', requireAuth, requireRole(['管理者', '编辑者']), asyncHandler(async (req, res) => {
+  const b = req.body || {};
+  const members = Array.isArray(b.members) ? b.members : (Array.isArray(b) ? b : null);
+  if (!members) { res.status(400).json({ error: '缺少 members 数组' }); return; }
+  let added = 0, updated = 0;
+  for (const m of members) {
+    if (!m || typeof m !== 'object' || !m.name) continue;
+    const exist = await db.getAsync('SELECT id FROM rc_dept_members WHERE name=$1 AND phone=$2', String(m.name), String(m.phone ?? ''));
+    if (exist) {
+      await db.runAsync(
+        `UPDATE rc_dept_members SET level=$1, post=$2, company=$3, skill=$4, note=$5, updated_at=NOW() WHERE id=$6`,
+        normLevel(m.level), String(m.post ?? ''), String(m.company ?? ''), String(m.skill ?? ''), String(m.note ?? ''), exist.id,
+      );
+      updated++;
+    } else {
+      await db.runAsync(
+        `INSERT INTO rc_dept_members (name, level, post, company, phone, skill, note) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+        String(m.name), normLevel(m.level), String(m.post ?? ''), String(m.company ?? ''),
+        String(m.phone ?? ''), String(m.skill ?? ''), String(m.note ?? ''),
+      );
+      added++;
+    }
+  }
+  res.json({ success: true, added, updated });
+}));
+
 export default router;
