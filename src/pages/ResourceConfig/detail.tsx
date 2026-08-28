@@ -51,8 +51,8 @@ const MODULE_DEFS: Array<{ key: keyof ResourceConfigProject | 'cert'; label: str
   },
   {
     key: 'staff', label: '投入明细', fields: [
-      { key: 'name', label: '姓名', type: 'text', width: 100 },
-      { key: 'company', label: '公司/部门', type: 'text', width: 120 },
+      { key: 'name', label: '姓名', type: 'text', width: 110 },
+      { key: 'company', label: '公司/部门', type: 'text', width: 140 },
       { key: 'level', label: '职级', type: 'select', width: 80, options: ['T7', 'T6', 'T5', 'T4'] },
       { key: 'post', label: '岗位', type: 'select', width: 90, options: ['经理', '暖通', '电气', '消防', '弱电'] },
       { key: 'role', label: '角色', type: 'select', width: 100, options: ['主测', '测试工程师', '经理', '组员'] },
@@ -70,7 +70,7 @@ const MODULE_DEFS: Array<{ key: keyof ResourceConfigProject | 'cert'; label: str
   },
   {
     key: 'external', label: '外部租赁人员', fields: [
-      { key: 'name', label: '名称', type: 'text', width: 140 },
+      { key: 'name', label: '名称', type: 'text', width: 160 },
       { key: 'total', label: '需求总天数', type: 'int', width: 100, min: 0 },
       { key: 'survey', label: '工勘', type: 'int', width: 80, min: 0 },
       { key: 'retest', label: '复测', type: 'int', width: 80, min: 0 },
@@ -153,33 +153,39 @@ function FreeSelect({ value, options, onChange, style }: { value?: string; optio
   );
 }
 
-/** 通用可编辑表格 */
-function EditableTable({ rows, fields, onChange, extraColumns, addDefaults }: {
+/** 通用可编辑表格（支持底部小计行） */
+function EditableTable({ rows, fields, onChange, extraColumns, addDefaults, sums }: {
   rows: Row[];
   fields: FieldDef[];
   onChange: (next: Row[]) => void;
   extraColumns?: ColumnsType<Row>;
   addDefaults?: Row;
+  /** 底部小计：key 对应列显示合计（sum=数值求和），custom 用 value 函数 */
+  sums?: Array<{ key: string; calc?: 'sum'; value?: (rows: Row[]) => string | number }>;
 }) {
   const update = (id: string, key: string, val: unknown) => {
     onChange(rows.map((r) => (r.id === id ? { ...r, [key]: val } : r)));
   };
   const columns: ColumnsType<Row> = [
+    {
+      title: '#', key: '__idx', width: 40, align: 'center', fixed: 'left' as const,
+      render: (_: unknown, _r: Row, i: number) => <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: 11 }}>{i + 1}</span>,
+    },
     ...fields.map((f): ColumnsType<Row>[number] => ({
       title: f.label,
       dataIndex: f.key,
       width: f.width,
       render: (_: unknown, r: Row) => {
         if (f.type === 'num' || f.type === 'int') {
-          return <InputNumber size="small" min={f.min ?? 0} precision={f.type === 'int' ? 0 : undefined} value={r[f.key]} onChange={(v) => update(r.id, f.key, v ?? 0)} style={{ width: '100%' }} />;
+          return <InputNumber size="small" min={f.min ?? 0} precision={f.type === 'int' ? 0 : undefined} value={r[f.key]} onChange={(v) => update(r.id, f.key, v ?? 0)} style={{ width: '100%' }} className="rc-cell-input" />;
         }
         if (f.type === 'textarea') {
-          return <TextArea size="small" autoSize={{ minRows: 1, maxRows: 4 }} value={r[f.key] ?? ''} onChange={(e) => update(r.id, f.key, e.target.value)} placeholder={f.placeholder} />;
+          return <TextArea size="small" autoSize={{ minRows: 1, maxRows: 4 }} value={r[f.key] ?? ''} onChange={(e) => update(r.id, f.key, e.target.value)} placeholder={f.placeholder} className="rc-cell-input" />;
         }
         if (f.type === 'select') {
           return <FreeSelect value={r[f.key]} options={f.options} onChange={(v) => update(r.id, f.key, v ?? '')} style={{ width: '100%' }} />;
         }
-        return <Input size="small" value={r[f.key] ?? ''} onChange={(e) => update(r.id, f.key, e.target.value)} placeholder={f.placeholder} />;
+        return <Input size="small" value={r[f.key] ?? ''} onChange={(e) => update(r.id, f.key, e.target.value)} placeholder={f.placeholder} className="rc-cell-input" />;
       },
     })),
     ...(extraColumns || []),
@@ -192,9 +198,39 @@ function EditableTable({ rows, fields, onChange, extraColumns, addDefaults }: {
       ),
     },
   ];
+  // 底部小计行
+  const summaryRow = () => {
+    if (!sums || sums.length === 0) return null;
+    return (
+      <Table.Summary fixed>
+        <Table.Summary.Row style={{ background: 'rgba(30,58,95,0.35)' }}>
+          <Table.Summary.Cell index={0}>
+            <span style={{ color: '#7cb8ff', fontWeight: 600, fontSize: 12 }}>合计</span>
+          </Table.Summary.Cell>
+          {fields.map((f, i) => {
+            const s = sums.find((x) => x.key === f.key);
+            if (!s) return <Table.Summary.Cell key={f.key} index={i + 1} />;
+            const v = s.value
+              ? s.value(rows)
+              : Math.round(rows.reduce((acc, r) => acc + (Number(r[f.key]) || 0), 0) * 10) / 10;
+            return (
+              <Table.Summary.Cell key={f.key} index={i + 1}>
+                <span style={{ color: '#7cb8ff', fontWeight: 600 }}>{v}</span>
+              </Table.Summary.Cell>
+            );
+          })}
+          {(extraColumns || []).map((_, i) => <Table.Summary.Cell key={'e' + i} index={fields.length + i + 1} />)}
+          <Table.Summary.Cell index={fields.length + (extraColumns || []).length + 1} />
+        </Table.Summary.Row>
+      </Table.Summary>
+    );
+  };
+
   return (
     <div>
       <Table<Row> rowKey="id" size="small" columns={columns} dataSource={rows} pagination={false}
+        className="rc-edit-table"
+        summary={summaryRow}
         scroll={{ x: 'max-content' }} />
       <Button size="small" type="dashed" icon={<PlusOutlined />} style={{ marginTop: 8, width: '100%' }}
         onClick={() => onChange([...rows, { id: genId(), ...(addDefaults || {}) }])}>
@@ -351,6 +387,38 @@ function ResourceConfigDetail() {
         },
       ];
     }
+    // 各模块底部小计配置（对齐原工具的小计行为）
+    let sums: Array<{ key: string; calc?: 'sum'; value?: (rows: Row[]) => string | number }> | undefined;
+    if (m.key === 'personnel') {
+      sums = [
+        { key: 'lead' }, { key: 'member' },
+        { key: 'post', value: (rs) => `共 ${rs.reduce((s, r) => s + (Number(r.lead) || 0) + (Number(r.member) || 0), 0)} 人` },
+      ];
+    } else if (m.key === 'staff') {
+      sums = [
+        { key: 'survey' }, { key: 'retest' }, { key: 'test' },
+        { key: 'name', value: (rs) => `共 ${rs.length} 人` },
+      ];
+    } else if (m.key === 'subsidy') {
+      sums = [{ key: 'count', calc: 'sum' }];
+    } else if (m.key === 'external') {
+      sums = [{ key: 'total' }, { key: 'count' }];
+    } else if (m.key === 'loads') {
+      sums = [{ key: 'count' }];
+    } else if (m.key === 'instruments') {
+      sums = [{ key: 'demand' }];
+    } else if (m.key === 'labor') {
+      sums = [
+        { key: 'qty' },
+        { key: 'work', value: (rs) => {
+          const md = rs.reduce((s, r, i) => s + (derived.laborCalc[i]?.manDays || 0), 0);
+          const wk = rs.reduce((s, r, i) => s + (derived.laborCalc[i]?.workers || 0), 0);
+          return `${Math.round(md * 10) / 10} 人天 / ${wk} 人`;
+        } },
+      ];
+    } else if (m.key === 'consumables' || m.key === 'safety') {
+      sums = [{ key: 'count' }];
+    }
     return {
       key: m.key as string,
       label: `${m.label}（${(rows || []).length}）`,
@@ -359,6 +427,7 @@ function ResourceConfigDetail() {
           rows={rows || []}
           fields={m.fields}
           extraColumns={extraColumns}
+          sums={sums}
           onChange={(next) => setModule(m.key as string, next)}
         />
       ),
@@ -423,6 +492,72 @@ function ResourceConfigDetail() {
 
   return (
     <div style={{ padding: '0 4px' }}>
+      {/* 专业表格样式（对齐原工具观感：深色列头/斑马纹/无边框沉浸式输入） */}
+      <style>{`
+        .rc-edit-table .ant-table-thead > tr > th {
+          background: rgba(30, 58, 95, 0.85) !important;
+          color: #e0e6ed !important;
+          font-weight: 600 !important;
+          font-size: 12px !important;
+          padding: 8px 8px !important;
+          border-bottom: 1px solid rgba(77, 159, 255, 0.3) !important;
+        }
+        .rc-edit-table .ant-table-tbody > tr > td {
+          padding: 3px 6px !important;
+          font-size: 12.5px;
+        }
+        .rc-edit-table .ant-table-tbody > tr:nth-child(even) > td {
+          background: rgba(255, 255, 255, 0.025);
+        }
+        .rc-edit-table .ant-table-tbody > tr:hover > td {
+          background: rgba(77, 159, 255, 0.07) !important;
+        }
+        /* 沉浸式输入：无边框透明，hover/focus 才浮现，像直接在单元格里编辑 */
+        .rc-edit-table .rc-cell-input,
+        .rc-edit-table .rc-cell-input.ant-input-number,
+        .rc-edit-table .rc-cell-input textarea {
+          background: transparent !important;
+          border-color: transparent !important;
+          box-shadow: none !important;
+          color: rgba(255, 255, 255, 0.88) !important;
+          font-size: 12.5px !important;
+        }
+        .rc-edit-table .rc-cell-input:hover,
+        .rc-edit-table .ant-table-cell:hover .rc-cell-input {
+          border-color: rgba(77, 159, 255, 0.35) !important;
+          background: rgba(77, 159, 255, 0.04) !important;
+        }
+        .rc-edit-table .rc-cell-input:focus,
+        .rc-edit-table .rc-cell-input:focus-within {
+          border-color: #4d9fff !important;
+          background: rgba(77, 159, 255, 0.08) !important;
+        }
+        .rc-edit-table .rc-cell-input::placeholder {
+          color: rgba(255, 255, 255, 0.22) !important;
+          font-size: 11.5px !important;
+        }
+        /* 下拉选择同样沉浸 */
+        .rc-edit-table .ant-select .ant-select-selector {
+          background: transparent !important;
+          border-color: transparent !important;
+          box-shadow: none !important;
+          font-size: 12.5px !important;
+        }
+        .rc-edit-table .ant-table-cell:hover .ant-select .ant-select-selector {
+          border-color: rgba(77, 159, 255, 0.35) !important;
+        }
+        .rc-edit-table .ant-select-focused .ant-select-selector {
+          border-color: #4d9fff !important;
+        }
+        /* 删除按钮平时隐形，hover 行才出现 */
+        .rc-edit-table .ant-table-row .ant-btn-dangerous {
+          opacity: 0.25;
+          transition: opacity 0.15s;
+        }
+        .rc-edit-table .ant-table-row:hover .ant-btn-dangerous {
+          opacity: 1;
+        }
+      `}</style>
       {/* 顶栏 */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
         <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/resource-config')} style={{ borderRadius: 8 }}>返回</Button>
