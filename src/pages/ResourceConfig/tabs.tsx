@@ -26,15 +26,22 @@ interface DeptRow {
 
 const LEVEL_COLOR: Record<string, string> = { P7: 'red', P6: 'orange', P5: 'blue', P4: 'green' };
 
+/** 所持证书字段（存 skill 列）：逗号/顿号分隔 → 数组 */
+function splitCerts(v: unknown): string[] {
+  return String(v || '').split(/[,，、;；]/).map((s) => s.trim()).filter(Boolean);
+}
+
 export function DeptMembersTab() {
   const { canEdit, canDelete } = useAuth();
   const editAllowed = canEdit('resourceConfig');
   const deleteAllowed = canDelete('resourceConfig');
   const [rows, setRows] = useState<DeptRow[]>([]);
   const [loading, setLoading] = useState(false);
-  const [editing, setEditing] = useState<DeptRow | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [addForm, setAddForm] = useState({ name: '', level: 'P4', post: '', company: '', phone: '', skill: '', note: '' });
+  // 证书编辑（唯一的可修改入口）
+  const [certEditing, setCertEditing] = useState<DeptRow | null>(null);
+  const [certValues, setCertValues] = useState<string[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -45,14 +52,6 @@ export function DeptMembersTab() {
     } finally { setLoading(false); }
   }, []);
   useEffect(() => { void load(); }, [load]);
-
-  const update = async (id: number, key: string, val: unknown) => {
-    setRows((prev) => prev.map((r) => (r.id === id ? { ...r, [key]: val } : r)));
-    await fetch(`/api/rc/dept-members/${id}`, {
-      method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
-      body: JSON.stringify({ [key]: val }),
-    }).catch(() => message.error('保存失败'));
-  };
 
   const handleImport = async (file: File) => {
     try {
@@ -85,28 +84,30 @@ export function DeptMembersTab() {
 
   const columns: ColumnsType<DeptRow> = [
     { title: '姓名', dataIndex: 'name', width: 100,
-      render: (t: string, r: DeptRow) => editAllowed
-        ? <Input size="small" className="rc-cell-input" value={t} onChange={(e) => update(r.id, 'name', e.target.value)} />
-        : t },
+      render: (t: string) => <span style={{ fontWeight: 500 }}>{t}</span> },
     { title: '职级', dataIndex: 'level', width: 80, align: 'center',
-      render: (t: string, r: DeptRow) => <Select size="small" value={t} disabled={!editAllowed} style={{ width: 68 }}
-        onChange={(v) => update(r.id, 'level', v)}
-        options={['P7', 'P6', 'P5', 'P4'].map((v) => ({ value: v, label: <Tag color={LEVEL_COLOR[v]} style={{ margin: 0 }}>{v}</Tag> }))} /> },
-    { title: '岗位', dataIndex: 'post', width: 170,
-      render: (t: string, r: DeptRow) => editAllowed
-        ? <Input size="small" className="rc-cell-input" value={t} onChange={(e) => update(r.id, 'post', e.target.value)} /> : (t || '-') },
-    { title: '公司/部门', dataIndex: 'company', width: 150,
-      render: (t: string, r: DeptRow) => editAllowed
-        ? <Input size="small" className="rc-cell-input" value={t} onChange={(e) => update(r.id, 'company', e.target.value)} /> : (t || '-') },
-    { title: '手机号', dataIndex: 'phone', width: 130,
-      render: (t: string, r: DeptRow) => editAllowed
-        ? <Input size="small" className="rc-cell-input" value={t} onChange={(e) => update(r.id, 'phone', e.target.value)} /> : (t || '-') },
-    { title: '技能', dataIndex: 'skill', width: 140,
-      render: (t: string, r: DeptRow) => editAllowed
-        ? <Input size="small" className="rc-cell-input" value={t} onChange={(e) => update(r.id, 'skill', e.target.value)} /> : (t || '-') },
-    { title: '备注', dataIndex: 'note', width: 220, ellipsis: true,
-      render: (t: string, r: DeptRow) => editAllowed
-        ? <Input size="small" className="rc-cell-input" value={t} onChange={(e) => update(r.id, 'note', e.target.value)} /> : (t || '-') },
+      render: (t: string) => <Tag color={LEVEL_COLOR[t] || 'default'} style={{ margin: 0 }}>{t}</Tag> },
+    { title: '岗位', dataIndex: 'post', width: 180, ellipsis: true,
+      render: (t: string) => t || '-' },
+    { title: '公司/部门', dataIndex: 'company', width: 150, ellipsis: true,
+      render: (t: string) => t || '-' },
+    { title: '手机号', dataIndex: 'phone', width: 125,
+      render: (t: string) => t || '-' },
+    { title: '所持证书', dataIndex: 'skill', width: 260,
+      render: (t: string, r: DeptRow) => {
+        const certs = splitCerts(t);
+        return (
+          <Space size={4} wrap>
+            {certs.map((c) => <Tag key={c} color="cyan" style={{ margin: 0 }}>{c}</Tag>)}
+            {editAllowed && (
+              <Button type="text" size="small" icon={<PlusOutlined />} onClick={() => { setCertEditing(r); setCertValues(splitCerts(r.skill)); }}
+                style={{ width: 26, height: 22, minWidth: 26, padding: 0, color: '#4d9fff' }} />
+            )}
+          </Space>
+        );
+      } },
+    { title: '备注', dataIndex: 'note', width: 200, ellipsis: true,
+      render: (t: string) => t || '-' },
     ...(deleteAllowed ? [{
       title: '', key: 'op', width: 44, align: 'center' as const,
       render: (_: unknown, r: DeptRow) => (
@@ -160,13 +161,46 @@ export function DeptMembersTab() {
         <Space direction="vertical" style={{ width: '100%', marginTop: 12 }} size={8}>
           <Space>
             <Input placeholder="姓名 *" value={addForm.name} onChange={(e) => setAddForm({ ...addForm, name: e.target.value })} style={{ width: 140 }} />
-            <Select value={addForm.level} onChange={(v) => setAddForm({ ...addForm, level: v })} options={['P7', 'P6', 'P5', 'P4'].map((v) => ({ value: v }))} style={{ width: 80 }} />
+            <Select value={addForm.level} onChange={(v) => setAddForm({ ...addForm, level: v })} options={['P7', 'P6', 'P5', 'P4', 'P3'].map((v) => ({ value: v }))} style={{ width: 80 }} />
           </Space>
           <Input placeholder="岗位" value={addForm.post} onChange={(e) => setAddForm({ ...addForm, post: e.target.value })} />
           <Input placeholder="公司/部门" value={addForm.company} onChange={(e) => setAddForm({ ...addForm, company: e.target.value })} />
           <Input placeholder="手机号" value={addForm.phone} onChange={(e) => setAddForm({ ...addForm, phone: e.target.value })} />
           <Input placeholder="备注（工号/入职日期等）" value={addForm.note} onChange={(e) => setAddForm({ ...addForm, note: e.target.value })} />
         </Space>
+      </Modal>
+
+      {/* 证书编辑弹窗（部门库唯一的行级可修改项） */}
+      <Modal
+        title={certEditing ? `所持证书 · ${certEditing.name}` : ''}
+        open={!!certEditing}
+        onCancel={() => setCertEditing(null)}
+        onOk={async () => {
+          if (!certEditing) return;
+          await fetch(`/api/rc/dept-members/${certEditing.id}`, {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+            body: JSON.stringify({ skill: certValues.join('、') }),
+          });
+          message.success('证书已更新');
+          setCertEditing(null);
+          void load();
+        }}
+        okText="保存" cancelText="取消"
+      >
+        <div style={{ marginTop: 12 }}>
+          <Select
+            mode="tags" style={{ width: '100%' }} placeholder="输入证书名称后回车添加，如：注册电气工程师、PMP、一级建造师"
+            value={certValues} onChange={setCertValues}
+            options={[
+              '注册电气工程师', '注册公用设备工程师', '一级建造师', '二级建造师',
+              'PMP', '电工证（高压）', '电工证（低压）', '安全员证', '消防设施操作员',
+            ].map((v) => ({ value: v, label: v }))}
+            open={false} // 纯自由输入（回车确认），预设项通过下拉箭头查看
+          />
+          <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12, marginTop: 8 }}>
+            点击输入框可查看常用证书预设；输入自定义名称后按回车添加。
+          </div>
+        </div>
       </Modal>
     </div>
   );
