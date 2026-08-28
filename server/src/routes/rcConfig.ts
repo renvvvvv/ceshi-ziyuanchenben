@@ -90,6 +90,14 @@ function sanitizeData(raw: unknown): Record<string, unknown> | null {
       else r.role = '组员';
     }
   }
+  // loads：数量/备用台数整数化（负载为整台单位，历史数据存过 0.1 等小数）
+  for (const r of data.loads as Record<string, unknown>[]) {
+    for (const k of ['count', 'ratio']) {
+      const v = Number(r[k]);
+      if (Number.isFinite(v) && v > 0 && !Number.isInteger(v)) r[k] = Math.ceil(v);
+      else if (!Number.isFinite(v)) r[k] = 0;
+    }
+  }
   // labor：workersCustom 补默认
   for (const r of data.labor as Record<string, unknown>[]) {
     if (r.workersCustom == null) r.workersCustom = false;
