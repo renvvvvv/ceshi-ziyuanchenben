@@ -446,7 +446,7 @@ function ResourceConfig() {
               <Form.Item name="count" rules={[{ required: true, message: '数量' }]} style={{ width: 80 }}>
                 <InputNumber min={0} placeholder="数量" style={{ width: '100%' }} />
               </Form.Item>
-              <Form.Item style={{ width: 80 }}><Input placeholder="备注" name="note" /></Form.Item>
+              <Form.Item name="note" style={{ width: 80 }}><Input placeholder="备注" /></Form.Item>
             </Form>
             <Space style={{ marginTop: 8 }}>
               <Button type="primary" size="small" onClick={handleAssetSave}>{assetEditing ? '更新' : '添加'}</Button>

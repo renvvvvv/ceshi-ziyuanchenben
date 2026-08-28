@@ -347,6 +347,12 @@ interface DeliveredRow {
   mw: string; site: string; manager: string; test_days: number;
 }
 
+/** JSONB 兼容解析：驱动可能返回对象（pg）或字符串 */
+function safeParse(v: unknown): unknown {
+  if (typeof v !== 'string') return v;
+  try { return JSON.parse(v); } catch { return null; }
+}
+
 export function DeliveredTab() {
   const [rows, setRows] = useState<DeliveredRow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -367,11 +373,15 @@ export function DeliveredTab() {
     setSnapLoading(true);
     setSnapshot({ name: r.name, data: {} as ResourceConfigProject });
     try {
-      // snapshot 完整数据在列表接口未含，逐条取（后端 delivered 列表已含 snapshot 摘要；详情从 snapshot JSONB 读）
-      const res = await fetch('/api/rc/delivered', { credentials: 'include' });
-      const d = await res.json();
-      const full = (d.data || []).find((x: DeliveredRow) => x.id === r.id);
-      setSnapshot({ name: r.name, data: (full || {}) as unknown as ResourceConfigProject });
+      // 列表接口不含 snapshot 大字段，走单条接口取完整快照（snapshot.data = 交付时点的完整配置）
+      const res = await fetch(`/api/rc/delivered/${r.id}`, { credentials: 'include' });
+      const d = await res.json().catch(() => ({}));
+      let proj: unknown = null;
+      if (d.success) {
+        const snap = safeParse(d.data?.snapshot);
+        proj = snap && typeof snap === 'object' ? (snap as Record<string, unknown>).data : null;
+      }
+      setSnapshot({ name: r.name, data: (proj || {}) as ResourceConfigProject });
     } finally { setSnapLoading(false); }
   };
 

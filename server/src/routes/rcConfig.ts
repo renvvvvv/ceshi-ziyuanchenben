@@ -274,6 +274,15 @@ router.get('/delivered', requireAuth, asyncHandler(async (_req, res) => {
   res.json({ success: true, data: rows });
 }));
 
+/** GET /api/rc/delivered/:id — 单条交付存档（含完整 snapshot，快照查看用） */
+router.get('/delivered/:id', requireAuth, asyncHandler(async (req, res) => {
+  const id = parseIdOrNull(req.params.id);
+  if (id === null) { res.status(400).json({ error: 'id 必须为正整数' }); return; }
+  const row = await db.getAsync('SELECT id, project_id, name, saved_at, snapshot FROM rc_delivered WHERE id=$1', id);
+  if (!row) { res.status(404).json({ error: '交付存档不存在' }); return; }
+  res.json({ success: true, data: row });
+}));
+
 // ============== 自有资源库 ==============
 
 /** GET /api/rc/assets */

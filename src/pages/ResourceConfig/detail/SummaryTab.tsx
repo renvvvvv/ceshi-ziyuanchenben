@@ -120,13 +120,15 @@ export default function SummaryTab({ data: p, assets }: TabProps) {
     // ---------- b) 人员合计 ----------
     const personnelRows = (p.personnel || []).filter((r) => r.post);
     const cntOf = (r: PersonnelRow) => num(r.count) || num(r.lead) + num(r.member);
-    const planTotal = personnelRows.reduce((s, r) => s + cntOf(r), 0);
+    // 计划总人数按全部行汇总（原 renderSummary totalP 口径）；表格仅显示已填岗位的行
+    const planTotal = (p.personnel || []).reduce((s, r) => s + cntOf(r), 0);
     const staffList = p.staff || [];
     const staffDaysTotal = staffList.reduce((s, r) => s + staffTotalOf(r), 0);
 
     // ---------- c) 岗位补贴 ----------
     const subsidyRows = (p.subsidy || []).filter((r) => r.post);
-    const subsidyTotal = subsidyRows.reduce((s, r) => s + num(r.count), 0);
+    // 补贴总人数同样按全部行汇总（原 sumSC 口径），表格仅显示已填岗位的行
+    const subsidyTotal = (p.subsidy || []).reduce((s, r) => s + num(r.count), 0);
 
     // ---------- d) 假负载（自有优先分配，含备用台数） ----------
     const loads: LoadRow[] = p.loads || [];

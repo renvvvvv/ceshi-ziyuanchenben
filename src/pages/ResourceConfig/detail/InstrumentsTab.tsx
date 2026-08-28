@@ -188,9 +188,11 @@ export default function InstrumentsTab({ data, assets, canEdit, patch }: TabProp
     const next = rowsRef.current.map((r) => {
       if (r.hidden) return r;
       const d = Math.max(0, r.demand || 0);
+      // 原算法（computeInsAllocation L2920）：未填名称的行直接 own=0 / rent=0，不把需求写成租赁落数据
       const own = r.name ? Math.min(d, stockByName.get(r.name) || 0) : 0;
+      const rent = r.name ? d - own : 0;
       matched += own;
-      return { ...r, own, rent: d - own };
+      return { ...r, own, rent };
     });
     patch({ instruments: next });
     if (matched > 0) libToast(`已按资源库分配：自有 ${matched} 台，超出部分自动转为租赁`);
@@ -339,7 +341,7 @@ export default function InstrumentsTab({ data, assets, canEdit, patch }: TabProp
                 <Table.Summary.Cell index={5} />
                 <Table.Summary.Cell index={6} />
                 <Table.Summary.Cell index={7} />
-                <Table.Summary.Cell index={8} />
+                {canEdit ? <Table.Summary.Cell index={8} /> : null}
               </Table.Summary.Row>
             </Table.Summary>
           ) : null)}

@@ -100,8 +100,8 @@ function useLibToast() {
   }, []);
 }
 
-// ============== 步进器（原 stepCell + initStepHold L1660-1680） ==============
-// 点击单次加减；按住「− / ＋」500ms 后每 120ms 连发一次
+// ============== 步进器（原 stepCell + initStepHold L1656-1680） ==============
+// 点击单次加减；按住「− / ＋」350ms 后每 120ms 连发一次（原工具 L1667-1669）
 
 interface StepperProps {
   value: number;
@@ -120,6 +120,17 @@ function Stepper({ value, onChange, min = 0, disabled }: StepperProps) {
     if (holdInterval.current != null) { window.clearInterval(holdInterval.current); holdInterval.current = null; }
   }, []);
   useEffect(() => stop, [stop]);
+  // 原工具 initStepHold（L1676-1680）：指针在按钮外松开 / 窗口失焦时也必须停止连发，避免「卡住一直加」
+  useEffect(() => {
+    window.addEventListener('blur', stop);
+    document.addEventListener('mouseup', stop);
+    document.addEventListener('pointercancel', stop);
+    return () => {
+      window.removeEventListener('blur', stop);
+      document.removeEventListener('mouseup', stop);
+      document.removeEventListener('pointercancel', stop);
+    };
+  }, [stop]);
   const clamp = (v: number) => Math.max(min, Math.round(v || 0));
   const step = (d: number) => onChange(clamp((latestRef.current || 0) + d));
   const begin = (d: number) => {
@@ -127,8 +138,8 @@ function Stepper({ value, onChange, min = 0, disabled }: StepperProps) {
     stop();
     step(d); // 立即响应第一次点击
     holdTimer.current = window.setTimeout(() => {
-      holdInterval.current = window.setInterval(() => step(d), 120); // 按住 500ms 后每 120ms 连发
-    }, 500);
+      holdInterval.current = window.setInterval(() => step(d), 120); // 按住 350ms 后每 120ms 连发
+    }, 350);
   };
   const btnStyle: CSSProperties = {
     width: 24, height: 24, border: 'none', background: 'rgba(255,255,255,0.06)',
@@ -217,14 +228,23 @@ export default function LoadsTab({ data, assets, canEdit, patch }: TabProps) {
     const hit = f === 'type'
       ? assets.find((a) => (a.cat === 'load' || a.cat === 'pdu') && `${(a.name || '')} ${(a.spec || '')}`.trim() === v.trim())
       : undefined;
-    patch({
-      loads: loadsRef.current.map((r) => {
-        if (r.id !== id) return r;
-        const nr = { ...r, [f]: v };
-        if (hit && !nr.spec) nr.spec = hit.spec || '';
-        return nr;
-      }),
+    const next = loadsRef.current.map((r) => {
+      if (r.id !== id) return r;
+      const nr = { ...r, [f]: v };
+      if (hit && !nr.spec) nr.spec = hit.spec || '';
+      return nr;
     });
+    patch({ loads: next });
+    // 原工具 input 事件 L3619-3624：编辑规格（含 KW，参与库存匹配）同样触发三分支库存提示
+    if (f === 'spec') {
+      const row = next.find((r) => r.id === id);
+      if (row && row.count > 0 && !isWaterRow(row) && !isRentRow(row)) {
+        const a = computeLoadAlloc(next, assets)[id] || { own: 0, rent: 0 };
+        if (a.own > 0 && a.rent <= 0) libToast(`「${row.type || '该负载'}」资源库自有 ${fmt1(a.own)} 台，无需租赁`);
+        else if (a.own > 0 && a.rent > 0) libToast(`「${row.type || '该负载'}」资源库自有 ${fmt1(a.own)} 台，不足 ${fmt1(a.rent)} 台需租赁`, 'warn');
+        else libToast(`「${row.type || '该负载'}」资源库无匹配，全部 ${fmt1(a.rent)} 台需租赁`, 'warn');
+      }
+    }
   };
 
   /** 数量 / 备用台数步进（原 input 事件：写值 + 三分支库存提示 L3619-3624） */
@@ -447,7 +467,7 @@ export default function LoadsTab({ data, assets, canEdit, patch }: TabProps) {
                 <Table.Summary.Cell index={7} align="center"><span style={{ ...sumColor, color: '#52c41a' }}>{stats.ownTotal.toFixed(0)}</span></Table.Summary.Cell>
                 <Table.Summary.Cell index={8} align="center"><span style={{ ...sumColor, color: '#faad14' }}>{stats.rentTotal.toFixed(0)}</span></Table.Summary.Cell>
                 <Table.Summary.Cell index={9} />
-                <Table.Summary.Cell index={10} />
+                {canEdit ? <Table.Summary.Cell index={10} /> : null}
               </Table.Summary.Row>
             </Table.Summary>
           ) : null)}

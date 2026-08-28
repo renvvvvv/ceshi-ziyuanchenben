@@ -54,9 +54,11 @@ function ProjectInfoTab({ id, meta, canEdit, onSaved }: {
         method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
         body: JSON.stringify(body),
       });
-      const d = await res.json();
+      const d = await res.json().catch(() => ({}));
       if (d.success) { message.success('项目信息已保存'); await onSaved(); }
       else message.error(d.error || '保存失败');
+    } catch {
+      message.error('保存失败，请检查网络');
     } finally { setSaving(false); }
   };
 
@@ -99,6 +101,24 @@ function ProjectInfoTab({ id, meta, canEdit, onSaved }: {
 
 interface Meta { name: string; mw: string; site: string; manager: string; test_days: number; start_date: string | null; end_date: string | null; remark: string; status: string }
 
+/**
+ * data JSONB 内嵌的标量（name/mw/site/...）是导入时点的旧快照，项目信息保存只更新
+ * 标量列、不回写 data。汇总等只读模块读 data 时必须以 meta（标量列）为准合并，
+ * 否则改完项目信息后汇总仍显示旧值；保存明细时回写合并值可保持两者同步。
+ */
+function mergeMetaIntoData(data: ResourceConfigProject, meta: Meta): ResourceConfigProject {
+  return {
+    ...data,
+    name: meta.name,
+    mw: meta.mw,
+    site: meta.site,
+    manager: meta.manager,
+    testDays: meta.test_days ?? 40,
+    startDate: meta.start_date || '',
+    endDate: meta.end_date || '',
+  };
+}
+
 function ResourceConfigDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -111,7 +131,12 @@ function ResourceConfigDetail() {
   const [dirty, setDirty] = useState(false);
   const [assets, setAssets] = useState<AssetLibItem[]>([]);
 
-  const reload = useCallback(async () => {
+  /**
+   * keepDetail=true：仅刷新 meta，不用服务端 data 覆盖本地明细状态。
+   * 项目信息保存（标量 PUT）后回调时必须带上，否则会把其他明细 Tab 里
+   * 尚未「保存全部」的修改静默冲掉。
+   */
+  const reload = useCallback(async (opts?: { keepDetail?: boolean }) => {
     try {
       const [projRes, assetRes] = await Promise.all([
         fetch(`/api/rc/projects/${id}`, { credentials: 'include' }).then((r) => r.json()),
@@ -120,7 +145,7 @@ function ResourceConfigDetail() {
       if (projRes.success) {
         const p = projRes.data;
         setMeta({ name: p.name, mw: p.mw, site: p.site, manager: p.manager, test_days: p.test_days, start_date: p.start_date, end_date: p.end_date, remark: p.remark, status: p.status });
-        setData((p.data || {}) as ResourceConfigProject);
+        if (!opts?.keepDetail) setData((p.data || {}) as ResourceConfigProject);
       } else {
         message.error(projRes.error || '加载失败');
       }
@@ -140,14 +165,15 @@ function ResourceConfigDetail() {
   }, []);
 
   const handleSave = async () => {
-    if (!data) return;
+    if (!data || !meta) return;
     setSaving(true);
     try {
       const res = await fetch(`/api/rc/projects/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ data }),
+        // 标量以 meta 为准一并回写，保持 data JSONB 内嵌标量与项目信息列同步
+        body: JSON.stringify({ data: mergeMetaIntoData(data, meta) }),
       });
       const d = await res.json();
       if (d.success) { message.success('已保存全部明细'); setDirty(false); }
@@ -166,10 +192,10 @@ function ResourceConfigDetail() {
     return <div style={{ textAlign: 'center', padding: 80, color: 'rgba(255,255,255,0.4)' }}>配置项目不存在</div>;
   }
 
-  const tabProps: TabProps = { data, assets, canEdit: editAllowed, patch };
+  const tabProps: TabProps = { data: mergeMetaIntoData(data, meta), assets, canEdit: editAllowed, patch };
 
   const items = [
-    { key: 'info', label: '📋 项目信息', children: <ProjectInfoTab id={id!} meta={meta} canEdit={editAllowed} onSaved={reload} /> },
+    { key: 'info', label: '📋 项目信息', children: <ProjectInfoTab id={id!} meta={meta} canEdit={editAllowed} onSaved={() => reload({ keepDetail: true })} /> },
     { key: 'personnel', label: '👥 测试人员', children: <PersonnelTab {...tabProps} /> },
     { key: 'subsidy', label: '💰 岗位与补贴', children: <SubsidyTab {...tabProps} /> },
     { key: 'loads', label: '🗄️ 假负载计划', children: <LoadsTab {...tabProps} /> },
