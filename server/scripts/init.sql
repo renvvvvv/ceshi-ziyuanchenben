@@ -200,3 +200,49 @@ CREATE TABLE IF NOT EXISTS test_docs (
     created_at  TIMESTAMPTZ DEFAULT NOW(),
     updated_at  TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- ============================================================
+-- 测试资源配置模块（收编自单文件资源配置工具，2026-08-28）
+-- 设计：主表存标量字段 + data JSONB 存 10 个子模块数组
+--（personnel/staff/subsidy/external/loads/instruments/consumables/labor/safety/cert），
+-- 与原工具 JSON 导出格式逐字对齐，存量备份可直接导入
+-- ============================================================
+CREATE TABLE IF NOT EXISTS rc_projects (
+    id          SERIAL PRIMARY KEY,
+    name        TEXT NOT NULL,
+    mw          TEXT DEFAULT '',
+    site        TEXT DEFAULT '',
+    manager     TEXT DEFAULT '',
+    test_days   INT DEFAULT 40,
+    start_date  TEXT,
+    end_date    TEXT,
+    remark      TEXT DEFAULT '',
+    status      TEXT NOT NULL DEFAULT '配置中',   -- 配置中 | 已交付
+    data        JSONB NOT NULL DEFAULT '{}',      -- 10 个子模块数组（详见前端 resourceConfig.ts 类型）
+    created_by  TEXT DEFAULT '',
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_rc_projects_status ON rc_projects(status);
+CREATE INDEX IF NOT EXISTS idx_rc_projects_updated ON rc_projects(updated_at DESC);
+
+-- 自有资源库（部门级，跨项目共用：假负载/仪表/PDU/机柜）
+CREATE TABLE IF NOT EXISTS rc_assets (
+    id          SERIAL PRIMARY KEY,
+    cat         TEXT NOT NULL CHECK (cat IN ('load','ins','pdu','cabinet')),
+    name        TEXT NOT NULL,
+    spec        TEXT DEFAULT '',                  -- spec 中的功率数字有语义（假负载匹配用）
+    count       INT NOT NULL DEFAULT 0 CHECK (count >= 0),
+    note        TEXT DEFAULT '',
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_rc_assets_cat ON rc_assets(cat);
+
+-- 已交付配置存档（完整项目快照，只读）
+CREATE TABLE IF NOT EXISTS rc_delivered (
+    id          SERIAL PRIMARY KEY,
+    project_id  INT,
+    name        TEXT NOT NULL,
+    saved_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    snapshot    JSONB NOT NULL                    -- 完整 rc_projects 行快照
+);

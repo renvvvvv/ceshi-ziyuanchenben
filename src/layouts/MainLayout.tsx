@@ -17,6 +17,7 @@ import {
   CalendarOutlined,
   FileSearchOutlined,
   RobotOutlined,
+  AppstoreOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../store/AuthContext';
 import { useData } from '../store/DataContext';
@@ -43,6 +44,7 @@ const ALL_MENU_ITEMS: MenuItemDef[] = [
   { key: '/ai-test-expert', icon: <RobotOutlined />, label: 'AI 测试专家', module: 'aiTestExpert' },
   { key: '/report-review', icon: <FileSearchOutlined />, label: '测试报告审核', module: 'reportReview' },
   { key: '/resource-calculator', icon: <CalculatorOutlined />, label: '资源计算器', module: 'resourceCalc' },
+  { key: '/resource-config', icon: <AppstoreOutlined />, label: '资源配置', module: 'resourceConfig' },
   { key: '/permission-config', icon: <SafetyOutlined />, label: '权限配置', module: 'permissionConfig' },
 ];
 

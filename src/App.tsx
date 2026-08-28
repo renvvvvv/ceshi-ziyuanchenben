@@ -21,6 +21,7 @@ const KnowledgeBase = lazy(() => import('./pages/KnowledgeBase'));
 const Attendance = lazy(() => import('./pages/Attendance'));
 const ReportReview = lazy(() => import('./pages/ReportReview'));
 const AiTestExpert = lazy(() => import('./pages/AiTestExpert'));
+const ResourceConfig = lazy(() => import('./pages/ResourceConfig'));
 
 // 加载中组件（带淡入动画）
 function PageLoading() {
@@ -99,6 +100,7 @@ function AppRoutes() {
           <Route path="team-pool" element={<RequirePermission module="teamPool"><TeamPool /></RequirePermission>} />
           <Route path="test-guide" element={<RequirePermission module="testGuide"><TestGuide /></RequirePermission>} />
           <Route path="resource-calculator" element={<RequirePermission module="resourceCalc"><ResourceCalculator /></RequirePermission>} />
+          <Route path="resource-config" element={<RequirePermission module="resourceConfig"><ResourceConfig /></RequirePermission>} />
           <Route path="permission-config" element={<RequirePermission module="permissionConfig"><PermissionConfig /></RequirePermission>} />
           <Route path="knowledge-base" element={<RequirePermission module="dashboard"><KnowledgeBase /></RequirePermission>} />
           <Route path="ai-test-expert" element={<RequirePermission module="aiTestExpert"><AiTestExpert /></RequirePermission>} />

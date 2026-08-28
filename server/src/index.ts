@@ -9,6 +9,7 @@ import kbRouter from './routes/kb.js';
 import kbQARouter from './routes/kbQA.js';
 import testDocsRouter from './routes/testDocs.js';
 import attendanceRouter from './routes/attendance.js';
+import rcConfigRouter from './routes/rcConfig.js';
 import { initDatabase } from './database.js';
 import db from './database.js';
 
@@ -42,6 +43,7 @@ app.use('/api/kb', kbRouter);
 app.use('/api/kb/qa', kbQARouter);
 app.use('/api/test-docs', testDocsRouter);
 app.use('/api/attendance-adjustments', attendanceRouter);
+app.use('/api/rc', rcConfigRouter);
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
