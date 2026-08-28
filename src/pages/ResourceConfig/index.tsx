@@ -6,9 +6,10 @@ import {
 import type { ColumnsType } from 'antd/es/table';
 import {
   PlusOutlined, UploadOutlined, DownloadOutlined, AppstoreOutlined, EyeOutlined,
-  EditOutlined, DeleteOutlined, SendOutlined, ReloadOutlined, FileOutlined,
+  EditOutlined, DeleteOutlined, SendOutlined, ReloadOutlined, FileOutlined, FormOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../store/AuthContext';
 import type { ResourceConfigProject, AssetLibItem } from '../../types/resourceConfig';
 import { calcLabor, calcLoadAllocation, calcInstrumentAllocation, ASSET_CATEGORIES } from '../../types/resourceConfig';
@@ -46,6 +47,7 @@ const CAT_LABEL: Record<string, string> = { load: '假负载', ins: '仪器仪�
 const CAT_COLOR: Record<string, string> = { load: 'orange', ins: 'blue', pdu: 'green', cabinet: 'purple' };
 
 function ResourceConfig() {
+  const navigate = useNavigate();
   const { canEdit, canDelete } = useAuth();
   const editAllowed = canEdit('resourceConfig');
   const deleteAllowed = canDelete('resourceConfig');
@@ -85,6 +87,9 @@ function ResourceConfig() {
       if (d.success && Array.isArray(d.data)) setAssets(d.data);
     } catch { /* ignore */ }
   }, []);
+
+  // 资源库挂载即加载：概览的租赁缺口计算依赖它（修复：之前只在开抽屉时才加载，直接看概览会算成全租赁）
+  useEffect(() => { void loadAssets(); }, [loadAssets]);
 
   // ===== 新建 / 编辑 =====
   const openCreate = () => { setEditing(null); form.resetFields(); setModalOpen(true); };
@@ -231,21 +236,24 @@ function ResourceConfig() {
     const loadRent = Object.values(loadAlloc).reduce((s, r) => s + r.rent, 0);
     const insAlloc = calcInstrumentAllocation(p.instruments || [], assetsForCalc);
     const insRent = Object.values(insAlloc).reduce((s, r) => s + r.rent, 0);
+    const round1 = (v: number) => Math.round(v * 10) / 10;
     return {
       personnel: (p.personnel || []).length,
       staff: (p.staff || []).length,
       loads: (p.loads || []).length,
       instruments: (p.instruments || []).length,
-      laborManDays: Math.round(laborManDays * 10) / 10,
-      laborWorkers,
-      loadRent,
-      insRent,
+      laborManDays: round1(laborManDays),
+      laborWorkers: Math.round(laborWorkers),
+      loadRent: round1(loadRent),
+      insRent: Math.round(insRent),
     };
   }, [detail, assets]);
 
   const columns: ColumnsType<RcRow> = [
     { title: '项目名称', dataIndex: 'name', width: 220, ellipsis: true,
-      render: (t: string) => <span style={{ color: '#7cb8ff', fontWeight: 500 }}>{t}</span> },
+      render: (t: string, r: RcRow) => (
+        <a onClick={() => navigate(`/resource-config/${r.id}`)} style={{ color: '#7cb8ff', fontWeight: 500 }}>{t}</a>
+      ) },
     { title: '规模', dataIndex: 'mw', width: 80, render: (t: string) => t || '-' },
     { title: '地点', dataIndex: 'site', width: 100, render: (t: string) => t || '-' },
     { title: '测试经理', dataIndex: 'manager', width: 100, render: (t: string) => t || '-' },
@@ -269,6 +277,7 @@ function ResourceConfig() {
       render: (_: unknown, r: RcRow) => (
         <Space size={0}>
           <Tooltip title="查看概览"><Button type="text" size="small" icon={<EyeOutlined />} onClick={() => openDetail(r)} style={{ color: '#7cb8ff', width: 32 }} /></Tooltip>
+          <Tooltip title="编辑明细"><Button type="text" size="small" icon={<FormOutlined />} onClick={() => navigate(`/resource-config/${r.id}`)} style={{ color: '#b37feb', width: 32 }} /></Tooltip>
           {editAllowed && <Tooltip title="编辑"><Button type="text" size="small" icon={<EditOutlined />} onClick={() => openEdit(r)} style={{ color: '#faad14', width: 32 }} /></Tooltip>}
           {editAllowed && <Tooltip title="导出 JSON（兼容原工具）"><Button type="text" size="small" icon={<DownloadOutlined />} onClick={() => handleExport(r)} style={{ color: '#52c41a', width: 32 }} /></Tooltip>}
           {editAllowed && r.status !== '已交付' && (
