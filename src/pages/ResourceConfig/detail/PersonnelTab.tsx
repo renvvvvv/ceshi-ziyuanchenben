@@ -141,7 +141,11 @@ export default function PersonnelTab({ data, canEdit, patch }: TabProps) {
     }
     const l = lead ?? 0;
     const mb = member ?? 0;
-    return { ...r, lead: l, member: mb, count: l + mb };
+    // 可拆分的行 count=主测+组员；完全无法拆分的行（如"测试经理1人"）保留存量 count，
+    // 否则会把管理岗人数清零（与汇总报告的 Σcount 口径一致）
+    const derived = l + mb;
+    const count = derived > 0 ? derived : (num(r.count) || 0);
+    return { ...r, lead: l, member: mb, count };
   }), [data.personnel]);
 
   const sumLead = personnel.reduce((s, r) => s + r.lead, 0);
