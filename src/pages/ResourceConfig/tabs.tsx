@@ -100,8 +100,10 @@ export function DeptMembersTab() {
           <Space size={4} wrap>
             {certs.map((c) => <Tag key={c} color="cyan" style={{ margin: 0 }}>{c}</Tag>)}
             {editAllowed && (
-              <Button type="text" size="small" icon={<PlusOutlined />} onClick={() => { setCertEditing(r); setCertValues(splitCerts(r.skill)); }}
-                style={{ width: 26, height: 22, minWidth: 26, padding: 0, color: '#4d9fff' }} />
+              <Button type="link" size="small" icon={<PlusOutlined />} onClick={() => { setCertEditing(r); setCertValues(splitCerts(r.skill)); }}
+                style={{ padding: '0 4px', height: 22, fontSize: 12, color: certs.length ? 'rgba(77,159,255,0.75)' : '#4d9fff' }}>
+                {certs.length ? '加证书' : '添加证书'}
+              </Button>
             )}
           </Space>
         );
