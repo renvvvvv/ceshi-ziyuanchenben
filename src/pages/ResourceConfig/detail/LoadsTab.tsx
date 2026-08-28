@@ -17,6 +17,12 @@ import {
 
 const { TextArea } = Input;
 
+/** 数值显示：最多 1 位小数去尾零（备用台数 0.1 等浮点相加会出现多位小数） */
+function fmt1(v: number): number | string {
+  const r = Math.round(v * 10) / 10;
+  return Number.isInteger(r) ? r : r.toFixed(1);
+}
+
 interface TabProps {
   data: ResourceConfigProject;
   assets: AssetLibItem[];
@@ -229,8 +235,8 @@ export default function LoadsTab({ data, assets, canEdit, patch }: TabProps) {
     if (row && row.count > 0 && !isWaterRow(row) && !isRentRow(row)) {
       const a = computeLoadAlloc(next, assets)[id] || { own: 0, rent: 0 };
       if (a.own > 0 && a.rent <= 0) libToast(`「${row.type || '该负载'}」资源库自有 ${a.own} 台，无需租赁`);
-      else if (a.own > 0 && a.rent > 0) libToast(`「${row.type || '该负载'}」资源库自有 ${a.own} 台，不足 ${a.rent} 台需租赁`, 'warn');
-      else libToast(`「${row.type || '该负载'}」资源库无匹配，全部 ${a.rent} 台需租赁`, 'warn');
+      else if (a.own > 0 && a.rent > 0) libToast(`「${row.type || '该负载'}」资源库自有 ${a.own} 台，不足 ${fmt1(a.rent)} 台需租赁`, 'warn');
+      else libToast(`「${row.type || '该负载'}」资源库无匹配，全部 ${fmt1(a.rent)} 台需租赁`, 'warn');
     }
   };
 
@@ -245,8 +251,8 @@ export default function LoadsTab({ data, assets, canEdit, patch }: TabProps) {
     }
     const a = computeLoadAlloc(loadsRef.current.map((r) => (r.id === id ? { ...r, type: v } : r)), assets)[id] || { own: 0, rent: 0 };
     if (a.own > 0 && a.rent <= 0) libToast(`「${v}」资源库自有 ${a.own} 台，无需租赁`);
-    else if (a.own > 0 && a.rent > 0) libToast(`「${v}」资源库自有 ${a.own} 台，不足 ${a.rent} 台需租赁`, 'warn');
-    else libToast(`「${v}」资源库无匹配，全部 ${a.rent} 台需租赁`, 'warn');
+    else if (a.own > 0 && a.rent > 0) libToast(`「${v}」资源库自有 ${a.own} 台，不足 ${fmt1(a.rent)} 台需租赁`, 'warn');
+    else libToast(`「${v}」资源库无匹配，全部 ${fmt1(a.rent)} 台需租赁`, 'warn');
   };
 
   /** 四个「第几天」（原 L3633-3638）：start/leave 变更时同步 days = 离场 − 开始 */
@@ -336,13 +342,13 @@ export default function LoadsTab({ data, assets, canEdit, patch }: TabProps) {
       render: (_v, r) => {
         if (isWaterRow(r)) return <span style={{ color: 'rgba(255,255,255,0.35)' }}>—</span>;
         const a = alloc[r.id] || { own: 0, rent: 0 };
-        return <span style={{ fontWeight: 600, color: '#52c41a' }}>{a.own}</span>;
+        return <span style={{ fontWeight: 600, color: '#52c41a' }}>{fmt1(a.own)}</span>;
       } },
     { title: '需租赁', key: 'rent', width: 62, align: 'center',
       render: (_v, r) => {
         if (isWaterRow(r)) return <span style={{ color: 'rgba(255,255,255,0.35)' }}>—</span>;
         const a = alloc[r.id] || { own: 0, rent: 0 };
-        return <span style={{ fontWeight: 600, color: '#faad14' }}>{a.rent}</span>;
+        return <span style={{ fontWeight: 600, color: '#faad14' }}>{fmt1(a.rent)}</span>;
       } },
     { title: '备注', dataIndex: 'remark', width: 170,
       render: (_v, r) => (

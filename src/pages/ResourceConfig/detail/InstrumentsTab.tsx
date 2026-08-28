@@ -241,9 +241,9 @@ export default function InstrumentsTab({ data, assets, canEdit, patch }: TabProp
             onChange={(v) => setDemand(r.id, typeof v === 'number' ? v : 0)} style={{ width: '100%' }} />
         : (r.demand ?? 0) },
     { title: '自有', key: 'own', width: 62, align: 'center',
-      render: (_v, r) => <span style={{ fontWeight: 600, color: '#52c41a' }}>{(insAlloc[r.id] || { own: 0 }).own}</span> },
+      render: (_v, r) => <span style={{ fontWeight: 600, color: '#52c41a' }}>{Math.round((insAlloc[r.id] || { own: 0 }).own * 10) / 10}</span> },
     { title: '需租赁', key: 'rent', width: 66, align: 'center',
-      render: (_v, r) => <span style={{ fontWeight: 600, color: '#faad14' }}>{(insAlloc[r.id] || { rent: 0 }).rent}</span> },
+      render: (_v, r) => <span style={{ fontWeight: 600, color: '#faad14' }}>{Math.round((insAlloc[r.id] || { rent: 0 }).rent * 10) / 10}</span> },
     { title: '天数', dataIndex: 'days', width: 70, align: 'center',
       render: (_v, r) => canEdit
         ? <InputNumber size="small" min={1} precision={0} value={r.days ?? 40} className="rc-cell-input"
@@ -289,7 +289,7 @@ export default function InstrumentsTab({ data, assets, canEdit, patch }: TabProp
       {stats.fullRows > 0 && stats.partRows === 0 && stats.rent <= 0 ? (
         <LibTip kind="ok">✅ <b>提示：</b>以下 <b>{stats.fullRows}</b> 种仪器在🏠自有资源库内数量充足，<b>无需租赁</b></LibTip>
       ) : stats.fullRows > 0 || stats.partRows > 0 ? (
-        <LibTip kind="warn">⚠️ <b>提示：</b>资源库可全覆盖 {stats.fullRows} 种（{stats.libMatched} 台）、部分覆盖 {stats.partRows} 种，另有 <b>{stats.rent} 台需租赁</b></LibTip>
+        <LibTip kind="warn">⚠️ <b>提示：</b>资源库可全覆盖 {stats.fullRows} 种（{stats.libMatched} 台）、部分覆盖 {stats.partRows} 种，另有 <b>{Math.round(stats.rent * 10) / 10} 台需租赁</b></LibTip>
       ) : (
         <LibTip kind="gray">🔍 资源库暂无匹配仪器，可到「🏠 自有资源库」添加自有仪器（按名称自动匹配，无需租赁）</LibTip>
       )}
@@ -334,8 +334,8 @@ export default function InstrumentsTab({ data, assets, canEdit, patch }: TabProp
                 <Table.Summary.Cell index={0} />
                 <Table.Summary.Cell index={1}><span style={sumColor}>合计</span></Table.Summary.Cell>
                 <Table.Summary.Cell index={2} align="center"><span style={sumColor}>{stats.req}</span></Table.Summary.Cell>
-                <Table.Summary.Cell index={3} align="center"><span style={{ ...sumColor, color: '#52c41a' }}>{stats.own}</span></Table.Summary.Cell>
-                <Table.Summary.Cell index={4} align="center"><span style={{ ...sumColor, color: '#faad14' }}>{stats.rent}</span></Table.Summary.Cell>
+                <Table.Summary.Cell index={3} align="center"><span style={{ ...sumColor, color: '#52c41a' }}>{Math.round(stats.own * 10) / 10}</span></Table.Summary.Cell>
+                <Table.Summary.Cell index={4} align="center"><span style={{ ...sumColor, color: '#faad14' }}>{Math.round(stats.rent * 10) / 10}</span></Table.Summary.Cell>
                 <Table.Summary.Cell index={5} />
                 <Table.Summary.Cell index={6} />
                 <Table.Summary.Cell index={7} />
