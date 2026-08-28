@@ -114,8 +114,10 @@ export function DeptMembersTab() {
       title: '', key: 'op', width: 44, align: 'center' as const,
       render: (_: unknown, r: DeptRow) => (
         <Popconfirm title={`删除「${r.name}」？`} onConfirm={async () => {
-          await fetch(`/api/rc/dept-members/${r.id}`, { method: 'DELETE', credentials: 'include' });
-          message.success('已删除'); void load();
+          const res = await fetch(`/api/rc/dept-members/${r.id}`, { method: 'DELETE', credentials: 'include' });
+          const d = await res.json().catch(() => ({}));
+          if (d.success) { message.success('已删除'); void load(); }
+          else message.error(d.error || '删除失败');
         }} okText="删除" cancelText="取消" okButtonProps={{ danger: true }}>
           <Button type="text" size="small" danger icon={<DeleteOutlined />} style={{ width: 30 }} />
         </Popconfirm>
@@ -179,13 +181,18 @@ export function DeptMembersTab() {
         onCancel={() => setCertEditing(null)}
         onOk={async () => {
           if (!certEditing) return;
-          await fetch(`/api/rc/dept-members/${certEditing.id}`, {
+          const res = await fetch(`/api/rc/dept-members/${certEditing.id}`, {
             method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
             body: JSON.stringify({ skill: certValues.join('、') }),
           });
-          message.success('证书已更新');
-          setCertEditing(null);
-          void load();
+          const d = await res.json().catch(() => ({}));
+          if (d.success) {
+            message.success('证书已更新');
+            setCertEditing(null);
+            void load();
+          } else {
+            message.error(d.error || '保存失败');
+          }
         }}
         okText="保存" cancelText="取消"
       >
@@ -277,8 +284,10 @@ export function AssetsTab() {
       title: '', key: 'op', width: 44, align: 'center' as const,
       render: (_: unknown, r: AssetRow) => (
         <Popconfirm title={`删除「${r.name}」？`} onConfirm={async () => {
-          await fetch(`/api/rc/assets/${r.id}`, { method: 'DELETE', credentials: 'include' });
-          message.success('已删除'); void load();
+          const res = await fetch(`/api/rc/assets/${r.id}`, { method: 'DELETE', credentials: 'include' });
+          const d = await res.json().catch(() => ({}));
+          if (d.success) { message.success('已删除'); void load(); }
+          else message.error(d.error || '删除失败');
         }} okText="删除" cancelText="取消" okButtonProps={{ danger: true }}>
           <Button type="text" size="small" danger icon={<DeleteOutlined />} style={{ width: 30 }} />
         </Popconfirm>

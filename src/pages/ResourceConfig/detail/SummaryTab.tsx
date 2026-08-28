@@ -35,7 +35,8 @@ const fmtDays = (v: number): string => (Math.round(v * 10) / 10).toString().repl
 const nowStr = (): string => {
   const d = new Date();
   const p = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()} ${d.getHours()}:${p(d.getMinutes())}`;
+  const p2 = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())} ${p2(d.getHours())}:${p(d.getMinutes())}`;
 };
 /** 投入明细单人总人天 = total（缺失时回退 踏勘+复测+测试，原 staffTotal 口径） */
 const staffTotalOf = (r: { total?: number; survey?: number; retest?: number; test?: number }): number =>
