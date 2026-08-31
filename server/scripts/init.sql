@@ -260,3 +260,16 @@ CREATE TABLE IF NOT EXISTS rc_dept_members (
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_rc_dept_level ON rc_dept_members(level);
+
+-- AI 用量记账（AI 测试专家按账号限额）
+CREATE TABLE IF NOT EXISTS ai_usage (
+    id          SERIAL PRIMARY KEY,
+    user_id     TEXT NOT NULL,
+    username    TEXT NOT NULL,
+    mode        TEXT NOT NULL DEFAULT 'deep',
+    tokens_in   INTEGER NOT NULL DEFAULT 0,
+    tokens_out  INTEGER NOT NULL DEFAULT 0,
+    question    TEXT,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_ai_usage_user_time ON ai_usage(user_id, created_at);

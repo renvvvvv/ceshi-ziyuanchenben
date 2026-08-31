@@ -106,6 +106,53 @@ function PermissionConfig() {
 
   const isAdmin = user?.role === '管理者';
 
+  // ============== AI 用量统计（仅管理者可见） ==============
+  const [aiUsage, setAiUsage] = useState<any[]>([]);
+  const [aiUsageLoading, setAiUsageLoading] = useState(false);
+  const loadAiUsage = useCallback(async () => {
+    if (user?.role !== '管理者') return;
+    setAiUsageLoading(true);
+    try {
+      const r = await request<{ success: boolean; list: any[] }>('/kb/qa/usage?days=30');
+      setAiUsage(r.list || []);
+    } catch {
+      /* 用量查询失败不影响页面其他功能 */
+    } finally {
+      setAiUsageLoading(false);
+    }
+  }, [user?.role]);
+
+  useEffect(() => {
+    if (user?.role === '管理者') loadAiUsage();
+  }, [user?.role, loadAiUsage]);
+
+  const fmtTokensCol = (v: number) => {
+    const n = Number(v) || 0;
+    if (n >= 1e8) return (n / 1e8).toFixed(2) + '亿';
+    if (n >= 1e4) return (n / 1e4).toFixed(1) + '万';
+    return String(Math.round(n));
+  };
+
+  const aiUsageColumns = [
+    { title: '账号', dataIndex: 'username', key: 'username' },
+    { title: '今日次数', dataIndex: 'todayCount', key: 'todayCount', width: 90 },
+    { title: '今日 Token', dataIndex: 'todayTokens', key: 'todayTokens', width: 110, render: fmtTokensCol },
+    { title: '本周 Token', dataIndex: 'weekTokens', key: 'weekTokens', width: 110, render: fmtTokensCol },
+    {
+      title: '本周积分 / 限额', dataIndex: 'weekPoints', key: 'weekPoints', width: 130,
+      render: (v: number) => {
+        const pct = Math.min(100, ((Number(v) || 0) / 60000) * 100);
+        return <Tag color={pct >= 90 ? 'red' : pct >= 70 ? 'orange' : 'green'}>{v} / 60000</Tag>;
+      },
+    },
+    { title: '近30天 Token', dataIndex: 'totalTokens', key: 'totalTokens', width: 120, render: fmtTokensCol },
+    { title: '近30天次数', dataIndex: 'totalCount', key: 'totalCount', width: 100 },
+    {
+      title: '最近使用', dataIndex: 'lastUsedAt', key: 'lastUsedAt', width: 150,
+      render: (v: string) => (v ? new Date(v).toLocaleString('zh-CN', { hour12: false }) : '-'),
+    },
+  ];
+
   // 角色矩阵用的模块列表（保留原有展示）
   const matrixModules = useMemo<AppModule[]>(
     () => ['dashboard', 'projects', 'history', 'teamPool', 'testGuide', 'resourceCalc', 'permissionConfig'],
@@ -762,6 +809,45 @@ function PermissionConfig() {
           )}
         </Spin>
       </Card>
+
+      {/* ============== AI 用量统计（仅管理者） ============== */}
+      {isAdmin && (
+        <Card
+          title={
+            <Space>
+              <ThunderboltOutlined style={{ color: '#52c41a' }} />
+              <span style={{ color: 'rgba(255,255,255,0.9)' }}>AI 用量统计（近30天）</span>
+              <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12 }}>
+                口径：每日 1.1亿 token（≈1.2万积分）· 每周硬限额 6万积分 · 1积分≈9167 token
+              </span>
+            </Space>
+          }
+          extra={
+            <Button icon={<ReloadOutlined />} onClick={loadAiUsage} loading={aiUsageLoading} size="small">
+              刷新
+            </Button>
+          }
+          style={{
+            background: 'rgba(13, 31, 60, 0.6)',
+            border: '1px solid rgba(255,255,255,0.08)',
+            borderRadius: 12,
+            marginBottom: 16,
+          }}
+          headStyle={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}
+          bodyStyle={{ padding: 0 }}
+        >
+          <Table
+            dataSource={aiUsage}
+            columns={aiUsageColumns}
+            pagination={false}
+            rowKey="username"
+            size="small"
+            locale={{ emptyText: <Empty description="近30天暂无 AI 问答记录" /> }}
+            className="dark-table"
+            style={{ background: 'transparent' }}
+          />
+        </Card>
+      )}
 
       {/* ============== 原角色矩阵 ============== */}
       <Card

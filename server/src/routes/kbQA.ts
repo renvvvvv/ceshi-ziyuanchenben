@@ -15,7 +15,7 @@ import { readFileSync, readdirSync, writeFileSync, mkdirSync, renameSync, exists
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import db from '../database.js';
-import { requireAuth } from './auth.js';
+import { requireAuth, requireRole } from './auth.js';
 
 const router = Router();
 
@@ -380,7 +380,7 @@ async function callGLMChatStream(
   messages: ChatMessage[],
   onChunk: (data: { content?: string; reasoning?: string; done?: boolean }) => void,
   mode: QaMode = 'deep',
-): Promise<{ reasoning: string; webSearch: any[] | null }> {
+): Promise<{ reasoning: string; webSearch: any[] | null; usage: { input: number; output: number } }> {
   const controller = new AbortController();
   // fast 模式通常 10s 内出全量结果，给 60s 余量；deep 含思考+联网搜索最长 150s
   const timeout = setTimeout(() => controller.abort(), mode === 'fast' ? 60000 : 150000);
@@ -424,6 +424,9 @@ async function callGLMChatStream(
     let buffer = '';
     let fullReasoning = '';
     let webSearch: any[] | null = null;
+    // 用量统计：message_start 带输入 token，message_delta 末次带累计输出 token
+    let usageIn = 0;
+    let usageOut = 0;
 
     while (true) {
       const { done, value } = await reader.read();
@@ -464,6 +467,15 @@ async function callGLMChatStream(
               webSearch.push({ title: q || '联网搜索', link: '', media: toolName });
             }
           }
+          // 用量统计（Anthropic 事件格式）
+          // 智谱端点：message_start 的 usage 恒为 0，真实的 input/output tokens
+          // 都在末尾的 message_delta 里（output_tokens 为累计值，取最后一次即可）
+          else if (evt.type === 'message_start' && evt.message?.usage?.input_tokens) {
+            usageIn = evt.message.usage.input_tokens;
+          } else if (evt.type === 'message_delta' && evt.usage) {
+            if (evt.usage.output_tokens) usageOut = evt.usage.output_tokens;
+            if (evt.usage.input_tokens) usageIn = evt.usage.input_tokens;
+          }
           // 搜索结果块：尽力提取来源标题/链接
           else if (evt.type === 'content_block_start' && evt.content_block?.type === 'web_search_tool_result') {
             try {
@@ -486,7 +498,7 @@ async function callGLMChatStream(
     }
 
     onChunk({ done: true });
-    return { reasoning: fullReasoning, webSearch };
+    return { reasoning: fullReasoning, webSearch, usage: { input: usageIn, output: usageOut } };
   } catch (err: any) {
     clearTimeout(timeout);
     if (err.name === 'AbortError') {
@@ -550,12 +562,96 @@ function buildLearnedPrompt(question: string): string {
     relevant.map(x => `Q: ${x.e.question}\nA: ${x.e.answer}`).join('\n\n');
 }
 
+// ============== AI 用量配额（防过度消耗） ==============
+// 口径（2026-08-31 与负责人确认）：每日 1.1 亿 token（≈1.2 万积分）为日额度，
+// 每周 6 万积分为周硬限额；换算 1 积分 = 1.1亿 / 1.2万 ≈ 9166.67 token。
+// 周期：日为自然日（0 点重置），周为自然周（周一 0 点重置，PG date_trunc('week')）。
+const DAILY_TOKEN_LIMIT = Number(process.env.AI_DAILY_TOKEN_LIMIT || 110_000_000);
+const WEEKLY_POINT_LIMIT = Number(process.env.AI_WEEKLY_POINT_LIMIT || 60_000);
+const POINT_TOKENS = Number(process.env.AI_POINT_TOKENS || 9166.67);
+
+function fmtTokens(n: number): string {
+  if (n >= 1e8) return (n / 1e8).toFixed(2) + '亿';
+  if (n >= 1e4) return (n / 1e4).toFixed(1) + '万';
+  return String(Math.round(n));
+}
+
+async function ensureAiUsageTable(): Promise<void> {
+  try {
+    await db.exec(`
+      CREATE TABLE IF NOT EXISTS ai_usage (
+        id          SERIAL PRIMARY KEY,
+        user_id     TEXT NOT NULL,
+        username    TEXT NOT NULL,
+        mode        TEXT NOT NULL DEFAULT 'deep',
+        tokens_in   INTEGER NOT NULL DEFAULT 0,
+        tokens_out  INTEGER NOT NULL DEFAULT 0,
+        question    TEXT,
+        created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+      CREATE INDEX IF NOT EXISTS idx_ai_usage_user_time ON ai_usage(user_id, created_at);
+    `);
+  } catch (e) {
+    console.warn('[KB-QA] ai_usage 表初始化失败，用量统计/限额将不可用:', (e as Error).message);
+  }
+}
+
+/** 汇总某账号用量：今日 token、本周 token（自然周周一起算）、今日提问次数 */
+async function getUsageSummary(userId: string): Promise<{ todayTokens: number; weekTokens: number; todayCount: number }> {
+  try {
+    const row0 = await db.getAsync(
+      `SELECT
+         COALESCE(SUM(tokens_in + tokens_out) FILTER (WHERE created_at >= date_trunc('day', now())), 0)  AS today_tokens,
+         COALESCE(SUM(tokens_in + tokens_out) FILTER (WHERE created_at >= date_trunc('week', now())), 0) AS week_tokens,
+         COUNT(*) FILTER (WHERE created_at >= date_trunc('day', now())) AS today_count
+       FROM ai_usage WHERE user_id = $1`, userId);
+    const row: any = row0 || {};
+    return {
+      todayTokens: Number(row.today_tokens) || 0,
+      weekTokens: Number(row.week_tokens) || 0,
+      todayCount: Number(row.today_count) || 0,
+    };
+  } catch {
+    // 表不存在等异常时放行（返回 0），不让统计故障阻断问答
+    return { todayTokens: 0, weekTokens: 0, todayCount: 0 };
+  }
+}
+
+function quotaPayload(s: { todayTokens: number; weekTokens: number; todayCount: number }) {
+  return {
+    todayTokens: s.todayTokens,
+    todayLimitTokens: DAILY_TOKEN_LIMIT,
+    todayCount: s.todayCount,
+    weekTokens: s.weekTokens,
+    weekPoints: Math.round((s.weekTokens / POINT_TOKENS) * 10) / 10,
+    weekLimitPoints: WEEKLY_POINT_LIMIT,
+    pointTokens: POINT_TOKENS,
+  };
+}
+
+async function recordUsage(
+  userId: string, username: string, mode: QaMode,
+  usage: { input: number; output: number }, question: string,
+): Promise<void> {
+  try {
+    await db.runAsync(
+      `INSERT INTO ai_usage (user_id, username, mode, tokens_in, tokens_out, question)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      userId, username, mode, Math.round(usage.input), Math.round(usage.output), question.slice(0, 50),
+    );
+  } catch (e) {
+    console.warn('[KB-QA] 用量记账失败（不影响回答）:', (e as Error).message);
+  }
+}
+
 // ============== 路由 ==============
 
 // 启动时加载知识库 + 向量索引 + 自学习库
 loadKnowledge();
 // 异步初始化向量索引（不阻塞启动，完成后 vectorReady=true）
 initVectorIndex().catch(err => console.warn('[KB-QA] 向量索引初始化异常:', err.message));
+// 用量表自检（幂等，老库无该表时自动建）
+ensureAiUsageTable();
 loadLearned();
 
 /**
@@ -583,6 +679,28 @@ router.post('/', requireAuth, async (req, res) => {
   }
 
   try {
+    // 0. 用量限额检查：超限不发起 AI 调用（不产生消耗），直接以 SSE 返回提示
+    const { userId, username } = (req as any).user || {};
+    const usageBefore = await getUsageSummary(userId);
+    const weekPointsBefore = usageBefore.weekTokens / POINT_TOKENS;
+    if (usageBefore.todayTokens >= DAILY_TOKEN_LIMIT || weekPointsBefore >= WEEKLY_POINT_LIMIT) {
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      res.flushHeaders?.();
+      const which = usageBefore.todayTokens >= DAILY_TOKEN_LIMIT
+        ? `今日 token 额度已用完（已用 ${fmtTokens(usageBefore.todayTokens)} / ${fmtTokens(DAILY_TOKEN_LIMIT)}），每日 0 点恢复`
+        : `本周积分额度已用完（已用 ${Math.round(weekPointsBefore)} / ${WEEKLY_POINT_LIMIT} 积分），下周一 0 点恢复`;
+      res.write(`data: ${JSON.stringify({
+        type: 'content',
+        text: `⏳ ${which}。为避免套餐额度过度消耗，本次 AI 调用未发起。如确有紧急需要，请联系管理员调整限额。`,
+      })}\n\n`);
+      res.write(`data: ${JSON.stringify({ type: 'done', reasoning: null, webSearch: null })}\n\n`);
+      res.write(`data: ${JSON.stringify({ type: 'quota', quota: quotaPayload(usageBefore) })}\n\n`);
+      res.end();
+      return;
+    }
+
     // 1. RAG 检索相关知识（向量优先，降级关键词）
     const relevant = await retrieveKnowledge(question, 3);
     const sources = relevant.map(c => ({ title: c.title, file: c.file }));
@@ -645,7 +763,7 @@ router.post('/', requireAuth, async (req, res) => {
     try {
       // 注意：done 事件必须在 await 返回后再发，
       // 因为 reasoning/webSearch 来自返回值（回调中访问会触发 TDZ 错误）
-      const { reasoning, webSearch } = await callGLMChatStream(
+      const { reasoning, webSearch, usage } = await callGLMChatStream(
         apiKey,
         systemPrompt,
         messages,
@@ -676,6 +794,17 @@ router.post('/', requireAuth, async (req, res) => {
 
       // 发送 done 事件（此时 reasoning/webSearch 已可用）
       safeWrite(`data: ${JSON.stringify({ type: 'done', reasoning, webSearch: searchResults })}\n\n`);
+
+      // 用量记账 + 推送最新配额（前端刷新进度条）
+      let usageFinal = usage;
+      if (usageFinal.input + usageFinal.output === 0) {
+        // API 未返回 usage 时按字符量估算（中文约 1.6 token/字）
+        const inChars = systemPrompt.length + messages.reduce((a, m) => a + m.content.length, 0);
+        usageFinal = { input: Math.ceil(inChars * 1.6), output: Math.ceil(fullAnswer.length * 1.6) };
+      }
+      await recordUsage(userId, username, qaMode, usageFinal, question);
+      const usageAfter = await getUsageSummary(userId);
+      safeWrite(`data: ${JSON.stringify({ type: 'quota', quota: quotaPayload(usageAfter) })}\n\n`);
       safeEnd();
     } catch (streamErr: any) {
       const errMsg = streamErr?.message || 'AI 流式回答失败';
@@ -703,6 +832,60 @@ router.post('/', requireAuth, async (req, res) => {
         }
       } catch {}
     }
+  }
+});
+
+/**
+ * GET /api/kb/qa/quota
+ * 当前账号的 AI 用量与配额（前端进度条展示）
+ */
+router.get('/quota', requireAuth, async (req, res) => {
+  try {
+    const { userId } = (req as any).user || {};
+    const s = await getUsageSummary(userId);
+    res.json({ success: true, quota: quotaPayload(s) });
+  } catch (e: any) {
+    res.status(500).json({ success: false, message: e?.message || '查询用量失败' });
+  }
+});
+
+/**
+ * GET /api/kb/qa/usage?days=30
+ * 各账号 AI 用量汇总（仅管理者）
+ */
+router.get('/usage', requireAuth, requireRole(['管理者']), async (req, res) => {
+  const days = Math.min(90, Math.max(1, Number(req.query.days) || 30));
+  try {
+    const rows = await db.allAsync(
+      `SELECT username,
+              COUNT(*)                       AS total_count,
+              COALESCE(SUM(tokens_in + tokens_out), 0) AS total_tokens,
+              COALESCE(SUM(tokens_in + tokens_out) FILTER (WHERE created_at >= date_trunc('day', now())), 0) AS today_tokens,
+              COALESCE(SUM(tokens_in + tokens_out) FILTER (WHERE created_at >= date_trunc('week', now())), 0) AS week_tokens,
+              COUNT(*) FILTER (WHERE created_at >= date_trunc('day', now())) AS today_count,
+              MAX(created_at)                AS last_used_at
+       FROM ai_usage
+       WHERE created_at >= now() - ($1 || ' days')::interval
+       GROUP BY username
+       ORDER BY week_tokens DESC, total_tokens DESC`, String(days));
+    const list = (rows as any[]).map((row: any) => ({
+      username: row.username,
+      todayTokens: Number(row.today_tokens) || 0,
+      todayCount: Number(row.today_count) || 0,
+      weekTokens: Number(row.week_tokens) || 0,
+      weekPoints: Math.round(((Number(row.week_tokens) || 0) / POINT_TOKENS) * 10) / 10,
+      totalTokens: Number(row.total_tokens) || 0,
+      totalCount: Number(row.total_count) || 0,
+      lastUsedAt: row.last_used_at,
+    }));
+    res.json({
+      success: true,
+      days,
+      limits: { dailyTokenLimit: DAILY_TOKEN_LIMIT, weeklyPointLimit: WEEKLY_POINT_LIMIT, pointTokens: POINT_TOKENS },
+      list,
+    });
+  } catch (e: any) {
+    res.status(500).json({ success: false, message: e?.message || '查询用量统计失败' });
   }
 });
 

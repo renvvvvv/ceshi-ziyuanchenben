@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Button, Spin, Input, message, Modal, Empty, Segmented, Tooltip } from 'antd';
+import { Button, Spin, Input, message, Modal, Empty, Segmented, Tooltip, Progress } from 'antd';
 import {
   RobotOutlined, UserOutlined, SendOutlined, ReloadOutlined,
   BulbOutlined, SearchOutlined, CheckOutlined, LinkOutlined,
   ThunderboltOutlined, BookOutlined, GlobalOutlined,
 } from '@ant-design/icons';
+import { request } from '../../api';
 
 const { TextArea } = Input;
 
@@ -49,6 +50,47 @@ const QUICK_QUESTIONS = [
   { icon: '🔧', text: '字节、阿里、腾讯的测试规范有什么区别？' },
 ];
 
+// ============== 用量配额进度条 ==============
+function fmtTokensShort(n: number): string {
+  if (n >= 1e8) return (n / 1e8).toFixed(2) + '亿';
+  if (n >= 1e4) return (n / 1e4).toFixed(1) + '万';
+  return String(Math.round(n));
+}
+
+function quotaColor(pct: number): string {
+  return pct >= 90 ? '#ff4d4f' : pct >= 70 ? '#faad14' : '#52c41a';
+}
+
+function QuotaBar({ quota }: { quota: any }) {
+  const todayUsed = quota.todayTokens || 0;
+  const todayLimit = quota.todayLimitTokens || 1;
+  const weekPoints = quota.weekPoints || 0;
+  const weekLimit = quota.weekLimitPoints || 1;
+  const todayPct = Math.min(100, (todayUsed / todayLimit) * 100);
+  const weekPct = Math.min(100, (weekPoints / weekLimit) * 100);
+  return (
+    <div style={{
+      display: 'flex', gap: 24, alignItems: 'center', padding: '6px 12px', marginBottom: 8,
+      background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 8,
+    }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'rgba(255,255,255,0.45)', marginBottom: 2 }}>
+          <span>今日 Token（{quota.todayCount ?? 0} 次提问）</span>
+          <span>剩余 <b style={{ color: quotaColor(todayPct) }}>{fmtTokensShort(Math.max(0, todayLimit - todayUsed))}</b> / {fmtTokensShort(todayLimit)}</span>
+        </div>
+        <Progress percent={todayPct} showInfo={false} size="small" strokeColor={quotaColor(todayPct)} trailColor="rgba(255,255,255,0.08)" />
+      </div>
+      <div style={{ width: 200 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'rgba(255,255,255,0.45)', marginBottom: 2 }}>
+          <span>本周积分</span>
+          <span>剩余 <b style={{ color: quotaColor(weekPct) }}>{Math.max(0, Math.round(weekLimit - weekPoints)).toLocaleString()}</b> / {weekLimit.toLocaleString()}</span>
+        </div>
+        <Progress percent={weekPct} showInfo={false} size="small" strokeColor={quotaColor(weekPct)} trailColor="rgba(255,255,255,0.08)" />
+      </div>
+    </div>
+  );
+}
+
 // ============== 主组件 ==============
 export default function AiTestExpert() {
   return (
@@ -87,10 +129,18 @@ function ChatArea() {
   const [qaMode, setQaMode] = useState<'fast' | 'deep'>('fast');
   const [asking, setAsking] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
+  // AI 用量配额（今日 token / 本周积分，进度条展示）
+  const [quota, setQuota] = useState<any>(null);
 
   useEffect(() => {
     if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight;
   }, [messages, asking]);
+
+  useEffect(() => {
+    request<{ success: boolean; quota: any }>('/kb/qa/quota')
+      .then(r => { if (r?.quota) setQuota(r.quota); })
+      .catch(() => { /* 配额查询失败不阻断对话 */ });
+  }, []);
 
   const handleAsk = useCallback(async (questionText?: string) => {
     const question = (questionText ?? input).trim();
@@ -161,6 +211,9 @@ function ChatArea() {
                 setMessages(prev => prev.map((m, i) => i === assistantIdx ? {
                   ...m, content: fullContent, reasoning: fullReasoning, webSearch,
                 } : m));
+              } else if (data.type === 'quota' && data.quota) {
+                // 本次回答完成后的最新用量，刷新进度条
+                setQuota(data.quota);
               } else if (data.type === 'error') {
                 // 后端在流式过程中出错，已通过 SSE 通知（而非 HTTP 500）
                 if (data.partial) fullContent = data.partial;
@@ -232,6 +285,7 @@ function ChatArea() {
         background: 'rgba(0,0,0,0.15)',
       }}>
         <div style={{ maxWidth: 900, margin: '0 auto' }}>
+          {quota && <QuotaBar quota={quota} />}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
             <Segmented
               value={qaMode}
