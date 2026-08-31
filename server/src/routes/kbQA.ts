@@ -371,18 +371,27 @@ async function callGLMChat(
  * 流式调用 GLM-5.2（stream=true，逐 chunk 回调）
  * onChunk: 每收到一段内容就回调（实时推送给前端）
  */
+/** 问答模式：fast=5.3-Flash 秒级响应（常规查询），deep=GLM-5.2 深度思考（复杂分析） */
+type QaMode = 'fast' | 'deep';
+
 async function callGLMChatStream(
   apiKey: string,
   systemPrompt: string,
   messages: ChatMessage[],
   onChunk: (data: { content?: string; reasoning?: string; done?: boolean }) => void,
+  mode: QaMode = 'deep',
 ): Promise<{ reasoning: string; webSearch: any[] | null }> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 150000);
+  // fast 模式通常 10s 内出全量结果，给 60s 余量；deep 含思考+联网搜索最长 150s
+  const timeout = setTimeout(() => controller.abort(), mode === 'fast' ? 60000 : 150000);
 
   try {
     // 2026-08-27 起改走 Anthropic 兼容端点（智谱 Coding Plan 套餐通道）。
-    // 标准 /paas/v4 端点下该套餐报 1113 余额不足；Anthropic 端点可用 glm-5.2（含思考+联网搜索）。
+    // 标准 /paas/v4 端点下该套餐报 1113 余额不足；Anthropic 端点可用 glm-5.2 / glm-5.3-flash。
+    const model = mode === 'fast' ? 'glm-5.3-flash' : 'glm-5.2';
+    // fast 档：关闭思考（秒回的关键）+ 搜索限 2 次；deep 档：思考 + 搜索 5 次
+    const thinking = mode === 'fast' ? { type: 'disabled' } : { type: 'enabled' };
+    const searchUses = mode === 'fast' ? 2 : 5;
     const response = await fetch('https://open.bigmodel.cn/api/anthropic/v1/messages', {
       method: 'POST',
       headers: {
@@ -391,11 +400,11 @@ async function callGLMChatStream(
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'glm-5.2',
+        model,
         system: systemPrompt,
         messages: messages.map(m => ({ role: m.role, content: m.content })),
-        thinking: { type: 'enabled' },
-        tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 }],
+        thinking,
+        tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: searchUses }],
         max_tokens: 8192,
         stream: true,
       }),
@@ -405,7 +414,7 @@ async function callGLMChatStream(
 
     if (!response.ok) {
       const errText = await response.text();
-      throw new Error(`GLM-5.2 HTTP ${response.status}: ${errText.slice(0, 300)}`);
+      throw new Error(`${model} HTTP ${response.status}: ${errText.slice(0, 300)}`);
     }
 
     // 逐行读取 SSE 流（Anthropic 事件格式）
@@ -555,12 +564,14 @@ loadLearned();
  *
  * 请求体: {
  *   messages: [{role:'user'|'assistant', content:'...'}],  // 历史对话（不含当前问题）
- *   question: '当前问题'
+ *   question: '当前问题',
+ *   mode: 'fast' | 'deep'   // fast=GLM-5.3-Flash 秒级；deep=GLM-5.2 深度思考（默认）
  * }
- * 响应: { success:true, answer:'...', sources:[{title, file}] }
+ * 响应: SSE 流（sources → reasoning → content → done）
  */
 router.post('/', requireAuth, async (req, res) => {
-  const { messages: history = [], question } = req.body || {};
+  const { messages: history = [], question, mode } = req.body || {};
+  const qaMode: QaMode = mode === 'fast' ? 'fast' : 'deep';
 
   if (!question || typeof question !== 'string' || question.trim().length === 0) {
     return res.status(400).json({ success: false, message: '请输入问题' });
@@ -646,6 +657,7 @@ router.post('/', requireAuth, async (req, res) => {
           }
           // 注意：这里不再处理 chunk.done —— 改为 await 返回后统一处理
         },
+        qaMode,
       );
 
       // 兜底：若 GLM 没产出 content（例如被内容安全拦截），给前端一个可见提示

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Button, Spin, Input, message, Modal, Empty } from 'antd';
+import { Button, Spin, Input, message, Modal, Empty, Segmented, Tooltip } from 'antd';
 import {
   RobotOutlined, UserOutlined, SendOutlined, ReloadOutlined,
   BulbOutlined, SearchOutlined, CheckOutlined, LinkOutlined,
@@ -83,6 +83,8 @@ export default function AiTestExpert() {
 function ChatArea() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
+  // 问答模式：fast=GLM-5.3-Flash 秒级（默认），deep=GLM-5.2 深度思考
+  const [qaMode, setQaMode] = useState<'fast' | 'deep'>('fast');
   const [asking, setAsking] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -115,7 +117,7 @@ function ChatArea() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ messages: history, question }),
+        body: JSON.stringify({ messages: history, question, mode: qaMode }),
         signal: controller.signal,
       });
 
@@ -214,7 +216,7 @@ function ChatArea() {
                   }}>
                     <Spin size="small" />
                     <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, marginLeft: 10 }}>
-                      正在深度思考 + 联网搜索...
+                      {qaMode === 'fast' ? '⚡ 快速回答中...' : '🧠 正在深度思考 + 联网搜索...'}
                     </span>
                   </div>
                 </div>
@@ -229,22 +231,40 @@ function ChatArea() {
         borderTop: '1px solid rgba(255,255,255,0.06)', padding: '16px 24px',
         background: 'rgba(0,0,0,0.15)',
       }}>
-        <div style={{ maxWidth: 900, margin: '0 auto', display: 'flex', gap: 10, alignItems: 'flex-end' }}>
-          <TextArea
-            value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={handleKeyDown}
-            placeholder="向 AI 测试专家提问...（Enter 发送，Shift+Enter 换行）"
-            autoSize={{ minRows: 1, maxRows: 5 }}
-            style={{
-              background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)',
-              borderRadius: 10, color: 'rgba(255,255,255,0.9)', resize: 'none', fontSize: 14,
-            }}
-          />
-          <Button type="primary" icon={<SendOutlined />} onClick={() => handleAsk()}
-            loading={asking} disabled={!input.trim()} style={{ borderRadius: 10, height: 42, width: 42 }} />
-          {messages.length > 0 && (
-            <Button icon={<ReloadOutlined />} onClick={() => setMessages([])}
-              title="新对话" style={{ borderRadius: 10, height: 42, width: 42 }} />
-          )}
+        <div style={{ maxWidth: 900, margin: '0 auto' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <Segmented
+              value={qaMode}
+              onChange={(v) => setQaMode(v as 'fast' | 'deep')}
+              disabled={asking}
+              options={[
+                { value: 'fast', label: <span style={{ fontSize: 12 }}>⚡ 快速回答 <span style={{ color: 'rgba(255,255,255,0.35)' }}>· 5.3-Flash 秒级</span></span> },
+                { value: 'deep', label: <span style={{ fontSize: 12 }}>🧠 深度思考 <span style={{ color: 'rgba(255,255,255,0.35)' }}>· GLM-5.2 30-90秒</span></span> },
+              ]}
+            />
+            <Tooltip title={qaMode === 'fast' ? '适合标准查询、简单排障，通常几秒内回答' : '适合复杂分析、跨标准对比、深度排障，思考更充分但耗时较长'}>
+              <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11, cursor: 'help' }}>
+                {qaMode === 'fast' ? '常规问题用这档' : '复杂问题用这档'}
+              </span>
+            </Tooltip>
+          </div>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end' }}>
+            <TextArea
+              value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={handleKeyDown}
+              placeholder="向 AI 测试专家提问...（Enter 发送，Shift+Enter 换行）"
+              autoSize={{ minRows: 1, maxRows: 5 }}
+              style={{
+                background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)',
+                borderRadius: 10, color: 'rgba(255,255,255,0.9)', resize: 'none', fontSize: 14,
+              }}
+            />
+            <Button type="primary" icon={<SendOutlined />} onClick={() => handleAsk()}
+              loading={asking} disabled={!input.trim()} style={{ borderRadius: 10, height: 42, width: 42 }} />
+            {messages.length > 0 && (
+              <Button icon={<ReloadOutlined />} onClick={() => setMessages([])}
+                title="新对话" style={{ borderRadius: 10, height: 42, width: 42 }} />
+            )}
+          </div>
         </div>
       </div>
     </div>
