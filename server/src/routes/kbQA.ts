@@ -565,10 +565,19 @@ function buildLearnedPrompt(question: string): string {
 // ============== AI 用量配额（防过度消耗） ==============
 // 口径（2026-08-31 与负责人确认）：每日 1.1 亿 token（≈1.2 万积分）为日额度，
 // 每周 6 万积分为周硬限额；换算 1 积分 = 1.1亿 / 1.2万 ≈ 9166.67 token。
-// 周期：日为自然日（0 点重置），周为自然周（周一 0 点重置，PG date_trunc('week')）。
-const DAILY_TOKEN_LIMIT = Number(process.env.AI_DAILY_TOKEN_LIMIT || 110_000_000);
-const WEEKLY_POINT_LIMIT = Number(process.env.AI_WEEKLY_POINT_LIMIT || 60_000);
-const POINT_TOKENS = Number(process.env.AI_POINT_TOKENS || 9166.67);
+// 周期：日为自然日（0 点重置），周为自然周（周一 0 点重置），时区固定 Asia/Shanghai。
+function readPositiveEnv(name: string, def: number): number {
+  const v = Number(process.env[name]);
+  // 防呆：环境变量设 0/负数/非数字时回退默认值（0 会导致全员锁死或限额静默失效）
+  return Number.isFinite(v) && v > 0 ? v : def;
+}
+const DAILY_TOKEN_LIMIT = readPositiveEnv('AI_DAILY_TOKEN_LIMIT', 110_000_000);
+const WEEKLY_POINT_LIMIT = readPositiveEnv('AI_WEEKLY_POINT_LIMIT', 60_000);
+const POINT_TOKENS = readPositiveEnv('AI_POINT_TOKENS', 9166.67);
+
+// 日/周边界（显式时区，不依赖 DB 会话 TimeZone 配置）
+const DAY_BOUND = `date_trunc('day', now() AT TIME ZONE 'Asia/Shanghai') AT TIME ZONE 'Asia/Shanghai'`;
+const WEEK_BOUND = `date_trunc('week', now() AT TIME ZONE 'Asia/Shanghai') AT TIME ZONE 'Asia/Shanghai'`;
 
 function fmtTokens(n: number): string {
   if (n >= 1e8) return (n / 1e8).toFixed(2) + '亿';
@@ -601,9 +610,9 @@ async function getUsageSummary(userId: string): Promise<{ todayTokens: number; w
   try {
     const row0 = await db.getAsync(
       `SELECT
-         COALESCE(SUM(tokens_in + tokens_out) FILTER (WHERE created_at >= date_trunc('day', now())), 0)  AS today_tokens,
-         COALESCE(SUM(tokens_in + tokens_out) FILTER (WHERE created_at >= date_trunc('week', now())), 0) AS week_tokens,
-         COUNT(*) FILTER (WHERE created_at >= date_trunc('day', now())) AS today_count
+         COALESCE(SUM(tokens_in + tokens_out) FILTER (WHERE created_at >= ${DAY_BOUND}), 0)  AS today_tokens,
+         COALESCE(SUM(tokens_in + tokens_out) FILTER (WHERE created_at >= ${WEEK_BOUND}), 0) AS week_tokens,
+         COUNT(*) FILTER (WHERE created_at >= ${DAY_BOUND}) AS today_count
        FROM ai_usage WHERE user_id = $1`, userId);
     const row: any = row0 || {};
     return {
@@ -809,6 +818,12 @@ router.post('/', requireAuth, async (req, res) => {
     } catch (streamErr: any) {
       const errMsg = streamErr?.message || 'AI 流式回答失败';
       console.error('[KB-QA] 流式回答失败:', errMsg);
+      // 错误/超时路径同样记账（上游可能已消耗 prompt + 已生成部分），避免配额系统性少算
+      const inChars = systemPrompt.length + messages.reduce((a, m) => a + m.content.length, 0);
+      recordUsage(userId, username, qaMode, {
+        input: Math.ceil(inChars * 1.6),
+        output: Math.ceil(fullAnswer.length * 1.6),
+      }, question).catch(() => { /* 记账失败不影响错误提示 */ });
       // 头部已发送，只能通过 SSE error 事件通知前端，绝不能 res.json（会抛 ERR_HTTP_HEADERS_SENT）
       safeWrite(`data: ${JSON.stringify({
         type: 'error',
@@ -860,9 +875,9 @@ router.get('/usage', requireAuth, requireRole(['管理者']), async (req, res) =
       `SELECT username,
               COUNT(*)                       AS total_count,
               COALESCE(SUM(tokens_in + tokens_out), 0) AS total_tokens,
-              COALESCE(SUM(tokens_in + tokens_out) FILTER (WHERE created_at >= date_trunc('day', now())), 0) AS today_tokens,
-              COALESCE(SUM(tokens_in + tokens_out) FILTER (WHERE created_at >= date_trunc('week', now())), 0) AS week_tokens,
-              COUNT(*) FILTER (WHERE created_at >= date_trunc('day', now())) AS today_count,
+              COALESCE(SUM(tokens_in + tokens_out) FILTER (WHERE created_at >= ${DAY_BOUND}), 0) AS today_tokens,
+              COALESCE(SUM(tokens_in + tokens_out) FILTER (WHERE created_at >= ${WEEK_BOUND}), 0) AS week_tokens,
+              COUNT(*) FILTER (WHERE created_at >= ${DAY_BOUND}) AS today_count,
               MAX(created_at)                AS last_used_at
        FROM ai_usage
        WHERE created_at >= now() - ($1 || ' days')::interval

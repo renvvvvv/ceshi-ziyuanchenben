@@ -109,12 +109,15 @@ function PermissionConfig() {
   // ============== AI 用量统计（仅管理者可见） ==============
   const [aiUsage, setAiUsage] = useState<any[]>([]);
   const [aiUsageLoading, setAiUsageLoading] = useState(false);
+  // 周限额从后端 limits 读取（后端可用环境变量调整，避免前端硬编码不一致）
+  const [weekPointLimit, setWeekPointLimit] = useState(60000);
   const loadAiUsage = useCallback(async () => {
     if (user?.role !== '管理者') return;
     setAiUsageLoading(true);
     try {
-      const r = await request<{ success: boolean; list: any[] }>('/kb/qa/usage?days=30');
+      const r = await request<{ success: boolean; list: any[]; limits?: { weeklyPointLimit?: number } }>('/kb/qa/usage?days=30');
       setAiUsage(r.list || []);
+      if (r.limits?.weeklyPointLimit && r.limits.weeklyPointLimit > 0) setWeekPointLimit(r.limits.weeklyPointLimit);
     } catch {
       /* 用量查询失败不影响页面其他功能 */
     } finally {
@@ -141,8 +144,8 @@ function PermissionConfig() {
     {
       title: '本周积分 / 限额', dataIndex: 'weekPoints', key: 'weekPoints', width: 130,
       render: (v: number) => {
-        const pct = Math.min(100, ((Number(v) || 0) / 60000) * 100);
-        return <Tag color={pct >= 90 ? 'red' : pct >= 70 ? 'orange' : 'green'}>{v} / 60000</Tag>;
+        const pct = Math.min(100, ((Number(v) || 0) / weekPointLimit) * 100);
+        return <Tag color={pct >= 90 ? 'red' : pct >= 70 ? 'orange' : 'green'}>{v} / {weekPointLimit.toLocaleString()}</Tag>;
       },
     },
     { title: '近30天 Token', dataIndex: 'totalTokens', key: 'totalTokens', width: 120, render: fmtTokensCol },

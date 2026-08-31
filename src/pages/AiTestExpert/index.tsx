@@ -4,6 +4,8 @@ import {
   RobotOutlined, UserOutlined, SendOutlined, ReloadOutlined,
   BulbOutlined, SearchOutlined, CheckOutlined, LinkOutlined,
   ThunderboltOutlined, BookOutlined, GlobalOutlined,
+  BankOutlined, SwapOutlined, FileProtectOutlined, DatabaseOutlined,
+  ToolOutlined, BarChartOutlined, AlertOutlined, ProjectOutlined,
 } from '@ant-design/icons';
 import { request } from '../../api';
 
@@ -530,27 +532,36 @@ function SidePanel() {
         </div>
       </div>
 
-      {/* 内置知识库 */}
+      {/* 内置知识库（与 server/knowledge/references 实际文件一一对应，配色按类别区分） */}
       <div style={{ padding: '0 16px 16px' }}>
         <div style={{ color: 'rgba(255,255,255,0.95)', fontSize: 13, fontWeight: 600, marginBottom: 12 }}>
           📚 内置知识库
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
           {[
-            '阿里巴巴 IDC 测试验证指引 V3.0',
-            '腾讯 IDC 验证测试规范 V1.8',
-            '字节跳动测试管理规范 V5.0',
-            '厂商标准 vs 国标对照表',
-            'GB50174-2017 / GB50462-2024',
-            '数据中心设备速查手册',
-            '现场排障方法论',
-            '测试数据分析框架',
-          ].map((kb, i) => (
+            { icon: <BankOutlined />, title: '阿里巴巴 IDC 测试验证指引 V3.0', grad: 'linear-gradient(135deg,#FF9A3D,#FF6A00)' },
+            { icon: <BankOutlined />, title: '腾讯 IDC 验证测试规范 V1.8', grad: 'linear-gradient(135deg,#3B8BFF,#0052D9)' },
+            { icon: <BankOutlined />, title: '字节跳动测试管理规范 V5.0', grad: 'linear-gradient(135deg,#00C2C7,#0A7F8C)' },
+            { icon: <SwapOutlined />, title: '三大厂标准 vs 国标对照表', grad: 'linear-gradient(135deg,#B37FEB,#722ED1)' },
+            { icon: <FileProtectOutlined />, title: '国标条款速查 GB50174/50462', grad: 'linear-gradient(135deg,#FF7875,#CF1322)' },
+            { icon: <DatabaseOutlined />, title: '现场设备速查手册', grad: 'linear-gradient(135deg,#5CDBD3,#13C2C2)' },
+            { icon: <ToolOutlined />, title: '现场排障方法论', grad: 'linear-gradient(135deg,#95DE64,#389E0D)' },
+            { icon: <BarChartOutlined />, title: '测试数据分析框架', grad: 'linear-gradient(135deg,#FFD666,#D48806)' },
+            { icon: <AlertOutlined />, title: '故障案例库 · 16 个案例', grad: 'linear-gradient(135deg,#FF9C6E,#D4380D)' },
+            { icon: <ProjectOutlined />, title: '测试策略与项目管理', grad: 'linear-gradient(135deg,#85A5FF,#2F54EB)' },
+          ].map((kb, i, arr) => (
             <div key={i} style={{
-              color: 'rgba(255,255,255,0.55)', fontSize: 12, padding: '4px 0',
-              borderBottom: i < 7 ? '1px solid rgba(255,255,255,0.04)' : 'none',
+              display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0',
+              borderBottom: i < arr.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none',
             }}>
-              📄 {kb}
+              <div style={{
+                width: 22, height: 22, borderRadius: 6, flexShrink: 0,
+                background: kb.grad, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                boxShadow: '0 2px 6px rgba(0,0,0,0.25)',
+              }}>
+                <span style={{ color: '#fff', fontSize: 11, lineHeight: 1 }}>{kb.icon}</span>
+              </div>
+              <span style={{ color: 'rgba(255,255,255,0.65)', fontSize: 12 }}>{kb.title}</span>
             </div>
           ))}
         </div>
