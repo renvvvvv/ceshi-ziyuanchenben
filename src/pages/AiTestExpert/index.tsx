@@ -5,7 +5,7 @@ import {
   BulbOutlined, SearchOutlined, CheckOutlined, LinkOutlined,
   ThunderboltOutlined, BookOutlined, GlobalOutlined,
   BankOutlined, SwapOutlined, FileProtectOutlined, DatabaseOutlined,
-  ToolOutlined, BarChartOutlined, AlertOutlined, ProjectOutlined,
+  ToolOutlined, BarChartOutlined, AlertOutlined, ProjectOutlined, ReadOutlined,
 } from '@ant-design/icons';
 import { request } from '../../api';
 
@@ -544,6 +544,7 @@ function SidePanel() {
             { icon: <BankOutlined />, title: '字节跳动测试管理规范 V5.0', grad: 'linear-gradient(135deg,#00C2C7,#0A7F8C)' },
             { icon: <SwapOutlined />, title: '三大厂标准 vs 国标对照表', grad: 'linear-gradient(135deg,#B37FEB,#722ED1)' },
             { icon: <FileProtectOutlined />, title: '国标条款速查 GB50174/50462', grad: 'linear-gradient(135deg,#FF7875,#CF1322)' },
+            { icon: <ReadOutlined />, title: '国标规范全文库 · 26 本', grad: 'linear-gradient(135deg,#FF85C0,#9E1068)' },
             { icon: <DatabaseOutlined />, title: '现场设备速查手册', grad: 'linear-gradient(135deg,#5CDBD3,#13C2C2)' },
             { icon: <ToolOutlined />, title: '现场排障方法论', grad: 'linear-gradient(135deg,#95DE64,#389E0D)' },
             { icon: <BarChartOutlined />, title: '测试数据分析框架', grad: 'linear-gradient(135deg,#FFD666,#D48806)' },
