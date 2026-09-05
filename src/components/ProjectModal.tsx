@@ -70,9 +70,9 @@ function ProjectModal({ open, project, teamMembers, onCancel, onSubmit }: Projec
   }));
 
   const STATUS_COLORS: Record<string, string> = {
-    '空闲': '#52c41a',
-    '测试中': '#eb576c',
-    '休假': '#1890ff',
+    '空闲': '#16a34a',
+    '测试中': '#ec4899',
+    '休假': '#6366f1',
   };
 
   const transferRender: TransferProps<{ key: string; name: string; employeeId: string; status: string; skills: string[]; currentProjects: string[] }>['render'] = (item) => (
@@ -80,24 +80,24 @@ function ProjectModal({ open, project, teamMembers, onCancel, onSubmit }: Projec
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <span style={{
           width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
-          background: STATUS_COLORS[item.status] || '#666',
-          boxShadow: `0 0 4px ${STATUS_COLORS[item.status] || '#666'}`,
+          background: STATUS_COLORS[item.status] || '#9d9ab8',
+          boxShadow: `0 0 4px ${STATUS_COLORS[item.status] || '#9d9ab8'}`,
         }} />
-        <span style={{ color: '#fff', fontSize: 13 }}>{item.name}</span>
-        <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11 }}>{item.employeeId}</span>
+        <span style={{ color: '#1e1b2e', fontSize: 13 }}>{item.name}</span>
+        <span style={{ color: '#9d9ab8', fontSize: 11 }}>{item.employeeId}</span>
       </div>
       {item.skills.length > 0 && (
         <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', paddingLeft: 12 }}>
           {item.skills.slice(0, 3).map((s) => (
             <span key={s} style={{
-              fontSize: 10, color: 'rgba(255,255,255,0.45)',
-              background: 'rgba(255,255,255,0.05)', borderRadius: 3, padding: '0 4px',
+              fontSize: 10, color: '#6b6892',
+              background: '#f6f5fc', borderRadius: 3, padding: '0 4px',
             }}>{s}</span>
           ))}
         </div>
       )}
       {item.currentProjects.length > 0 && (
-        <div style={{ fontSize: 10, color: 'rgba(235,87,108,0.7)', paddingLeft: 12 }}>
+        <div style={{ fontSize: 10, color: 'rgba(220,38,38,0.75)', paddingLeft: 12 }}>
           {item.currentProjects.length > 1 ? `${item.currentProjects[0]} 等${item.currentProjects.length}个项目` : item.currentProjects[0]}
         </div>
       )}
@@ -117,9 +117,9 @@ function ProjectModal({ open, project, teamMembers, onCancel, onSubmit }: Projec
       width={720}
       destroyOnClose
       styles={{
-        header: { background: 'transparent', borderBottom: '1px solid rgba(255,255,255,0.1)' },
+        header: { background: 'transparent', borderBottom: '1px solid #e9e7f4' },
         body: { paddingTop: 20 },
-        footer: { borderTop: '1px solid rgba(255,255,255,0.1)' },
+        footer: { borderTop: '1px solid #e9e7f4' },
       }}
     >
       <Form form={form} layout="vertical" style={{ marginTop: 16 }}>
@@ -184,7 +184,7 @@ function ProjectModal({ open, project, teamMembers, onCancel, onSubmit }: Projec
 
         {/* 人员指派 */}
         <div style={{ marginTop: 16, marginBottom: 16 }}>
-          <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 14, marginBottom: 8, fontFamily: 'var(--font-primary)' }}>
+          <div style={{ color: '#46436a', fontSize: 14, marginBottom: 8, fontFamily: 'var(--font-primary)' }}>
             人员指派
           </div>
           <Transfer
@@ -202,13 +202,13 @@ function ProjectModal({ open, project, teamMembers, onCancel, onSubmit }: Projec
             listStyle={{
               width: 280,
               height: 280,
-              background: 'rgba(255,255,255,0.04)',
-              border: '1px solid rgba(255,255,255,0.08)',
+              background: '#f6f5fc',
+              border: '1px solid #e9e7f4',
               borderRadius: 8,
             }}
             selectAllLabels={['全选', '全选']}
           />
-          <div style={{ marginTop: 8, color: 'rgba(255,255,255,0.35)', fontSize: 12 }}>
+          <div style={{ marginTop: 8, color: '#9d9ab8', fontSize: 12 }}>
             已指派 {targetKeys.length} 人，项目开始后自动转为「测试中」状态
           </div>
         </div>

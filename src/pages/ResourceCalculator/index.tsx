@@ -335,7 +335,7 @@ function ResourceCalculator() {
           onClick={() => { setImportMode('batch'); setImportFile(null); setImportedData([]); setImportError(''); setImportModalOpen(true); }}>
           群算
         </Button>
-        <span style={{ color: '#999', fontSize: 13, lineHeight: '40px', marginLeft: 8 }}>
+        <span style={{ color: '#9d9ab8', fontSize: 13, lineHeight: '40px', marginLeft: 8 }}>
           单算：手动填写参数 | 群算：导入 Excel 批量计算
         </span>
       </div>
@@ -350,7 +350,7 @@ function ResourceCalculator() {
               type="date"
               value={filterDate}
               onChange={e => setFilterDate(e.target.value)}
-              style={{ padding: '2px 8px', border: '1px solid #d9d9d9', borderRadius: 6, fontSize: 13, width: 130 }}
+              style={{ padding: '2px 8px', border: '1px solid #d9d5f0', borderRadius: 6, fontSize: 13, width: 130 }}
             />
             {filterDate && <Button size="small" onClick={() => setFilterDate('')}>清除日期</Button>}
             {!backendOnline && <Tag color="red">后端离线</Tag>}
@@ -360,7 +360,7 @@ function ResourceCalculator() {
         }
       >
         {historyData.length === 0 && !historyLoading ? (
-          <div style={{ textAlign: 'center', padding: 40, color: '#999' }}>
+          <div style={{ textAlign: 'center', padding: 40, color: '#9d9ab8' }}>
             <HistoryOutlined style={{ fontSize: 36, marginBottom: 12 }} />
             <Paragraph>暂无历史记录。点击上方"单算"或"群算"开始。</Paragraph>
           </div>
@@ -450,8 +450,8 @@ function ResourceCalculator() {
             </Col>
           </Row>
           <Form.Item label="机柜功率段配置（可添加多行）" required>
-            <div style={{ border: '1px solid #d9d9d9', borderRadius: 6, padding: 12, marginBottom: 8 }}>
-              <div style={{ display: 'flex', gap: 8, marginBottom: 4, fontWeight: 500, fontSize: 12, color: '#666' }}>
+            <div style={{ border: '1px solid #e9e7f4', borderRadius: 6, padding: 12, marginBottom: 8 }}>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 4, fontWeight: 500, fontSize: 12, color: '#6b6892' }}>
                 <span style={{ width: 100 }}>功率 (kW)</span>
                 <span style={{ flex: 1 }}>机柜数量</span>
                 <span style={{ width: 60 }}></span>
@@ -585,8 +585,8 @@ function ResourceCalculator() {
               { title: '空调', dataIndex: 'ac_type', width: 65 },
               { title: '校验', dataIndex: '_errors', width: 55,
                 render: (e: string[]) => e.length > 0
-                  ? <Tooltip title={e.join('; ')}><CloseCircleOutlined style={{ color: '#ff4d4f' }} /></Tooltip>
-                  : <CheckCircleOutlined style={{ color: '#52c41a' }} /> },
+                  ? <Tooltip title={e.join('; ')}><CloseCircleOutlined style={{ color: '#dc2626' }} /></Tooltip>
+                  : <CheckCircleOutlined style={{ color: '#16a34a' }} /> },
             ]}
             pagination={false} scroll={{ x: 750 }}
             caption={importedData.length > 5 ? `仅显示前5条，共${importedData.length}条` : undefined}
@@ -659,14 +659,14 @@ function SingleResultView({ report, input, onExport, onBack, embedded }: {
       children: (
         <div>
           {report.柴发负载?.数量 ? (
-            <div style={{ marginBottom: 12, padding: '8px 12px', background: '#fff7e6', borderRadius: 6 }}>
+            <div style={{ marginBottom: 12, padding: '8px 12px', background: '#fff7ed', borderRadius: 6 }}>
               <Text strong>柴发负载：</Text>
               <Tag color="volcano">{report.柴发负载.规格}</Tag>
               <Text>×{report.柴发负载.数量}台  {report.柴发负载.电缆}</Text>
             </div>
           ) : null}
           {report.认证需求?.证书名称 && (
-            <div style={{ marginBottom: 12, padding: '8px 12px', background: '#f6f8fa', borderRadius: 6 }}>
+            <div style={{ marginBottom: 12, padding: '8px 12px', background: '#f6f5fc', borderRadius: 6 }}>
               <Text strong>认证需求：</Text>
               <Tag color="orange">{report.认证需求.证书名称}</Tag>
               {report.认证需求.认证范围 && <Text type="secondary"> 范围：{report.认证需求.认证范围}</Text>}
@@ -675,9 +675,9 @@ function SingleResultView({ report, input, onExport, onBack, embedded }: {
           <Row gutter={24} style={{ marginBottom: 16 }}>
             <Col span={4}><Statistic title="总容量" value={input.total_mw} suffix="MW" /></Col>
             <Col span={4}><Statistic title="总工期" value={input.total_duration} suffix="天" /></Col>
-            <Col span={4}><Statistic title="平均人数" value={Math.round(report.汇总.总人天 / input.total_duration * 10) / 10} suffix="人" valueStyle={{ color: '#faad14' }} /></Col>
-            <Col span={6}><Statistic title="峰值同时在场" value={report.汇总.峰值同时在场} suffix="人" valueStyle={{ color: '#1677ff' }} /></Col>
-            <Col span={6}><Statistic title="总人天" value={report.汇总.总人天} suffix="人·天" valueStyle={{ color: '#52c41a' }} /></Col>
+            <Col span={4}><Statistic title="平均人数" value={Math.round(report.汇总.总人天 / input.total_duration * 10) / 10} suffix="人" valueStyle={{ color: '#d97706' }} /></Col>
+            <Col span={6}><Statistic title="峰值同时在场" value={report.汇总.峰值同时在场} suffix="人" valueStyle={{ color: '#6366f1' }} /></Col>
+            <Col span={6}><Statistic title="总人天" value={report.汇总.总人天} suffix="人·天" valueStyle={{ color: '#16a34a' }} /></Col>
           </Row>
           <Table columns={summaryColumns} dataSource={summaryData} pagination={false} size="small" bordered scroll={{ x: 1800 }} />
         </div>

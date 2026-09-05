@@ -30,9 +30,9 @@ const MODULE_LABELS: Record<AppModule, string> = {
 };
 
 const ROLE_COLORS: Record<UserRole, string> = {
-  '管理者': '#ff4d4f',
-  '编辑者': '#faad14',
-  '阅读者': '#4d9fff',
+  '管理者': '#dc2626',
+  '编辑者': '#d97706',
+  '阅读者': '#6366f1',
 };
 
 const ALL_MODULES: AppModule[] = [
@@ -481,7 +481,7 @@ function PermissionConfig() {
         if (!perm) return null;
         return (
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11 }}>
+            <span style={{ color: '#6b6892', fontSize: 11 }}>
               <Switch
                 size="small"
                 checked={perm.view}
@@ -490,7 +490,7 @@ function PermissionConfig() {
               />{' '}
               查看
             </span>
-            <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11 }}>
+            <span style={{ color: '#6b6892', fontSize: 11 }}>
               <Switch
                 size="small"
                 checked={perm.edit}
@@ -499,7 +499,7 @@ function PermissionConfig() {
               />{' '}
               编辑
             </span>
-            <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11 }}>
+            <span style={{ color: '#6b6892', fontSize: 11 }}>
               <Switch
                 size="small"
                 checked={perm.delete}
@@ -525,11 +525,11 @@ function PermissionConfig() {
       render: (_: unknown, acc: AccountView) => (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {acc.type === 'feishu'
-            ? <TeamOutlined style={{ color: '#4d9fff' }} />
-            : <UserOutlined style={{ color: '#faad14' }} />}
+            ? <TeamOutlined style={{ color: '#6366f1' }} />
+            : <UserOutlined style={{ color: '#d97706' }} />}
           <div>
-            <div style={{ color: 'rgba(255,255,255,0.9)' }}>{acc.name}</div>
-            <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11 }}>{acc.username}</div>
+            <div style={{ color: '#1e1b2e' }}>{acc.name}</div>
+            <div style={{ color: '#6b6892', fontSize: 11 }}>{acc.username}</div>
           </div>
         </div>
       ),
@@ -613,10 +613,10 @@ function PermissionConfig() {
       width: 100,
       render: (_: unknown, acc: AccountView) => {
         if (acc.type === 'feishu') {
-          return <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11 }}>—</span>;
+          return <span style={{ color: '#9d9ab8', fontSize: 11 }}>—</span>;
         }
         if (acc.username === 'admin') {
-          return <Tooltip title="admin 不可删除"><LockOutlined style={{ color: 'rgba(255,255,255,0.3)' }} /></Tooltip>;
+          return <Tooltip title="admin 不可删除"><LockOutlined style={{ color: '#9d9ab8' }} /></Tooltip>;
         }
         return (
           <Popconfirm
@@ -647,7 +647,7 @@ function PermissionConfig() {
     <div>
       <div className="page-header">
         <h3>
-          <SafetyOutlined style={{ marginRight: 8, color: '#ff4d4f' }} />
+          <SafetyOutlined style={{ marginRight: 8, color: '#dc2626' }} />
           权限配置
         </h3>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -656,7 +656,7 @@ function PermissionConfig() {
             onClick={handleReset}
             disabled={!isAdmin}
             className="glass-btn"
-            style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.6)', borderRadius: 8 }}
+            style={{ background: '#f6f5fc', border: '1px solid #d9d5f0', color: '#46436a', borderRadius: 8 }}
           >
             重置默认
           </Button>
@@ -664,7 +664,7 @@ function PermissionConfig() {
             type="primary"
             onClick={handleSave}
             disabled={!isAdmin}
-            style={{ background: 'linear-gradient(135deg, #4d9fff, #3578e5)', border: 'none', borderRadius: 8 }}
+            style={{ background: 'linear-gradient(135deg, #6366f1, #a855f7)', border: 'none', borderRadius: 8 }}
           >
             保存角色矩阵
           </Button>
@@ -674,14 +674,14 @@ function PermissionConfig() {
       {!isAdmin && (
         <Card
           style={{
-            background: 'rgba(255, 77, 79, 0.08)',
-            border: '1px solid rgba(255, 77, 79, 0.3)',
+            background: 'rgba(220, 38, 38, 0.06)',
+            border: '1px solid rgba(220, 38, 38, 0.28)',
             marginBottom: 16,
             borderRadius: 8,
           }}
           bodyStyle={{ padding: 12 }}
         >
-          <p style={{ color: '#ff4d4f', margin: 0, fontSize: 13 }}>
+          <p style={{ color: '#dc2626', margin: 0, fontSize: 13 }}>
             当前身份为「{user?.role}」，仅管理者可修改权限配置。您可查看但无法修改。
           </p>
         </Card>
@@ -691,9 +691,9 @@ function PermissionConfig() {
       <Card
         title={
           <Space>
-            <TeamOutlined style={{ color: '#4d9fff' }} />
-            <span style={{ color: 'rgba(255,255,255,0.9)' }}>账号权限配置</span>
-            <Badge count={accounts.length} style={{ backgroundColor: '#4d9fff' }} />
+            <TeamOutlined style={{ color: '#6366f1' }} />
+            <span style={{ color: '#1e1b2e' }}>账号权限配置</span>
+            <Badge count={accounts.length} style={{ backgroundColor: '#6366f1' }} />
           </Space>
         }
         extra={
@@ -712,7 +712,7 @@ function PermissionConfig() {
                 icon={<PlusOutlined />}
                 onClick={() => setAddModalOpen(true)}
                 size="small"
-                style={{ background: 'linear-gradient(135deg, #4d9fff, #3578e5)', border: 'none' }}
+                style={{ background: 'linear-gradient(135deg, #6366f1, #a855f7)', border: 'none' }}
               >
                 新增账密账号
               </Button>
@@ -720,23 +720,23 @@ function PermissionConfig() {
                 icon={<SearchOutlined />}
                 onClick={() => setFeishuSearchOpen(true)}
                 size="small"
-                style={{ background: 'linear-gradient(135deg, #52c41a, #389e0d)', border: 'none', color: '#fff' }}
+                style={{ background: 'linear-gradient(135deg, #16a34a, #0d9488)', border: 'none', color: '#fff' }}
               >
                 搜索飞书账号
               </Button>
               {selectedRowKeys.length > 0 && (
-                <span style={{ borderLeft: '1px solid rgba(255,255,255,0.15)', paddingLeft: 8, marginLeft: 4 }}>
-                  <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12, marginRight: 8 }}>
+                <span style={{ borderLeft: '1px solid #d9d5f0', paddingLeft: 8, marginLeft: 4 }}>
+                  <span style={{ color: '#46436a', fontSize: 12, marginRight: 8 }}>
                     已选 {selectedRowKeys.length} 个
                   </span>
                   <Button size="small" icon={<ThunderboltOutlined />} loading={batchLoading}
                     onClick={() => handleBatch('setRole', '管理者')}
-                    style={{ marginRight: 4, borderColor: '#ff4d4f', color: '#ff4d4f' }}>
+                    style={{ marginRight: 4, borderColor: '#dc2626', color: '#dc2626' }}>
                     批量设为管理者
                   </Button>
                   <Button size="small" loading={batchLoading}
                     onClick={() => handleBatch('setRole', '编辑者')}
-                    style={{ marginRight: 4, borderColor: '#faad14', color: '#faad14' }}>
+                    style={{ marginRight: 4, borderColor: '#d97706', color: '#d97706' }}>
                     批量设为编辑者
                   </Button>
                   <Button size="small" loading={batchLoading}
@@ -753,19 +753,19 @@ function PermissionConfig() {
           )
         }
         style={{
-          background: 'rgba(13, 31, 60, 0.6)',
-          border: '1px solid rgba(255,255,255,0.08)',
+          background: '#ffffff',
+          border: '1px solid #e9e7f4',
           borderRadius: 12,
           marginBottom: 16,
         }}
-        headStyle={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}
+        headStyle={{ borderBottom: '1px solid #e9e7f4' }}
         bodyStyle={{ padding: 0 }}
       >
         <Spin spinning={loadingAccounts}>
           {accounts.length === 0 && !loadingAccounts ? (
             <div style={{ padding: 24 }}>
               <Empty
-                description={<span style={{ color: 'rgba(255,255,255,0.4)' }}>暂无账号记录</span>}
+                description={<span style={{ color: '#6b6892' }}>暂无账号记录</span>}
               />
             </div>
           ) : (
@@ -783,7 +783,7 @@ function PermissionConfig() {
               className="dark-table"
               expandable={{
                 expandedRowRender: (acc: AccountView) => (
-                  <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, paddingLeft: 8 }}>
+                  <div style={{ color: '#6b6892', fontSize: 12, paddingLeft: 8 }}>
                     {acc.type === 'feishu' && acc.deptNames && acc.deptNames.length > 0 && (
                       <div>部门：{acc.deptNames.map((d, i) => <Tag key={i}>{d}</Tag>)}</div>
                     )}
@@ -818,9 +818,9 @@ function PermissionConfig() {
         <Card
           title={
             <Space>
-              <ThunderboltOutlined style={{ color: '#52c41a' }} />
-              <span style={{ color: 'rgba(255,255,255,0.9)' }}>AI 用量统计（近30天）</span>
-              <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12 }}>
+              <ThunderboltOutlined style={{ color: '#16a34a' }} />
+              <span style={{ color: '#1e1b2e' }}>AI 用量统计（近30天）</span>
+              <span style={{ color: '#9d9ab8', fontSize: 12 }}>
                 口径：每日 1.1亿 token（≈1.2万积分）· 每周硬限额 6万积分 · 1积分≈9167 token
               </span>
             </Space>
@@ -831,12 +831,12 @@ function PermissionConfig() {
             </Button>
           }
           style={{
-            background: 'rgba(13, 31, 60, 0.6)',
-            border: '1px solid rgba(255,255,255,0.08)',
+            background: '#ffffff',
+            border: '1px solid #e9e7f4',
             borderRadius: 12,
             marginBottom: 16,
           }}
-          headStyle={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}
+          headStyle={{ borderBottom: '1px solid #e9e7f4' }}
           bodyStyle={{ padding: 0 }}
         >
           <Table
@@ -856,16 +856,16 @@ function PermissionConfig() {
       <Card
         title={
           <Space>
-            <SafetyOutlined style={{ color: '#faad14' }} />
-            <span style={{ color: 'rgba(255,255,255,0.9)' }}>角色默认权限矩阵</span>
+            <SafetyOutlined style={{ color: '#d97706' }} />
+            <span style={{ color: '#1e1b2e' }}>角色默认权限矩阵</span>
           </Space>
         }
         style={{
-          background: 'rgba(13, 31, 60, 0.6)',
-          border: '1px solid rgba(255,255,255,0.08)',
+          background: '#ffffff',
+          border: '1px solid #e9e7f4',
           borderRadius: 12,
         }}
-        headStyle={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}
+        headStyle={{ borderBottom: '1px solid #e9e7f4' }}
         bodyStyle={{ padding: 0 }}
       >
         <Table
@@ -878,7 +878,7 @@ function PermissionConfig() {
         />
       </Card>
 
-      <div style={{ marginTop: 16, color: 'rgba(255,255,255,0.3)', fontSize: 12 }}>
+      <div style={{ marginTop: 16, color: '#9d9ab8', fontSize: 12 }}>
         <p>说明：</p>
         <ul style={{ paddingLeft: 20, margin: 0 }}>
           <li>「账号权限配置」：按账号维度覆盖角色或模块权限（飞书用户登录后才会出现在列表）</li>
@@ -891,7 +891,7 @@ function PermissionConfig() {
 
       {/* ============== 新增账密账号弹窗 ============== */}
       <Modal
-        title={<Space><PlusOutlined style={{ color: '#4d9fff' }} />新增账密账号</Space>}
+        title={<Space><PlusOutlined style={{ color: '#6366f1' }} />新增账密账号</Space>}
         open={addModalOpen}
         onOk={handleAddAccount}
         onCancel={() => { setAddModalOpen(false); addForm.resetFields(); }}
@@ -958,7 +958,7 @@ function PermissionConfig() {
         width={640}
         title={
           <Space>
-            <SearchOutlined style={{ color: '#52c41a' }} />
+            <SearchOutlined style={{ color: '#16a34a' }} />
             <span>搜索飞书账号并预授权</span>
           </Space>
         }
@@ -970,17 +970,17 @@ function PermissionConfig() {
               value={feishuQuery}
               onChange={(e) => setFeishuQuery(e.target.value)}
               onPressEnter={handleFeishuSearch}
-              prefix={<SearchOutlined style={{ color: 'rgba(255,255,255,0.3)' }} />}
+              prefix={<SearchOutlined style={{ color: '#9d9ab8' }} />}
               style={{ flex: 1 }}
               allowClear
             />
             <Button type="primary" loading={feishuSearching} onClick={handleFeishuSearch}
-              style={{ background: 'linear-gradient(135deg, #52c41a, #389e0d)', border: 'none' }}>
+              style={{ background: 'linear-gradient(135deg, #16a34a, #0d9488)', border: 'none' }}>
               搜索
             </Button>
           </Space.Compact>
         </div>
-        <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12, marginBottom: 12 }}>
+        <div style={{ color: '#6b6892', fontSize: 12, marginBottom: 12 }}>
           搜索到的用户可立即预授权（默认角色为编辑者），授权后可在账号列表中配置具体权限。
           用户首次登录后，预配置的权限会自动保留。
         </div>
@@ -992,17 +992,17 @@ function PermissionConfig() {
                 <div key={c.openId}
                   style={{
                     padding: '12px 16px', marginBottom: 8, borderRadius: 8,
-                    background: 'rgba(255,255,255,0.04)',
-                    border: '1px solid rgba(255,255,255,0.08)',
+                    background: '#f6f5fc',
+                    border: '1px solid #e9e7f4',
                     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                   }}>
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                      <UserOutlined style={{ color: '#52c41a' }} />
-                      <strong style={{ color: 'rgba(255,255,255,0.9)' }}>{c.name}</strong>
+                      <UserOutlined style={{ color: '#16a34a' }} />
+                      <strong style={{ color: '#1e1b2e' }}>{c.name}</strong>
                       {alreadyExists && <Tag color="orange" style={{ margin: 0 }}>已预授权</Tag>}
                     </div>
-                    <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, display: 'flex', gap: 16 }}>
+                    <div style={{ color: '#6b6892', fontSize: 12, display: 'flex', gap: 16 }}>
                       {c.email && <span>邮箱: {c.email}</span>}
                       {c.mobile && <span>手机: {c.mobile}</span>}
                       {c.userId && <span>工号: {c.userId}</span>}
@@ -1013,7 +1013,7 @@ function PermissionConfig() {
                     loading={preauthorizingId === c.openId}
                     disabled={alreadyExists}
                     onClick={() => handlePreauthorize(c)}
-                    style={{ background: 'linear-gradient(135deg, #52c41a, #389e0d)', border: 'none' }}
+                    style={{ background: 'linear-gradient(135deg, #16a34a, #0d9488)', border: 'none' }}
                   >
                     {alreadyExists ? '已预授权' : '预授权'}
                   </Button>
@@ -1029,7 +1029,7 @@ function PermissionConfig() {
         title={
           permModal && (
             <Space>
-              <KeyOutlined style={{ color: '#4d9fff' }} />
+              <KeyOutlined style={{ color: '#6366f1' }} />
               <span>「{permModal.account.name}」模块权限覆盖</span>
             </Space>
           )
@@ -1060,13 +1060,13 @@ function PermissionConfig() {
       >
         {permModal && (
           <div>
-            <div style={{ marginBottom: 12, color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>
+            <div style={{ marginBottom: 12, color: '#6b6892', fontSize: 12 }}>
               为该账号单独配置 9 个模块的查看/编辑/删除权限。优先级高于「角色默认权限矩阵」。
               全部清空（全 false）等价于清除覆盖。
             </div>
             <div style={{ marginBottom: 12 }}>
               <Space>
-                <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12 }}>快速填充：</span>
+                <span style={{ color: '#46436a', fontSize: 12 }}>快速填充：</span>
                 {ALL_ROLES.map(r => (
                   <Button key={r} size="small" onClick={() => fillFromRole(r)}>
                     用 {r} 权限

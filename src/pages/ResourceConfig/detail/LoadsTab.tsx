@@ -64,11 +64,11 @@ function computeLoadAlloc(loads: LoadRow[], assets: AssetLibItem[]): Record<stri
 /** 行内徽章（原 .badge b-ok/b-warn/b-rent/b-miss，深色主题适配） */
 function badgeStyle(kind: 'ok' | 'warn' | 'rent' | 'miss' | 'water'): CSSProperties {
   const color: Record<typeof kind, CSSProperties> = {
-    ok: { background: 'rgba(82,196,26,0.12)', border: '1px solid rgba(82,196,26,0.45)', color: '#95de64' },
-    warn: { background: 'rgba(250,173,20,0.12)', border: '1px solid rgba(250,173,20,0.45)', color: '#ffc53d' },
-    rent: { background: 'rgba(255,77,79,0.10)', border: '1px solid rgba(255,77,79,0.40)', color: '#ff7875' },
-    miss: { background: 'rgba(114,46,209,0.12)', border: '1px solid rgba(114,46,209,0.45)', color: '#b37feb' },
-    water: { background: 'rgba(77,159,255,0.10)', border: '1px solid rgba(77,159,255,0.35)', color: '#7cb8ff' },
+    ok: { background: 'rgba(22,163,74,0.12)', border: '1px solid rgba(22,163,74,0.45)', color: '#16a34a' },
+    warn: { background: 'rgba(217,119,6,0.12)', border: '1px solid rgba(217,119,6,0.45)', color: '#d97706' },
+    rent: { background: 'rgba(220,38,38,0.10)', border: '1px solid rgba(220,38,38,0.40)', color: '#dc2626' },
+    miss: { background: 'rgba(168,85,247,0.12)', border: '1px solid rgba(168,85,247,0.45)', color: '#a855f7' },
+    water: { background: 'rgba(99,102,241,0.10)', border: '1px solid rgba(99,102,241,0.35)', color: '#6366f1' },
   };
   return {
     display: 'inline-block', fontSize: 10.5, lineHeight: 1.5, padding: '1px 7px',
@@ -79,9 +79,9 @@ function badgeStyle(kind: 'ok' | 'warn' | 'rent' | 'miss' | 'water'): CSSPropert
 /** 库存覆盖提示条（原 .lib-tip / .lib-tip.warn / .lib-tip.gray） */
 function LibTip({ kind, children }: { kind: 'ok' | 'warn' | 'gray'; children: React.ReactNode }) {
   const style: Record<typeof kind, CSSProperties> = {
-    ok: { background: 'rgba(82,196,26,0.08)', border: '1px solid rgba(82,196,26,0.35)', color: '#95de64' },
-    warn: { background: 'rgba(250,173,20,0.08)', border: '1px solid rgba(250,173,20,0.35)', color: '#ffc53d' },
-    gray: { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.5)' },
+    ok: { background: 'rgba(22,163,74,0.08)', border: '1px solid rgba(22,163,74,0.35)', color: '#16a34a' },
+    warn: { background: 'rgba(217,119,6,0.08)', border: '1px solid rgba(217,119,6,0.35)', color: '#d97706' },
+    gray: { background: '#f8f7fd', border: '1px solid #d9d5f0', color: '#6b6892' },
   };
   return <div style={{ marginBottom: 12, padding: '9px 14px', borderRadius: 8, fontSize: 12.5, lineHeight: 1.6, ...style[kind] }}>{children}</div>;
 }
@@ -142,26 +142,26 @@ function Stepper({ value, onChange, min = 0, disabled }: StepperProps) {
     }, 350);
   };
   const btnStyle: CSSProperties = {
-    width: 24, height: 24, border: 'none', background: 'rgba(255,255,255,0.06)',
-    cursor: disabled ? 'not-allowed' : 'pointer', fontSize: 15, lineHeight: '24px', color: 'rgba(255,255,255,0.65)',
+    width: 24, height: 24, border: 'none', background: '#e9e7f4',
+    cursor: disabled ? 'not-allowed' : 'pointer', fontSize: 15, lineHeight: '24px', color: '#46436a',
     userSelect: 'none', WebkitUserSelect: 'none', touchAction: 'none', padding: 0,
   };
   return (
     <div
       className="rc-stepper"
       title="点击单次加减，按住不放可连续不停地加减"
-      style={{ display: 'inline-flex', alignItems: 'center', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, overflow: 'hidden', background: 'rgba(255,255,255,0.02)' }}
+      style={{ display: 'inline-flex', alignItems: 'center', border: '1px solid #d9d5f0', borderRadius: 6, overflow: 'hidden', background: '#f6f5fc' }}
     >
       <button type="button" aria-label="减少" tabIndex={-1} disabled={disabled}
         onMouseDown={() => begin(-1)} onMouseUp={stop} onMouseLeave={stop}
-        style={{ ...btnStyle, borderRight: '1px solid rgba(255,255,255,0.12)' }}>−</button>
+        style={{ ...btnStyle, borderRight: '1px solid #d9d5f0' }}>−</button>
       <InputNumber
         size="small" min={min} precision={0} value={value} disabled={disabled} controls={false}
         onChange={(v) => onChange(clamp(typeof v === 'number' ? v : min))}
         className="rc-step-input rc-cell-input" style={{ width: 46 }} />
       <button type="button" aria-label="增加" tabIndex={-1} disabled={disabled}
         onMouseDown={() => begin(1)} onMouseUp={stop} onMouseLeave={stop}
-        style={{ ...btnStyle, borderLeft: '1px solid rgba(255,255,255,0.12)' }}>+</button>
+        style={{ ...btnStyle, borderLeft: '1px solid #d9d5f0' }}>+</button>
     </div>
   );
 }
@@ -300,14 +300,14 @@ export default function LoadsTab({ data, assets, canEdit, patch }: TabProps) {
 
   /** 周期单元格：四个「第几天」（原 L3533-3536，彩色 day-tag） */
   const renderPeriod = (r: LoadRow) => {
-    const items: Array<[string, 'arrive' | 'start' | 'end' | 'leave', string]> = [
-      ['到场', 'arrive', '#6366f1'], ['开始使用', 'start', '#16a34a'], ['结束使用', 'end', '#ea580c'], ['离场', 'leave', '#dc2626'],
+    const items: Array<[string, 'arrive' | 'start' | 'end' | 'leave', string, string]> = [
+      ['到场', 'arrive', '#f1f0fe', '#6366f1'], ['开始使用', 'start', '#f0fdf4', '#16a34a'], ['结束使用', 'end', '#fff7ed', '#d97706'], ['离场', 'leave', '#fef2f2', '#dc2626'],
     ];
     return (
       <div>
-        {items.map(([label, f, bg]) => (
+        {items.map(([label, f, bg, tc]) => (
           <div key={f} style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 3 }}>
-            <span style={{ background: bg, color: '#fff', minWidth: 48, textAlign: 'center', flex: 'none', fontSize: 11, borderRadius: 3, padding: '1px 0' }}>{label}</span>
+            <span style={{ background: bg, color: tc, minWidth: 48, textAlign: 'center', flex: 'none', fontSize: 11, borderRadius: 3, padding: '1px 0' }}>{label}</span>
             <InputNumber
               size="small" min={1} max={70} precision={0} disabled={!canEdit}
               value={parseDayRef(r[f]) || null} placeholder="第?天"
@@ -315,16 +315,16 @@ export default function LoadsTab({ data, assets, canEdit, patch }: TabProps) {
               className="rc-cell-input" style={{ flex: 1, minWidth: 0, width: 56 }} />
           </div>
         ))}
-        <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11, marginTop: 2 }}>填写第几天 · 天数 = 离场 − 开始使用 自动算</div>
+        <div style={{ color: '#6b6892', fontSize: 11, marginTop: 2 }}>填写第几天 · 天数 = 离场 − 开始使用 自动算</div>
       </div>
     );
   };
 
   const columns: ColumnsType<LoadRow> = [
     { title: '#', key: 'idx', width: 36, align: 'center', fixed: 'left' as const,
-      render: (_v, _r, i) => <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: 11 }}>{i + 1}</span> },
+      render: (_v, _r, i) => <span style={{ color: '#9d9ab8', fontSize: 11 }}>{i + 1}</span> },
     {
-      title: <div>假负载类型<div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', fontWeight: 400 }}>可输入库中无的类型</div></div>,
+      title: <div>假负载类型<div style={{ fontSize: 10, color: '#6b6892', fontWeight: 400 }}>可输入库中无的类型</div></div>,
       dataIndex: 'type', width: 200,
       render: (_v, r) => (
         <div>
@@ -353,22 +353,22 @@ export default function LoadsTab({ data, assets, canEdit, patch }: TabProps) {
         ? <TextArea size="small" autoSize={{ minRows: 1, maxRows: 4 }} value={r.spec ?? ''} placeholder="6KW/台 带电源线"
             onChange={(e) => setText(r.id, 'spec', e.target.value)} className="rc-cell-input" />
         : (r.spec || '-') },
-    { title: <div>到场 / 开始 / 结束 / 离场<div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', fontWeight: 400 }}>第几天（1-70）</div></div>,
+    { title: <div>到场 / 开始 / 结束 / 离场<div style={{ fontSize: 10, color: '#6b6892', fontWeight: 400 }}>第几天（1-70）</div></div>,
       key: 'period', width: 150, render: (_v, r) => renderPeriod(r) },
-    { title: <div>天数<div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', fontWeight: 400 }}>自动算</div></div>,
+    { title: <div>天数<div style={{ fontSize: 10, color: '#6b6892', fontWeight: 400 }}>自动算</div></div>,
       key: 'days', width: 56, align: 'center',
       render: (_v, r) => <span style={{ fontWeight: 600 }} title="离场 − 开始使用 自动计算">{calcLoadDays(r)}</span> },
     { title: '自有', key: 'own', width: 56, align: 'center',
       render: (_v, r) => {
-        if (isWaterRow(r)) return <span style={{ color: 'rgba(255,255,255,0.35)' }}>—</span>;
+        if (isWaterRow(r)) return <span style={{ color: '#9d9ab8' }}>—</span>;
         const a = alloc[r.id] || { own: 0, rent: 0 };
-        return <span style={{ fontWeight: 600, color: '#52c41a' }}>{fmt1(a.own)}</span>;
+        return <span style={{ fontWeight: 600, color: '#16a34a' }}>{fmt1(a.own)}</span>;
       } },
     { title: '需租赁', key: 'rent', width: 62, align: 'center',
       render: (_v, r) => {
-        if (isWaterRow(r)) return <span style={{ color: 'rgba(255,255,255,0.35)' }}>—</span>;
+        if (isWaterRow(r)) return <span style={{ color: '#9d9ab8' }}>—</span>;
         const a = alloc[r.id] || { own: 0, rent: 0 };
-        return <span style={{ fontWeight: 600, color: '#faad14' }}>{fmt1(a.rent)}</span>;
+        return <span style={{ fontWeight: 600, color: '#d97706' }}>{fmt1(a.rent)}</span>;
       } },
     { title: '备注', dataIndex: 'remark', width: 170,
       render: (_v, r) => (
@@ -377,7 +377,7 @@ export default function LoadsTab({ data, assets, canEdit, patch }: TabProps) {
             ? <TextArea size="small" autoSize={{ minRows: 1, maxRows: 4 }} value={r.remark ?? ''} placeholder="备注（可选）"
                 onChange={(e) => setText(r.id, 'remark', e.target.value)} className="rc-cell-input" />
             : (r.remark || '-')}
-          {r.note ? <div style={{ color: '#faad14', fontSize: 11, marginTop: 3 }}>📌 {r.note}</div> : null}
+          {r.note ? <div style={{ color: '#d97706', fontSize: 11, marginTop: 3 }}>📌 {r.note}</div> : null}
         </div>
       ) },
     ...(canEdit ? [{
@@ -390,7 +390,7 @@ export default function LoadsTab({ data, assets, canEdit, patch }: TabProps) {
     }] : []),
   ];
 
-  const sumColor: CSSProperties = { color: '#7cb8ff', fontWeight: 600 };
+  const sumColor: CSSProperties = { color: '#6366f1', fontWeight: 600 };
 
   return (
     <div>
@@ -400,7 +400,7 @@ export default function LoadsTab({ data, assets, canEdit, patch }: TabProps) {
           background: transparent !important;
           border: none !important;
           box-shadow: none !important;
-          color: rgba(255,255,255,0.88) !important;
+          color: #1e1b2e !important;
         }
         .rc-stepper .rc-step-input .ant-input-number-input {
           text-align: center;
@@ -408,22 +408,22 @@ export default function LoadsTab({ data, assets, canEdit, patch }: TabProps) {
           height: 24px;
           font-size: 12.5px;
         }
-        .rc-stepper button:hover { background: rgba(77,159,255,0.18) !important; color: #7cb8ff !important; }
-        .rc-stepper button:active { background: rgba(77,159,255,0.3) !important; }
+        .rc-stepper button:hover { background: rgba(99,102,241,0.18) !important; color: #6366f1 !important; }
+        .rc-stepper button:active { background: rgba(99,102,241,0.3) !important; }
       `}</style>
 
       {/* 页头 5 统计卡 */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10, marginBottom: 14 }}>
         {[
-          { label: '负载类型数', value: loads.length, color: '#7cb8ff' },
-          { label: '需求总量(台)', value: stats.needTotal.toFixed(0), color: '#7cb8ff' },
-          { label: '自有可覆盖', value: stats.ownTotal.toFixed(0), color: '#52c41a' },
-          { label: '需租赁', value: stats.rentTotal.toFixed(0), color: '#faad14' },
-          { label: '租赁台·天 (Σ需租×天数)', value: stats.rentDays.toFixed(0), color: '#faad14' },
+          { label: '负载类型数', value: loads.length, color: '#6366f1' },
+          { label: '需求总量(台)', value: stats.needTotal.toFixed(0), color: '#6366f1' },
+          { label: '自有可覆盖', value: stats.ownTotal.toFixed(0), color: '#16a34a' },
+          { label: '需租赁', value: stats.rentTotal.toFixed(0), color: '#d97706' },
+          { label: '租赁台·天 (Σ需租×天数)', value: stats.rentDays.toFixed(0), color: '#d97706' },
         ].map((c, i) => (
-          <div key={i} style={{ background: 'linear-gradient(135deg, rgba(30,58,95,0.45), rgba(30,58,95,0.2))', border: '1px solid rgba(77,159,255,0.18)', borderRadius: 10, padding: '12px 16px' }}>
+          <div key={i} style={{ background: 'linear-gradient(135deg,#f6f5fc,#f1f0fe)', border: '1px solid rgba(99,102,241,0.18)', borderRadius: 10, padding: '12px 16px' }}>
             <div style={{ fontSize: 22, fontWeight: 700, color: c.color, lineHeight: 1.2 }}>{c.value}</div>
-            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 4 }}>{c.label}</div>
+            <div style={{ fontSize: 12, color: '#6b6892', marginTop: 4 }}>{c.label}</div>
           </div>
         ))}
       </div>
@@ -438,10 +438,10 @@ export default function LoadsTab({ data, assets, canEdit, patch }: TabProps) {
       )}
 
       {/* 表格卡片 */}
-      <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: 16, marginBottom: 16 }}>
+      <div style={{ background: '#f6f5fc', border: '1px solid #e9e7f4', borderRadius: 12, padding: 16, marginBottom: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', marginBottom: 12 }}>
-          <span style={{ fontSize: 14, fontWeight: 600, color: 'rgba(255,255,255,0.9)' }}>🗄️ 假负载到场计划表</span>
-          <span style={{ margin: '0 0 0 8px', fontSize: 12, color: 'rgba(255,255,255,0.45)' }}>总需求 = 数量 + 备用台数，资源库优先覆盖为自有，超出部分自动转为需租赁</span>
+          <span style={{ fontSize: 14, fontWeight: 600, color: '#1e1b2e' }}>🗄️ 假负载到场计划表</span>
+          <span style={{ margin: '0 0 0 8px', fontSize: 12, color: '#6b6892' }}>总需求 = 数量 + 备用台数，资源库优先覆盖为自有，超出部分自动转为需租赁</span>
           <div style={{ flex: 1 }} />
           {canEdit && <Button size="small" type="primary" icon={<PlusOutlined />} onClick={addRow}>＋ 添加负载</Button>}
         </div>
@@ -449,14 +449,14 @@ export default function LoadsTab({ data, assets, canEdit, patch }: TabProps) {
           rowKey="id" size="small" columns={columns} dataSource={loads} pagination={false}
           className="rc-edit-table" scroll={{ x: 'max-content' }}
           locale={{ emptyText: (
-            <div style={{ padding: '28px 0', textAlign: 'center', color: 'rgba(255,255,255,0.4)' }}>
+            <div style={{ padding: '28px 0', textAlign: 'center', color: '#6b6892' }}>
               <div style={{ fontSize: 30, marginBottom: 6 }}>🗄️</div>
               还没有假负载配置<br />点上方「<b>＋ 添加负载</b>」开始配置
             </div>
           ) }}
           summary={() => (loads.length > 0 ? (
             <Table.Summary fixed>
-              <Table.Summary.Row style={{ background: 'rgba(30,58,95,0.35)' }}>
+              <Table.Summary.Row style={{ background: '#f1f0fe' }}>
                 <Table.Summary.Cell index={0} />
                 <Table.Summary.Cell index={1}><span style={sumColor}>合计</span></Table.Summary.Cell>
                 <Table.Summary.Cell index={2} align="center"><span style={sumColor} title="总需求 = Σ(数量+备用台数)">{stats.needTotal.toFixed(0)}</span></Table.Summary.Cell>
@@ -464,15 +464,15 @@ export default function LoadsTab({ data, assets, canEdit, patch }: TabProps) {
                 <Table.Summary.Cell index={4} />
                 <Table.Summary.Cell index={5} />
                 <Table.Summary.Cell index={6} />
-                <Table.Summary.Cell index={7} align="center"><span style={{ ...sumColor, color: '#52c41a' }}>{stats.ownTotal.toFixed(0)}</span></Table.Summary.Cell>
-                <Table.Summary.Cell index={8} align="center"><span style={{ ...sumColor, color: '#faad14' }}>{stats.rentTotal.toFixed(0)}</span></Table.Summary.Cell>
+                <Table.Summary.Cell index={7} align="center"><span style={{ ...sumColor, color: '#16a34a' }}>{stats.ownTotal.toFixed(0)}</span></Table.Summary.Cell>
+                <Table.Summary.Cell index={8} align="center"><span style={{ ...sumColor, color: '#d97706' }}>{stats.rentTotal.toFixed(0)}</span></Table.Summary.Cell>
                 <Table.Summary.Cell index={9} />
                 {canEdit ? <Table.Summary.Cell index={10} /> : null}
               </Table.Summary.Row>
             </Table.Summary>
           ) : null)}
         />
-        <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, lineHeight: 1.7, marginTop: 8 }}>
+        <div style={{ color: '#6b6892', fontSize: 12, lineHeight: 1.7, marginTop: 8 }}>
           ⚠️ <b>假负载类型</b>支持手动输入：可直接键入资源库里没有的类型（如「XX 品牌 800KW」），下拉中也有🏠资源库已有项与「🛒 租赁」供快速选择；填写规格（含 KW）可自动匹配自有资源，否则整行按租赁处理（自有=0）。<b>到场 / 开始使用 / 结束使用 / 离场</b>四列填写<b>第几天</b>（不用写具体日期），其中<b>天数 = 离场 − 开始使用 自动计算</b>。备用台数手动填写整数（如填 10 表示额外备用 10 台），总需求 = 数量 + 备用台数，资源库优先覆盖为自有，超出自动转租赁。
         </div>
       </div>

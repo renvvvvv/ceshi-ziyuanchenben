@@ -37,7 +37,7 @@ function PageLoading() {
       animation: 'pageFadeIn 0.3s cubic-bezier(0.4, 0, 0.2, 1) both',
     }}>
       <Spin size="large" />
-      <span style={{ color: 'rgba(255,255,255,0.4)', fontFamily: 'var(--font-primary)', fontSize: 13 }}>
+      <span style={{ color: '#6b6892', fontFamily: 'var(--font-primary)', fontSize: 13 }}>
         加载中...
       </span>
     </div>

@@ -22,15 +22,15 @@ export default function KnowledgeBase() {
       {/* 顶栏 */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 12, padding: '12px 18px',
-        borderBottom: '1px solid rgba(255,255,255,0.08)',
-        background: 'rgba(255,255,255,0.02)',
+        borderBottom: '1px solid #e9e7f4',
+        background: '#f6f5fc',
       }}>
-        <GlobalOutlined style={{ color: '#4d9fff', fontSize: 18 }} />
+        <GlobalOutlined style={{ color: '#6366f1', fontSize: 18 }} />
         <div style={{ flex: 1 }}>
-          <div style={{ color: 'rgba(255,255,255,0.95)', fontSize: 15, fontWeight: 600 }}>
+          <div style={{ color: '#1e1b2e', fontSize: 15, fontWeight: 600 }}>
             飞书知识库
           </div>
-          <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 11, marginTop: 2 }}>
+          <div style={{ color: '#9d9ab8', fontSize: 11, marginTop: 2 }}>
             飞书知识库 · {kbData?.totalNodes || 0} 个文档
           </div>
         </div>

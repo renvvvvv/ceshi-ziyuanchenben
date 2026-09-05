@@ -30,17 +30,17 @@ const UNIT_TICK: Record<GanttUnit, { interval: number; majorEvery: number }> = {
 };
 
 const statusColors: Record<string, { bg: string; text: string }> = {
-  '测试中': { bg: 'rgba(77, 159, 255, 0.15)', text: '#4d9fff' },
-  '未开始': { bg: 'rgba(250, 173, 20, 0.15)', text: '#faad14' },
-  '已完成': { bg: 'rgba(82, 196, 26, 0.15)', text: '#52c41a' },
-  '阻塞': { bg: 'rgba(255, 77, 79, 0.15)', text: '#ff4d4f' },
+  '测试中': { bg: 'rgba(99,102,241, 0.15)', text: '#6366f1' },
+  '未开始': { bg: 'rgba(217, 119, 6, 0.15)', text: '#d97706' },
+  '已完成': { bg: 'rgba(22, 163, 74, 0.15)', text: '#16a34a' },
+  '阻塞': { bg: 'rgba(220, 38, 38, 0.15)', text: '#dc2626' },
 };
 
 const barColors: Record<string, string> = {
-  '测试中': 'linear-gradient(135deg, #4d9fff, #69b1ff)',
-  '未开始': 'linear-gradient(135deg, #faad14, #ffc53d)',
-  '已完成': 'linear-gradient(135deg, #52c41a, #73d13d)',
-  '阻塞': 'linear-gradient(135deg, #ff4d4f, #ff7875)',
+  '测试中': 'linear-gradient(135deg, #6366f1, #818cf8)',
+  '未开始': 'linear-gradient(135deg, #d97706, #f59e0b)',
+  '已完成': 'linear-gradient(135deg, #16a34a, #73d13d)',
+  '阻塞': 'linear-gradient(135deg, #dc2626, #f87171)',
 };
 
 /** 左侧项目名宽度 */
@@ -303,7 +303,7 @@ function GanttChart({ projects, unit = 'day' }: GanttChartProps) {
 
   if (validProjects.length === 0) {
     return (
-      <div style={{ textAlign: 'center', padding: 48, color: 'rgba(255,255,255,0.4)' }}>
+      <div style={{ textAlign: 'center', padding: 48, color: '#6b6892' }}>
         {projects.length === 0 ? '暂无进行中或未开始的项目' : '当前项目均未设置开始日期，无法绘制甘特图'}
       </div>
     );
@@ -319,7 +319,7 @@ function GanttChart({ projects, unit = 'day' }: GanttChartProps) {
     <div className="gantt-container" ref={containerRef}>
       {/* 图例 */}
       <div className="gantt-legend">
-        <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11, marginRight: 16 }}>图例：</span>
+        <span style={{ color: '#6b6892', fontSize: 11, marginRight: 16 }}>图例：</span>
         {Object.entries(barColors).map(([status, gradient]) => (
           <span key={status} style={{ display: 'inline-flex', alignItems: 'center', marginRight: 16, fontSize: 11 }}>
             <span
@@ -332,7 +332,7 @@ function GanttChart({ projects, unit = 'day' }: GanttChartProps) {
                 marginRight: 4,
               }}
             />
-            <span style={{ color: statusColors[status]?.text || '#fff' }}>{status}</span>
+            <span style={{ color: statusColors[status]?.text || '#1e1b2e' }}>{status}</span>
           </span>
         ))}
         <span style={{ display: 'inline-flex', alignItems: 'center', marginLeft: 8, fontSize: 11 }}>
@@ -341,14 +341,14 @@ function GanttChart({ projects, unit = 'day' }: GanttChartProps) {
               display: 'inline-block',
               width: 1,
               height: 14,
-              background: '#ff4d4f',
+              background: '#dc2626',
               marginRight: 4,
             }}
           />
-          <span style={{ color: '#ff4d4f' }}>今天</span>
+          <span style={{ color: '#dc2626' }}>今天</span>
         </span>
         {skippedCount > 0 && (
-          <span style={{ marginLeft: 12, fontSize: 11, color: 'rgba(250,173,20,0.75)' }}>
+          <span style={{ marginLeft: 12, fontSize: 11, color: '#d97706' }}>
             ⚠ {skippedCount} 个项目未设置开始日期，未在图中展示
           </span>
         )}
@@ -364,7 +364,7 @@ function GanttChart({ projects, unit = 'day' }: GanttChartProps) {
               className="gantt-label-col gantt-sticky-label"
               style={{ width: LABEL_WIDTH, minWidth: LABEL_WIDTH, flexDirection: 'column', justifyContent: 'center', height: '100%' }}
             >
-              <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>项目名称</span>
+              <span style={{ color: '#6b6892', fontSize: 12 }}>项目名称</span>
             </div>
             {/* 右侧时间轴表头 */}
             <div style={{ position: 'relative', width: totalWidth, minWidth: totalWidth, height: '100%' }}>
@@ -373,7 +373,7 @@ function GanttChart({ projects, unit = 'day' }: GanttChartProps) {
                 style={{
                   position: 'relative',
                   height: HEADER_MAJOR_HEIGHT,
-                  borderBottom: '1px solid rgba(255,255,255,0.06)',
+                  borderBottom: '1px solid #e9e7f4',
                 }}
               >
                 {majorGroups.map((g, idx) => (
@@ -389,8 +389,8 @@ function GanttChart({ projects, unit = 'day' }: GanttChartProps) {
                       justifyContent: 'center',
                       fontSize: 11,
                       fontWeight: 600,
-                      color: 'rgba(255,255,255,0.65)',
-                      borderRight: '1px solid rgba(255,255,255,0.12)',
+                      color: '#46436a',
+                      borderRight: '1px solid #d9d5f0',
                       fontFamily: "'Outfit', 'Noto Sans SC', sans-serif",
                     }}
                   >
@@ -418,10 +418,10 @@ function GanttChart({ projects, unit = 'day' }: GanttChartProps) {
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      borderRight: '1px solid rgba(255,255,255,0.06)',
+                      borderRight: '1px solid #e9e7f4',
                       boxSizing: 'border-box',
                       ...(showToday && idx === todayTickIndex
-                        ? { background: 'rgba(255, 77, 79, 0.08)' }
+                        ? { background: 'rgba(220, 38, 38, 0.08)' }
                         : {}),
                     }}
                   >
@@ -430,11 +430,11 @@ function GanttChart({ projects, unit = 'day' }: GanttChartProps) {
                         style={{
                           fontSize: t.isMajor ? 10 : 9,
                           whiteSpace: 'nowrap',
-                          color: t.isMajor ? 'rgba(255,255,255,0.75)' : 'rgba(255,255,255,0.35)',
+                          color: t.isMajor ? '#46436a' : '#9d9ab8',
                           fontFamily: "'Outfit', 'Noto Sans SC', sans-serif",
                           lineHeight: 1,
                           ...(showToday && idx === todayTickIndex
-                            ? { color: '#ff4d4f', fontWeight: 700 }
+                            ? { color: '#dc2626', fontWeight: 700 }
                             : {}),
                         }}
                       >
@@ -477,10 +477,10 @@ function GanttChart({ projects, unit = 'day' }: GanttChartProps) {
                       }
                     >
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 2, overflow: 'hidden', minWidth: 0, flex: 1 }}>
-                        <span style={{ color: '#fff', fontSize: 13, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block', minWidth: 0 }}>
+                        <span style={{ color: '#1e1b2e', fontSize: 13, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block', minWidth: 0 }}>
                           {project.name}
                         </span>
-                        <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block', minWidth: 0 }}>
+                        <span style={{ color: '#6b6892', fontSize: 11, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block', minWidth: 0 }}>
                           {project.customer}{project.city ? ` · ${project.city}` : ''}
                           {project.plannedManpower ? ` · ${project.plannedManpower}人` : ''}
                         </span>
@@ -523,12 +523,12 @@ function GanttChart({ projects, unit = 'day' }: GanttChartProps) {
                           minWidth: tickWidth,
                           height: '100%',
                           borderRight: t.isMajor
-                            ? '1px solid rgba(255,255,255,0.13)'
-                            : '1px solid rgba(255,255,255,0.04)',
+                            ? '1px solid #e9e7f4'
+                            : '1px solid #f8f7fd',
                           boxSizing: 'border-box',
                           position: 'relative',
                           ...(showToday && idx === todayTickIndex
-                            ? { background: 'rgba(255,77,79,0.04)' }
+                            ? { background: 'rgba(220,38,38,0.04)' }
                             : {}),
                         }}
                       />

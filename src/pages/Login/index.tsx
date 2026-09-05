@@ -73,25 +73,25 @@ function Login() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: 'linear-gradient(135deg, #0a1628 0%, #1a2d4a 50%, #0d1f3c 100%)',
+        background: 'linear-gradient(135deg, #fafafd 0%, #f1f0fe 50%, #eceafb 100%)',
       }}
     >
       <Card
         style={{
           width: 400,
-          background: 'rgba(13, 31, 60, 0.85)',
-          border: '1px solid rgba(77, 159, 255, 0.2)',
+          background: 'rgba(255, 255, 255, 0.92)',
+          border: '1px solid rgba(99,102,241, 0.2)',
           borderRadius: 16,
           backdropFilter: 'blur(20px)',
-          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)',
+          boxShadow: '0 8px 24px rgba(99, 102, 241, 0.10)',
         }}
         bodyStyle={{ padding: '40px 32px' }}
       >
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
-          <SafetyOutlined style={{ fontSize: 48, color: '#4d9fff', marginBottom: 16 }} />
+          <SafetyOutlined style={{ fontSize: 48, color: '#6366f1', marginBottom: 16 }} />
           <h2
             style={{
-              color: '#fff',
+              color: '#1e1b2e',
               fontSize: 22,
               fontWeight: 600,
               margin: 0,
@@ -101,7 +101,7 @@ function Login() {
           >
             智航万恒测试验证管理平台
           </h2>
-          <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13, margin: 0 }}>
+          <p style={{ color: '#6b6892', fontSize: 13, margin: 0 }}>
             {feishuEnabled ? '使用飞书账号一键登录' : '请输入账号密码登录系统'}
           </p>
         </div>
@@ -131,7 +131,7 @@ function Login() {
             >
               飞书一键登录
             </Button>
-            <Divider plain style={{ borderColor: 'rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.3)' }}>
+            <Divider plain style={{ borderColor: '#d9d5f0', color: '#9d9ab8' }}>
               或使用账号密码
             </Divider>
           </>
@@ -142,7 +142,7 @@ function Login() {
           <Collapse ghost>
             <Collapse.Panel
               key="password"
-              header={<span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12 }}>管理员账号登录</span>}
+              header={<span style={{ color: '#6b6892', fontSize: 12 }}>管理员账号登录</span>}
             >
               <PasswordForm loading={loading} onSubmit={handleSubmit} />
             </Collapse.Panel>
@@ -152,11 +152,11 @@ function Login() {
         )}
 
         {!feishuEnabled && (
-          <div style={{ marginTop: 16, padding: 10, background: 'rgba(77,159,255,0.05)', border: '1px solid rgba(77,159,255,0.12)', borderRadius: 6, fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>
-            <div style={{ fontWeight: 600, color: 'rgba(77,159,255,0.85)', marginBottom: 4 }}>演示账号</div>
-            <div>管理员：<code style={{ color: '#7cb8ff' }}>admin</code> / <code style={{ color: '#7cb8ff' }}>admin123</code></div>
-            <div>编辑者：<code style={{ color: '#7cb8ff' }}>editor</code> / <code style={{ color: '#7cb8ff' }}>editor123</code></div>
-            <div>阅读者：<code style={{ color: '#7cb8ff' }}>reader</code> / <code style={{ color: '#7cb8ff' }}>reader123</code></div>
+          <div style={{ marginTop: 16, padding: 10, background: 'rgba(99,102,241,0.05)', border: '1px solid rgba(99,102,241,0.12)', borderRadius: 6, fontSize: 11, color: '#6b6892' }}>
+            <div style={{ fontWeight: 600, color: 'rgba(99,102,241,0.85)', marginBottom: 4 }}>演示账号</div>
+            <div>管理员：<code style={{ color: '#818cf8' }}>admin</code> / <code style={{ color: '#818cf8' }}>admin123</code></div>
+            <div>编辑者：<code style={{ color: '#818cf8' }}>editor</code> / <code style={{ color: '#818cf8' }}>editor123</code></div>
+            <div>阅读者：<code style={{ color: '#818cf8' }}>reader</code> / <code style={{ color: '#818cf8' }}>reader123</code></div>
           </div>
         )}
       </Card>
@@ -186,13 +186,13 @@ function PasswordForm({
         rules={[{ required: true, message: '请输入账号' }]}
       >
         <Input
-          prefix={<UserOutlined style={{ color: 'rgba(255,255,255,0.4)' }} />}
+          prefix={<UserOutlined style={{ color: '#6b6892' }} />}
           placeholder="账号"
           size="large"
           style={{
-            background: 'rgba(255,255,255,0.06)',
-            border: '1px solid rgba(255,255,255,0.15)',
-            color: '#fff',
+            background: '#f6f5fc',
+            border: '1px solid #d9d5f0',
+            color: '#1e1b2e',
             borderRadius: 8,
           }}
           className="dark-input"
@@ -204,13 +204,13 @@ function PasswordForm({
         rules={[{ required: true, message: '请输入密码' }]}
       >
         <Input.Password
-          prefix={<LockOutlined style={{ color: 'rgba(255,255,255,0.4)' }} />}
+          prefix={<LockOutlined style={{ color: '#6b6892' }} />}
           placeholder="密码"
           size="large"
           style={{
-            background: 'rgba(255,255,255,0.06)',
-            border: '1px solid rgba(255,255,255,0.15)',
-            color: '#fff',
+            background: '#f6f5fc',
+            border: '1px solid #d9d5f0',
+            color: '#1e1b2e',
             borderRadius: 8,
           }}
           className="dark-input"
@@ -225,7 +225,7 @@ function PasswordForm({
           loading={loading}
           block
           style={{
-            background: 'linear-gradient(135deg, #4d9fff, #3578e5)',
+            background: 'linear-gradient(135deg, #6366f1, #a855f7)',
             border: 'none',
             borderRadius: 8,
             height: 44,

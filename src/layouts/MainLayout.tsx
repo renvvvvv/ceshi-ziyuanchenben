@@ -49,9 +49,9 @@ const ALL_MENU_ITEMS: MenuItemDef[] = [
 ];
 
 const ROLE_COLORS: Record<string, string> = {
-  '管理者': '#ff4d4f',
-  '编辑者': '#faad14',
-  '阅读者': '#4d9fff',
+  '管理者': '#dc2626',
+  '编辑者': '#d97706',
+  '阅读者': '#6366f1',
 };
 
 function MainLayout() {
@@ -159,7 +159,7 @@ function MainLayout() {
           alignItems: 'center',
           justifyContent: 'center',
           padding: '18px 12px',
-          borderBottom: '1px solid rgba(255,255,255,0.06)',
+          borderBottom: '1px solid #e9e7f4',
           cursor: 'pointer',
           transition: 'background 0.3s ease',
         }}
@@ -220,7 +220,7 @@ function MainLayout() {
           onClose={() => setDrawerOpen(false)}
           width={240}
           className="mobile-sider-drawer"
-          styles={{ body: { padding: 0, background: 'linear-gradient(180deg, #0d1f3c 0%, #061428 100%)' } }}
+          styles={{ body: { padding: 0, background: 'linear-gradient(180deg, #ffffff 0%, #fafaff 100%)' } }}
         >
           {siderContent}
         </Drawer>
@@ -232,7 +232,7 @@ function MainLayout() {
               type="text"
               icon={isDesktop ? (collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />) : <MenuUnfoldOutlined />}
               onClick={() => isDesktop ? setCollapsed(!collapsed) : setDrawerOpen(true)}
-              style={{ fontSize: 16, width: 40, height: 40, color: 'rgba(255,255,255,0.6)', transition: 'all 0.3s ease', borderRadius: 8 }}
+              style={{ fontSize: 16, width: 40, height: 40, color: '#46436a', transition: 'all 0.3s ease', borderRadius: 8 }}
             />
             <h3 style={{ transition: 'color 0.3s ease' }}>{currentTitle}</h3>
           </div>
@@ -242,15 +242,15 @@ function MainLayout() {
                 <Avatar
                   icon={<UserOutlined />}
                   style={{
-                    background: 'linear-gradient(135deg, #4d9fff, #69b1ff)',
-                    boxShadow: '0 2px 8px rgba(77,159,255,0.35)',
+                    background: 'linear-gradient(135deg, #6366f1, #818cf8)',
+                    boxShadow: '0 2px 8px rgba(99,102,241,0.35)',
                     fontFamily: 'var(--font-primary)',
                     fontWeight: 500,
                     transition: 'transform 0.3s ease, box-shadow 0.3s ease',
                   }}
                 />
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-                  <span style={{ color: 'rgba(255,255,255,0.85)', fontFamily: 'var(--font-primary)', fontSize: 13, lineHeight: 1.4 }}>
+                  <span style={{ color: '#1e1b2e', fontFamily: 'var(--font-primary)', fontSize: 13, lineHeight: 1.4 }}>
                     {user?.name || '管理员'}
                   </span>
                   <Tag

@@ -101,7 +101,7 @@ export function DeptMembersTab() {
             {certs.map((c) => <Tag key={c} color="cyan" style={{ margin: 0 }}>{c}</Tag>)}
             {editAllowed && (
               <Button type="link" size="small" icon={<PlusOutlined />} onClick={() => { setCertEditing(r); setCertValues(splitCerts(r.skill)); }}
-                style={{ padding: '0 4px', height: 22, fontSize: 12, color: certs.length ? 'rgba(77,159,255,0.75)' : '#4d9fff' }}>
+                style={{ padding: '0 4px', height: 22, fontSize: 12, color: certs.length ? 'rgba(99,102,241,0.75)' : '#6366f1' }}>
                 {certs.length ? '加证书' : '添加证书'}
               </Button>
             )}
@@ -130,15 +130,15 @@ export function DeptMembersTab() {
       {/* 统计卡 */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10, marginBottom: 14 }}>
         {[
-          { label: '总人数', value: rows.length, color: '#7cb8ff' },
-          { label: 'P7', value: byLevel('P7'), color: '#ff7875' },
-          { label: 'P6', value: byLevel('P6'), color: '#ffc53d' },
-          { label: 'P5', value: byLevel('P5'), color: '#69b1ff' },
-          { label: 'P4', value: byLevel('P4'), color: '#95de64' },
+          { label: '总人数', value: rows.length, color: '#6366f1' },
+          { label: 'P7', value: byLevel('P7'), color: '#dc2626' },
+          { label: 'P6', value: byLevel('P6'), color: '#d97706' },
+          { label: 'P5', value: byLevel('P5'), color: '#6366f1' },
+          { label: 'P4', value: byLevel('P4'), color: '#16a34a' },
         ].map((c, i) => (
-          <div key={i} style={{ background: 'linear-gradient(135deg, rgba(30,58,95,0.45), rgba(30,58,95,0.2))', border: '1px solid rgba(77,159,255,0.18)', borderRadius: 10, padding: '12px 16px' }}>
+          <div key={i} style={{ background: 'linear-gradient(135deg,#f6f5fc,#f1f0fe)', border: '1px solid rgba(99,102,241,0.18)', borderRadius: 10, padding: '12px 16px' }}>
             <div style={{ fontSize: 22, fontWeight: 700, color: c.color }}>{c.value}</div>
-            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 4 }}>{c.label}</div>
+            <div style={{ fontSize: 12, color: '#6b6892', marginTop: 4 }}>{c.label}</div>
           </div>
         ))}
       </div>
@@ -153,7 +153,7 @@ export function DeptMembersTab() {
             <Button size="small" type="primary" icon={<PlusOutlined />} onClick={() => setAddOpen(true)}>添加人员</Button>
           </>
         )}
-        <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12, alignSelf: 'center' }}>
+        <span style={{ color: '#9d9ab8', fontSize: 12, alignSelf: 'center' }}>
           <TeamOutlined /> 职级双轨：显示 P，库内 T；导入时自动归一（原工具同规则）
         </span>
       </div>
@@ -206,7 +206,7 @@ export function DeptMembersTab() {
             ].map((v) => ({ value: v, label: v }))}
             open={false} // 纯自由输入（回车确认），预设项通过下拉箭头查看
           />
-          <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12, marginTop: 8 }}>
+          <div style={{ color: '#9d9ab8', fontSize: 12, marginTop: 8 }}>
             点击输入框可查看常用证书预设；输入自定义名称后按回车添加。
           </div>
         </div>
@@ -300,20 +300,20 @@ export function AssetsTab() {
       {/* 统计卡 */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10, marginBottom: 14 }}>
         {[
-          { label: '设备种类', value: rows.length, color: '#7cb8ff' },
-          { label: '设备总量', value: totalCount, color: '#7cb8ff' },
-          ...ASSET_CATEGORIES.map((c) => ({ label: `${c.label}类`, value: byCat(c.value).length, color: '#95de64' })),
+          { label: '设备种类', value: rows.length, color: '#6366f1' },
+          { label: '设备总量', value: totalCount, color: '#6366f1' },
+          ...ASSET_CATEGORIES.map((c) => ({ label: `${c.label}类`, value: byCat(c.value).length, color: '#16a34a' })),
         ].map((c, i) => (
-          <div key={i} style={{ background: 'linear-gradient(135deg, rgba(30,58,95,0.45), rgba(30,58,95,0.2))', border: '1px solid rgba(77,159,255,0.18)', borderRadius: 10, padding: '12px 16px' }}>
+          <div key={i} style={{ background: 'linear-gradient(135deg,#f6f5fc,#f1f0fe)', border: '1px solid rgba(99,102,241,0.18)', borderRadius: 10, padding: '12px 16px' }}>
             <div style={{ fontSize: 22, fontWeight: 700, color: c.color }}>{c.value}</div>
-            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 4 }}>{c.label}</div>
+            <div style={{ fontSize: 12, color: '#6b6892', marginTop: 4 }}>{c.label}</div>
           </div>
         ))}
       </div>
       <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
         <Button size="small" icon={<ReloadOutlined />} onClick={() => void load()} loading={loading}>刷新</Button>
         {editAllowed && <Button size="small" type="primary" icon={<PlusOutlined />} onClick={() => setAddOpen(true)}>添加设备</Button>}
-        <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12, alignSelf: 'center' }}>
+        <span style={{ color: '#9d9ab8', fontSize: 12, alignSelf: 'center' }}>
           部门级自有资产，跨项目共用；规格中的功率数字（如 6KW）用于假负载/仪表的自动分配
         </span>
       </div>
@@ -395,7 +395,7 @@ export function DeliveredTab() {
   };
 
   const columns: ColumnsType<DeliveredRow> = [
-    { title: '项目名称', dataIndex: 'name', width: 240, render: (t: string) => <span style={{ color: '#95de64', fontWeight: 500 }}>{t}</span> },
+    { title: '项目名称', dataIndex: 'name', width: 240, render: (t: string) => <span style={{ color: '#16a34a', fontWeight: 500 }}>{t}</span> },
     { title: '规模', dataIndex: 'mw', width: 80, render: (t: string) => t || '-' },
     { title: '地点', dataIndex: 'site', width: 110, render: (t: string) => t || '-' },
     { title: '测试经理', dataIndex: 'manager', width: 100, render: (t: string) => t || '-' },
@@ -404,7 +404,7 @@ export function DeliveredTab() {
       render: (t: string) => t ? dayjs(t).format('YYYY-MM-DD HH:mm') : '-' },
     { title: '操作', key: 'op', width: 90, align: 'center',
       render: (_: unknown, r: DeliveredRow) => (
-        <Button type="text" size="small" icon={<EyeOutlined />} onClick={() => viewSnapshot(r)} style={{ color: '#7cb8ff', width: 32 }} />
+        <Button type="text" size="small" icon={<EyeOutlined />} onClick={() => viewSnapshot(r)} style={{ color: '#818cf8', width: 32 }} />
       ) },
   ];
 
@@ -412,7 +412,7 @@ export function DeliveredTab() {
     <div>
       <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
         <Button size="small" icon={<ReloadOutlined />} onClick={() => void load()} loading={loading}>刷新</Button>
-        <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12, alignSelf: 'center' }}>
+        <span style={{ color: '#9d9ab8', fontSize: 12, alignSelf: 'center' }}>
           交付时点的完整配置快照（只读），对应原工具「已完成项目」
         </span>
       </div>
@@ -429,11 +429,11 @@ export function DeliveredTab() {
               <Col span={6}><Statistic title="投入人员" value={(snapshot.data.staff || []).length} suffix="人" /></Col>
               <Col span={6}><Statistic title="假负载类型" value={(snapshot.data.loads || []).length} suffix="种" /></Col>
               <Col span={6}><Statistic title="仪表种类" value={(snapshot.data.instruments || []).length} suffix="种" /></Col>
-              <Col span={8}><Statistic title="劳务人天" value={Math.round((snapshot.data.labor || []).reduce((s, r) => s + calcLabor(r).manDays, 0) * 10) / 10} valueStyle={{ color: '#4d9fff' }} /></Col>
-              <Col span={8}><Statistic title="总人天" value={(snapshot.data.staff || []).reduce((s, r) => s + (Number((r as any).survey) || 0) + (Number((r as any).retest) || 0) + (Number((r as any).test) || 0), 0)} valueStyle={{ color: '#4d9fff' }} /></Col>
+              <Col span={8}><Statistic title="劳务人天" value={Math.round((snapshot.data.labor || []).reduce((s, r) => s + calcLabor(r).manDays, 0) * 10) / 10} valueStyle={{ color: '#6366f1' }} /></Col>
+              <Col span={8}><Statistic title="总人天" value={(snapshot.data.staff || []).reduce((s, r) => s + (Number((r as any).survey) || 0) + (Number((r as any).retest) || 0) + (Number((r as any).test) || 0), 0)} valueStyle={{ color: '#6366f1' }} /></Col>
               <Col span={8}><Statistic title="耗材类目" value={(snapshot.data.consumables || []).length} /></Col>
             </Row>
-            <div style={{ marginTop: 16, color: 'rgba(255,255,255,0.4)', fontSize: 12 }}>
+            <div style={{ marginTop: 16, color: '#6b6892', fontSize: 12 }}>
               快照为交付时点的只读数据；如需修改请回到对应配置项目（重新交付会生成新快照）。
             </div>
           </div>

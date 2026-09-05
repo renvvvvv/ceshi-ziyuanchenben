@@ -53,16 +53,16 @@ const staffDaysByRole = (
     .reduce((sum, s) => sum + staffTotalOf(s), 0);
 };
 
-const BLUE = '#7cb8ff';
-const GREEN = '#52c41a';
-const WARN = '#faad14';
+const BLUE = '#6366f1';
+const GREEN = '#16a34a';
+const WARN = '#d97706';
 
 /** 区块卡片容器（CONVENTIONS 统一样式） */
 function Section({ title, tag, extra, children }: { title: string; tag?: string; extra?: ReactNode; children: ReactNode }) {
   return (
-    <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: 16, marginBottom: 16 }}>
+    <div style={{ background: '#f6f5fc', border: '1px solid #e9e7f4', borderRadius: 12, padding: 16, marginBottom: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 4 }}>
-        <span style={{ fontSize: 14, fontWeight: 600, color: 'rgba(255,255,255,0.9)' }}>{title}</span>
+        <span style={{ fontSize: 14, fontWeight: 600, color: '#1e1b2e' }}>{title}</span>
         {tag && <Tag style={{ margin: 0 }}>{tag}</Tag>}
         <div style={{ flex: 1 }} />
         {extra && <span style={{ color: BLUE, fontWeight: 600, fontSize: 13 }}>{extra}</span>}
@@ -76,8 +76,8 @@ function Section({ title, tag, extra, children }: { title: string; tag?: string;
 function KV({ k, v }: { k: string; v: string }) {
   return (
     <div style={{ flex: '1 1 170px', minWidth: 150 }}>
-      <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)', marginBottom: 2 }}>{k}</div>
-      <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.88)', wordBreak: 'break-all' }}>{v || '—'}</div>
+      <div style={{ fontSize: 12, color: '#6b6892', marginBottom: 2 }}>{k}</div>
+      <div style={{ fontSize: 13, color: '#1e1b2e', wordBreak: 'break-all' }}>{v || '—'}</div>
     </div>
   );
 }
@@ -87,8 +87,8 @@ function MiniStats({ items }: { items: Array<{ label: string; value: string | nu
   return (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
       {items.map((it, i) => (
-        <div key={i} style={{ background: 'rgba(77,159,255,0.06)', border: '1px solid rgba(77,159,255,0.15)', borderRadius: 8, padding: '4px 12px', fontSize: 12 }}>
-          <span style={{ color: 'rgba(255,255,255,0.45)' }}>{it.label}</span>
+        <div key={i} style={{ background: 'rgba(99,102,241,0.06)', border: '1px solid rgba(99,102,241,0.15)', borderRadius: 8, padding: '4px 12px', fontSize: 12 }}>
+          <span style={{ color: '#6b6892' }}>{it.label}</span>
           <b style={{ color: it.color || BLUE, fontSize: 14, marginLeft: 6 }}>{it.value}</b>
         </div>
       ))}
@@ -99,7 +99,7 @@ function MiniStats({ items }: { items: Array<{ label: string; value: string | nu
 /** 页脚说明行 */
 function Note({ children, warn }: { children: ReactNode; warn?: boolean }) {
   return (
-    <div style={{ marginTop: 6, fontSize: 12.5, color: warn ? WARN : 'rgba(255,255,255,0.45)', lineHeight: 1.7 }}>
+    <div style={{ marginTop: 6, fontSize: 12.5, color: warn ? WARN : '#6b6892', lineHeight: 1.7 }}>
       {children}
     </div>
   );
@@ -224,7 +224,7 @@ export default function SummaryTab({ data: p, assets }: TabProps) {
   // ============== 各区块小表格列定义 ==============
 
   const personnelCols: ColumnsType<PersonnelRow> = [
-    { title: '岗位', dataIndex: 'post', width: 120, render: (t: string) => <b style={{ color: 'rgba(255,255,255,0.85)' }}>{t}</b> },
+    { title: '岗位', dataIndex: 'post', width: 120, render: (t: string) => <b style={{ color: '#1e1b2e' }}>{t}</b> },
     { title: '数量', key: 'count', width: 70, align: 'center', render: (_: unknown, r: PersonnelRow) => <b style={{ color: BLUE }}>{S.cntOf(r)}</b> },
     { title: '人员分工', dataIndex: 'division', render: (t: string) => <span style={{ whiteSpace: 'pre-line', fontSize: 12.5 }}>{t || ''}</span> },
     { title: '人员姓名', dataIndex: 'names', render: (t: string) => <span style={{ whiteSpace: 'pre-line', fontSize: 12.5 }}>{t || ''}</span> },
@@ -245,8 +245,8 @@ export default function SummaryTab({ data: p, assets }: TabProps) {
   const loadCols: ColumnsType<LoadView> = [
     { title: '类型', dataIndex: 'typeDisp', width: 110 },
     { title: '数量', dataIndex: 'count', width: 60, align: 'center' },
-    { title: '自有', key: 'own', width: 60, align: 'center', render: (_: unknown, r: LoadView) => r.own == null ? <span style={{ color: 'rgba(255,255,255,0.35)' }}>—</span> : <b style={{ color: GREEN }}>{r.own}</b> },
-    { title: '需租赁', key: 'rent', width: 70, align: 'center', render: (_: unknown, r: LoadView) => r.rent == null ? <span style={{ color: 'rgba(255,255,255,0.35)' }}>—</span> : <b style={{ color: WARN }}>{r.rent}</b> },
+    { title: '自有', key: 'own', width: 60, align: 'center', render: (_: unknown, r: LoadView) => r.own == null ? <span style={{ color: '#9d9ab8' }}>—</span> : <b style={{ color: GREEN }}>{r.own}</b> },
+    { title: '需租赁', key: 'rent', width: 70, align: 'center', render: (_: unknown, r: LoadView) => r.rent == null ? <span style={{ color: '#9d9ab8' }}>—</span> : <b style={{ color: WARN }}>{r.rent}</b> },
     { title: '备用台数', dataIndex: 'ratio', width: 70, align: 'center' },
     { title: '规格', dataIndex: 'spec', width: 150, render: (t: string) => <span style={{ whiteSpace: 'pre-line', fontSize: 12 }}>{t}</span> },
     { title: '到场(第X天)', dataIndex: 'arrive', width: 85, align: 'center' },
@@ -314,12 +314,12 @@ export default function SummaryTab({ data: p, assets }: TabProps) {
     <div>
       {/* 标题 + 实时同步标识（原 sum_title / sum_sync_badge） */}
       <div style={{ marginBottom: 14 }}>
-        <div style={{ fontSize: 16, fontWeight: 700, color: 'rgba(255,255,255,0.92)' }}>
+        <div style={{ fontSize: 16, fontWeight: 700, color: '#1e1b2e' }}>
           {p.name}{mwText ? `（${mwText}MW）` : ''} · 资源配置汇总
         </div>
         <span style={{
           display: 'inline-block', marginTop: 6, fontSize: 12, padding: '4px 10px', borderRadius: 6,
-          background: 'rgba(77,159,255,0.08)', border: '1px solid rgba(77,159,255,0.25)', color: 'rgba(255,255,255,0.55)',
+          background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.25)', color: '#6b6892',
         }}>
           🔄 数据已实时同步自各模块 · {nowStr()}
         </span>
@@ -328,9 +328,9 @@ export default function SummaryTab({ data: p, assets }: TabProps) {
       {/* h) 资源库覆盖总览（原 lib-tip，置于最前） */}
       {S.showCoverage && (
         <div style={{
-          background: S.allCovered ? 'rgba(82,196,26,0.07)' : 'rgba(250,173,20,0.07)',
-          border: `1px solid ${S.allCovered ? 'rgba(82,196,26,0.3)' : 'rgba(250,173,20,0.35)'}`,
-          borderRadius: 10, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: 'rgba(255,255,255,0.75)',
+          background: S.allCovered ? 'rgba(22,163,74,0.07)' : 'rgba(217,119,6,0.07)',
+          border: `1px solid ${S.allCovered ? 'rgba(22,163,74,0.3)' : 'rgba(217,119,6,0.35)'}`,
+          borderRadius: 10, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: '#46436a',
         }}>
           <b style={{ color: S.allCovered ? GREEN : WARN }}>{S.allCovered ? '✅ 资源库覆盖检查：' : '⚠️ 资源库覆盖检查：'}</b>
           {' '}假负载 <b>{S.lFull}</b> 项无需租赁（自有 {Math.round(S.lOwnT)} 台{S.lPart ? `，${S.lPart} 项部分覆盖` : ''}）
@@ -371,7 +371,7 @@ export default function SummaryTab({ data: p, assets }: TabProps) {
           className="rc-edit-table" scroll={{ x: 'max-content' }}
           summary={() => (
             <Table.Summary fixed>
-              <Table.Summary.Row style={{ background: 'rgba(30,58,95,0.35)' }}>
+              <Table.Summary.Row style={{ background: '#f1f0fe' }}>
                 <Table.Summary.Cell index={0}><span style={{ color: BLUE, fontWeight: 600 }}>合计</span></Table.Summary.Cell>
                 <Table.Summary.Cell index={1} align="center"><span style={{ color: BLUE, fontWeight: 600 }}>{S.subsidyTotal}</span></Table.Summary.Cell>
                 <Table.Summary.Cell index={2} />
@@ -413,7 +413,7 @@ export default function SummaryTab({ data: p, assets }: TabProps) {
           pagination={false} className="rc-edit-table" scroll={{ x: 'max-content' }}
           summary={() => (
             <Table.Summary fixed>
-              <Table.Summary.Row style={{ background: 'rgba(30,58,95,0.35)' }}>
+              <Table.Summary.Row style={{ background: '#f1f0fe' }}>
                 <Table.Summary.Cell index={0}><span style={{ color: BLUE, fontWeight: 600 }}>合计</span></Table.Summary.Cell>
                 <Table.Summary.Cell index={1} align="center"><span style={{ color: BLUE, fontWeight: 600 }}>{S.insReqT}</span></Table.Summary.Cell>
                 <Table.Summary.Cell index={2} align="center"><span style={{ color: BLUE, fontWeight: 600 }}>{S.insOwnT}</span></Table.Summary.Cell>
@@ -457,7 +457,7 @@ export default function SummaryTab({ data: p, assets }: TabProps) {
             ]}
             summary={() => (
               <Table.Summary fixed>
-                <Table.Summary.Row style={{ background: 'rgba(30,58,95,0.35)' }}>
+                <Table.Summary.Row style={{ background: '#f1f0fe' }}>
                   <Table.Summary.Cell index={0}><span style={{ color: BLUE, fontWeight: 600 }}>合计需租赁</span></Table.Summary.Cell>
                   <Table.Summary.Cell index={1} />
                   <Table.Summary.Cell index={2} />

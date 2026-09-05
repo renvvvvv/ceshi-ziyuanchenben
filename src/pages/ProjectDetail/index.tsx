@@ -11,17 +11,17 @@ import type { Project, ProjectPhase, ProjectPhaseFile } from '../../types';
 
 const PHASE_STATUS_CONFIG: Record<string, { color: string; dotColor: string; label: string }> = {
   pending:    { color: '#8c8c8c', dotColor: '#8c8c8c', label: '待开始' },
-  in_progress: { color: '#4d9fff', dotColor: '#1677ff', label: '进行中' },
-  completed:  { color: '#52c41a', dotColor: '#52c41a', label: '已完成' },
+  in_progress: { color: '#6366f1', dotColor: '#6366f1', label: '进行中' },
+  completed:  { color: '#16a34a', dotColor: '#16a34a', label: '已完成' },
 };
 
 /** 模拟文件类型图标 */
 function getFileIcon(fileType?: string) {
   const map: Record<string, string> = {
-    pdf: '#ff4d4f',
-    xlsx: '#52c41a',
-    docx: '#1890ff',
-    pptx: '#faad14',
+    pdf: '#dc2626',
+    xlsx: '#16a34a',
+    docx: '#6366f1',
+    pptx: '#d97706',
     default: '#8c8c8c',
   };
   return map[fileType || ''] || map['default'];
@@ -173,10 +173,10 @@ function ProjectDetail() {
         {/* 阶段头部：名称 + 说明 + 状态标签 */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 6 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontWeight: 600, fontSize: 13.5, color: 'rgba(255,255,255,0.9)', lineHeight: 1.3 }}>
+            <div style={{ fontWeight: 600, fontSize: 13.5, color: '#1e1b2e', lineHeight: 1.3 }}>
               {phase.name}
             </div>
-            <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.42)', marginTop: 2, lineHeight: 1.4 }}>
+            <div style={{ fontSize: 11.5, color: '#6b6892', marginTop: 2, lineHeight: 1.4 }}>
               {phase.description}
             </div>
           </div>
@@ -199,7 +199,7 @@ function ProjectDetail() {
 
         {/* 完成日期 */}
         {phase.date && (
-          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.32)', marginBottom: 6 }}>
+          <div style={{ fontSize: 11, color: '#9d9ab8', marginBottom: 6 }}>
             完成时间：{phase.date}
           </div>
         )}
@@ -211,8 +211,8 @@ function ProjectDetail() {
               marginTop: 8,
               padding: phase.files.length > 0 ? '10px 12px' : '14px',
               borderRadius: 8,
-              border: '1px dashed rgba(77,159,255,0.25)',
-              background: 'rgba(77,159,255,0.04)',
+              border: '1px dashed rgba(99,102,241,0.25)',
+              background: 'rgba(99,102,241,0.04)',
             }}
           >
             {/* 已上传文件列表 */}
@@ -227,15 +227,15 @@ function ProjectDetail() {
                       justifyContent: 'space-between',
                       padding: '5px 10px',
                       borderRadius: 6,
-                      background: 'rgba(13,31,60,0.7)',
-                      border: '1px solid rgba(255,255,255,0.06)',
+                      background: '#f6f5fc',
+                      border: '1px solid #e9e7f4',
                     }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
                       <FileOutlined style={{ color: getFileIcon(file.fileType), fontSize: 14, flexShrink: 0 }} />
                       <span
                         style={{
-                          color: 'rgba(255,255,255,0.72)',
+                          color: '#46436a',
                           fontSize: 12,
                           overflow: 'hidden',
                           textOverflow: 'ellipsis',
@@ -245,7 +245,7 @@ function ProjectDetail() {
                       >
                         {file.fileName}
                       </span>
-                      <span style={{ color: 'rgba(255,255,255,0.28)', fontSize: 11, flexShrink: 0 }}>
+                      <span style={{ color: '#9d9ab8', fontSize: 11, flexShrink: 0 }}>
                         ({file.fileSize})
                       </span>
                     </div>
@@ -255,7 +255,7 @@ function ProjectDetail() {
                       icon={<DeleteOutlined />}
                       onClick={() => handleDeleteFile(phase.key, file.id)}
                       danger
-                      style={{ color: 'rgba(255,77,79,0.45)', fontSize: 11, flexShrink: 0, padding: '0 4px' }}
+                      style={{ color: 'rgba(220,38,38,0.45)', fontSize: 11, flexShrink: 0, padding: '0 4px' }}
                     />
                   </div>
                 ))}
@@ -272,8 +272,8 @@ function ProjectDetail() {
                 icon={<UploadOutlined />}
                 size="small"
                 style={{
-                  borderColor: 'rgba(77,159,255,0.35)',
-                  color: '#4d9fff',
+                  borderColor: 'rgba(99,102,241,0.35)',
+                  color: '#6366f1',
                   fontFamily: 'var(--font-primary)',
                   borderRadius: 6,
                   fontSize: 12,
@@ -292,11 +292,11 @@ function ProjectDetail() {
   const timelineItems = phases.map((phase, index) => ({
       color:
         index === phases.length - 1 && phase.status === 'completed'
-          ? '#52c41a'
+          ? '#16a34a'
           : phase.status === 'in_progress'
-            ? '#1677ff'
+            ? '#6366f1'
             : phase.status === 'completed'
-              ? '#52c41a'
+              ? '#16a34a'
               : 'gray',
       children: renderPhaseContent(phase, index),
     }));
@@ -328,7 +328,7 @@ function ProjectDetail() {
           <Card title="项目详情" className="detail-info-card">
             <Descriptions column={1} size="small" labelStyle={{ width: 80 }}>
               <Descriptions.Item label="项目经理">
-                <Avatar size="small" icon={<ProjectOutlined />} style={{ marginRight: 8, backgroundColor: '#1677ff' }} />
+                <Avatar size="small" icon={<ProjectOutlined />} style={{ marginRight: 8, backgroundColor: '#6366f1' }} />
                 {project.manager}
               </Descriptions.Item>
               <Descriptions.Item label="开始日期">{project.startDate}</Descriptions.Item>
@@ -352,18 +352,18 @@ function ProjectDetail() {
 
           <Card
             title="测试管理链接"
-            styles={{ header: { borderBottom: '1px solid rgba(255,255,255,0.06)' } }}
+            styles={{ header: { borderBottom: '1px solid #e9e7f4' } }}
           >
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <Input
                 value={docLinkInput}
                 onChange={(e) => setDocLinkInput(e.target.value)}
                 placeholder="请输入测试管理文档链接（如飞书/钉钉/Confluence 链接）"
-                prefix={<LinkOutlined style={{ color: 'rgba(255,255,255,0.3)' }} />}
+                prefix={<LinkOutlined style={{ color: '#9d9ab8' }} />}
                 style={{
-                  background: 'rgba(255,255,255,0.04)',
-                  border: '1px solid rgba(255,255,255,0.08)',
-                  color: '#fff',
+                  background: '#f8f7fd',
+                  border: '1px solid #e9e7f4',
+                  color: '#1e1b2e',
                 }}
               />
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -372,18 +372,18 @@ function ProjectDetail() {
                     href={project.docLink}
                     target="_blank"
                     rel="noopener noreferrer"
-                    style={{ color: '#4d9fff', fontSize: 13 }}
+                    style={{ color: '#6366f1', fontSize: 13 }}
                   >
                     <LinkOutlined /> 打开当前链接
                   </a>
                 ) : (
-                  <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: 13 }}>暂无测试管理链接</span>
+                  <span style={{ color: '#9d9ab8', fontSize: 13 }}>暂无测试管理链接</span>
                 )}
                 <Button
                   type="primary"
                   icon={<SaveOutlined />}
                   onClick={handleUpdateDocLink}
-                  style={{ background: 'linear-gradient(135deg, #4d9fff, #69b1ff)', border: 'none' }}
+                  style={{ background: 'linear-gradient(135deg, #6366f1, #818cf8)', border: 'none' }}
                 >
                   保存链接
                 </Button>

@@ -62,13 +62,13 @@ function ProjectInfoTab({ id, meta, canEdit, onSaved }: {
     } finally { setSaving(false); }
   };
 
-  const card: React.CSSProperties = { background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: 20, marginBottom: 16 };
-  const label: React.CSSProperties = { display: 'block', fontSize: 12, color: 'rgba(255,255,255,0.55)', marginBottom: 6 };
+  const card: React.CSSProperties = { background: '#f6f5fc', border: '1px solid #e9e7f4', borderRadius: 12, padding: 20, marginBottom: 16 };
+  const label: React.CSSProperties = { display: 'block', fontSize: 12, color: '#6b6892', marginBottom: 6 };
 
   return (
     <div style={{ maxWidth: 780 }}>
       <div style={card}>
-        <div style={{ fontSize: 14, fontWeight: 600, color: 'rgba(255,255,255,0.9)', marginBottom: 16 }}>📋 基本信息</div>
+        <div style={{ fontSize: 14, fontWeight: 600, color: '#1e1b2e', marginBottom: 16 }}>📋 基本信息</div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14 }}>
           <div><span style={label}>项目名称</span><Input value={form.name} disabled={!canEdit} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="例如：乌兰大三期B1" /></div>
           <div><span style={label}>项目规模(MW)</span><Input value={form.mw} disabled={!canEdit} onChange={(e) => setForm({ ...form, mw: e.target.value })} placeholder="100" /></div>
@@ -90,7 +90,7 @@ function ProjectInfoTab({ id, meta, canEdit, onSaved }: {
           </Button>
         )}
       </div>
-      <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12 }}>
+      <div style={{ color: '#9d9ab8', fontSize: 12 }}>
         维护项目基本信息，作为本配置的主标识。
       </div>
     </div>
@@ -189,7 +189,7 @@ function ResourceConfigDetail() {
     return <div style={{ textAlign: 'center', padding: 80 }}><Spin size="large" /></div>;
   }
   if (!data || !meta) {
-    return <div style={{ textAlign: 'center', padding: 80, color: 'rgba(255,255,255,0.4)' }}>配置项目不存在</div>;
+    return <div style={{ textAlign: 'center', padding: 80, color: '#6b6892' }}>配置项目不存在</div>;
   }
 
   const tabProps: TabProps = { data: mergeMetaIntoData(data, meta), assets, canEdit: editAllowed, patch };
@@ -209,39 +209,39 @@ function ResourceConfigDetail() {
       {/* 专业表格样式（对齐原工具观感：深色列头/斑马纹/无边框沉浸式输入） */}
       <style>{`
         .rc-edit-table .ant-table-thead > tr > th {
-          background: rgba(30, 58, 95, 0.85) !important;
-          color: #e0e6ed !important;
+          background: #f1f0fe !important;
+          color: #46436a !important;
           font-weight: 600 !important;
           font-size: 12px !important;
           padding: 8px 8px !important;
-          border-bottom: 1px solid rgba(77, 159, 255, 0.3) !important;
+          border-bottom: 1px solid rgba(99,102,241, 0.3) !important;
         }
         .rc-edit-table .ant-table-tbody > tr > td { padding: 3px 6px !important; font-size: 12.5px; }
-        .rc-edit-table .ant-table-tbody > tr:nth-child(even) > td { background: rgba(255, 255, 255, 0.025); }
-        .rc-edit-table .ant-table-tbody > tr:hover > td { background: rgba(77, 159, 255, 0.07) !important; }
+        .rc-edit-table .ant-table-tbody > tr:nth-child(even) > td { background: #f6f5fc; }
+        .rc-edit-table .ant-table-tbody > tr:hover > td { background: rgba(99,102,241, 0.07) !important; }
         .rc-edit-table .rc-cell-input, .rc-edit-table .rc-cell-input.ant-input-number, .rc-edit-table .rc-cell-input textarea {
           background: transparent !important; border-color: transparent !important; box-shadow: none !important;
-          color: rgba(255, 255, 255, 0.88) !important; font-size: 12.5px !important;
+          color: #1e1b2e !important; font-size: 12.5px !important;
         }
         .rc-edit-table .rc-cell-input:hover, .rc-edit-table .ant-table-cell:hover .rc-cell-input {
-          border-color: rgba(77, 159, 255, 0.35) !important; background: rgba(77, 159, 255, 0.04) !important;
+          border-color: rgba(99,102,241, 0.35) !important; background: rgba(99,102,241, 0.04) !important;
         }
         .rc-edit-table .rc-cell-input:focus, .rc-edit-table .rc-cell-input:focus-within {
-          border-color: #4d9fff !important; background: rgba(77, 159, 255, 0.08) !important;
+          border-color: #6366f1 !important; background: rgba(99,102,241, 0.08) !important;
         }
-        .rc-edit-table .rc-cell-input::placeholder { color: rgba(255, 255, 255, 0.22) !important; font-size: 11.5px !important; }
+        .rc-edit-table .rc-cell-input::placeholder { color: #9d9ab8 !important; font-size: 11.5px !important; }
         .rc-edit-table .ant-select .ant-select-selector {
           background: transparent !important; border-color: transparent !important; box-shadow: none !important; font-size: 12.5px !important;
         }
-        .rc-edit-table .ant-table-cell:hover .ant-select .ant-select-selector { border-color: rgba(77, 159, 255, 0.35) !important; }
-        .rc-edit-table .ant-select-focused .ant-select-selector { border-color: #4d9fff !important; }
+        .rc-edit-table .ant-table-cell:hover .ant-select .ant-select-selector { border-color: rgba(99,102,241, 0.35) !important; }
+        .rc-edit-table .ant-select-focused .ant-select-selector { border-color: #6366f1 !important; }
         .rc-edit-table .ant-table-row .ant-btn-dangerous { opacity: 0.25; transition: opacity 0.15s; }
         .rc-edit-table .ant-table-row:hover .ant-btn-dangerous { opacity: 1; }
       `}</style>
       {/* 顶栏 */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
         <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/resource-config')} style={{ borderRadius: 8 }}>返回</Button>
-        <span style={{ fontSize: 16, fontWeight: 600, color: 'rgba(255,255,255,0.9)' }}>{meta.name}</span>
+        <span style={{ fontSize: 16, fontWeight: 600, color: '#1e1b2e' }}>{meta.name}</span>
         {meta.mw && <Tag>{meta.mw} MW</Tag>}
         {meta.site && <Tag>{meta.site}</Tag>}
         <Tag color={meta.status === '已交付' ? 'success' : 'processing'}>{meta.status}</Tag>

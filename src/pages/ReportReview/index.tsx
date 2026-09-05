@@ -21,11 +21,11 @@ interface TypoError {
 // 深色 Modal 主题 token
 const DARK_MODAL_THEME = {
   token: {
-    colorBgElevated: '#15233d',
-    colorText: 'rgba(255,255,255,0.85)',
-    colorTextSecondary: 'rgba(255,255,255,0.55)',
-    colorBorder: 'rgba(255,255,255,0.1)',
-    colorBgContainer: '#15233d',
+    colorBgElevated: '#ffffff',
+    colorText: '#1e1b2e',
+    colorTextSecondary: '#6b6892',
+    colorBorder: '#f1f0fe',
+    colorBgContainer: '#ffffff',
   },
 };
 
@@ -205,7 +205,7 @@ function ReportReview() {
   const highlightedContent = useMemo(() => {
     if (!rawText) return null;
     if (errors.length === 0) {
-      return <pre style={{ whiteSpace: 'pre-wrap', margin: 0, fontFamily: 'inherit', fontSize: 13, color: 'rgba(255,255,255,0.75)', lineHeight: 1.8 }}>{rawText}</pre>;
+      return <pre style={{ whiteSpace: 'pre-wrap', margin: 0, fontFamily: 'inherit', fontSize: 13, color: '#46436a', lineHeight: 1.8 }}>{rawText}</pre>;
     }
     const unfixedErrors = errors.filter((e) => !e.fixed && e.original && e.original.length > 0);
     const fixedErrors = errors.filter((e) => e.fixed && e.suggestion && e.suggestion.length > 0);
@@ -240,15 +240,15 @@ function ReportReview() {
           if (seg.type === 'error') {
             return (
               <span key={i} id={`error-${seg.error?.id}`} onClick={() => setActiveErrorId(seg.error?.id ?? null)}
-                style={{ cursor: 'pointer', background: activeErrorId === seg.error?.id ? 'rgba(255,77,79,0.3)' : 'rgba(255,77,79,0.15)', color: '#ff7875', borderBottom: '2px solid #ff4d4f', padding: '1px 3px', borderRadius: 3, transition: 'background 0.3s' }}>
+                style={{ cursor: 'pointer', background: activeErrorId === seg.error?.id ? 'rgba(220,38,38,0.2)' : '#fef2f2', color: '#dc2626', borderBottom: '2px solid #dc2626', padding: '1px 3px', borderRadius: 3, transition: 'background 0.3s' }}>
                 {seg.text}
               </span>
             );
           }
           if (seg.type === 'fixed') {
-            return <span key={i} id={`error-${seg.error?.id}`} style={{ background: 'rgba(82,196,26,0.12)', color: '#52c41a', padding: '1px 3px', borderRadius: 3 }}>{seg.text}</span>;
+            return <span key={i} id={`error-${seg.error?.id}`} style={{ background: 'rgba(22,163,74,0.12)', color: '#16a34a', padding: '1px 3px', borderRadius: 3 }}>{seg.text}</span>;
           }
-          return <span key={i} style={{ color: 'rgba(255,255,255,0.75)' }}>{seg.text}</span>;
+          return <span key={i} style={{ color: '#46436a' }}>{seg.text}</span>;
         })}
       </pre>
     );
@@ -406,14 +406,14 @@ function ReportReview() {
             onJump={handleJumpToError} onFix={handleFixOne} onAdopt={handleAdoptOnly}
           />
           {/* 右侧：文档预览 */}
-          <div style={{ flex: 1, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-            <div style={{ padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ color: 'rgba(255,255,255,0.85)', fontSize: 14, fontWeight: 600 }}>
-                <FileTextOutlined style={{ marginRight: 8, color: '#4d9fff' }} />
+          <div style={{ flex: 1, background: '#f6f5fc', border: '1px solid #e9e7f4', borderRadius: 12, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            <div style={{ padding: '12px 16px', borderBottom: '1px solid #e9e7f4', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ color: '#1e1b2e', fontSize: 14, fontWeight: 600 }}>
+                <FileTextOutlined style={{ marginRight: 8, color: '#6366f1' }} />
                 文档预览
               </span>
               {reviewed && errors.length > 0 && (
-                <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>
+                <span style={{ fontSize: 12, color: '#6b6892' }}>
                   红色 = 错别字 · 绿色 = 已修改
                 </span>
               )}
@@ -431,13 +431,13 @@ function ReportReview() {
       {!hasFile && !reviewing && reviewPhase !== 'parsing' && (
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: 12 }}>
           <div style={{ width: '100%', maxWidth: 560 }}>
-            <Dragger {...uploadProps} style={{ background: 'rgba(77,159,255,0.02)', borderRadius: 12 }}>
+            <Dragger {...uploadProps} style={{ background: 'rgba(99,102,241,0.02)', borderRadius: 12 }}>
               <div style={{ padding: '50px 20px' }}>
-                <InboxOutlined style={{ color: '#4d9fff', fontSize: 56, marginBottom: 16 }} />
-                <p style={{ color: 'rgba(255,255,255,0.85)', fontSize: 15, fontWeight: 500, marginBottom: 6 }}>
+                <InboxOutlined style={{ color: '#6366f1', fontSize: 56, marginBottom: 16 }} />
+                <p style={{ color: '#1e1b2e', fontSize: 15, fontWeight: 500, marginBottom: 6 }}>
                   拖拽测试报告到此处，或点击选择
                 </p>
-                <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13 }}>
+                <p style={{ color: '#6b6892', fontSize: 13 }}>
                   支持 .docx / .pdf 格式 · 上传后自动审核
                 </p>
               </div>
@@ -449,12 +449,12 @@ function ReportReview() {
       {/* ===== 学习库管理 Modal（深色主题）===== */}
       <ConfigProvider theme={DARK_MODAL_THEME}>
         <Modal
-          title={<span><BookOutlined style={{ color: '#52c41a', marginRight: 8 }} />自我学习库管理<span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginLeft: 12, fontWeight: 'normal' }}>共 {learnedItems.length} 条</span></span>}
+          title={<span><BookOutlined style={{ color: '#16a34a', marginRight: 8 }} />自我学习库管理<span style={{ fontSize: 12, color: '#6b6892', marginLeft: 12, fontWeight: 'normal' }}>共 {learnedItems.length} 条</span></span>}
           open={manageLibOpen} onCancel={() => setManageLibOpen(false)}
           footer={<Button onClick={() => setManageLibOpen(false)}>关闭</Button>} width={720}
         >
-          <div style={{ marginBottom: 12, padding: '10px 14px', background: 'rgba(77,159,255,0.06)', border: '1px solid rgba(77,159,255,0.15)', borderRadius: 8, fontSize: 12, color: 'rgba(255,255,255,0.65)', lineHeight: 1.7 }}>
-            <BulbOutlined style={{ color: '#4d9fff', marginRight: 6 }} />
+          <div style={{ marginBottom: 12, padding: '10px 14px', background: 'rgba(99,102,241,0.06)', border: '1px solid rgba(99,102,241,0.15)', borderRadius: 8, fontSize: 12, color: '#46436a', lineHeight: 1.7 }}>
+            <BulbOutlined style={{ color: '#6366f1', marginRight: 6 }} />
             这些纠错已在历史审核中被采纳，下次遇到相同错误会优先识别。误学的条目可点击"移除"清除。
           </div>
           <Input placeholder="搜索原词或推荐词" value={learnedSearch} onChange={(e) => setLearnedSearch(e.target.value)} allowClear style={{ marginBottom: 12 }} />
@@ -462,11 +462,11 @@ function ReportReview() {
             <div style={{ maxHeight: 420, overflowY: 'auto' }}>
               <List dataSource={learnedItems.filter((it) => !learnedSearch || it.original.includes(learnedSearch) || it.suggestion.includes(learnedSearch)).slice().sort((a, b) => b.count - a.count)}
                 renderItem={(item) => (
-                  <List.Item style={{ opacity: item.count <= 1 ? 0.55 : 1, borderBottom: '1px solid rgba(255,255,255,0.06)' }}
+                  <List.Item style={{ opacity: item.count <= 1 ? 0.55 : 1, borderBottom: '1px solid #e9e7f4' }}
                     actions={[<Button type="text" danger size="small" icon={<DeleteOutlined />} onClick={() => handleDeleteLearned(item.original)}>移除</Button>]}>
                     <List.Item.Meta
-                      title={<span style={{ fontSize: 13 }}><span style={{ color: '#ff7875', textDecoration: 'line-through' }}>{item.original}</span><SwapOutlined style={{ color: 'rgba(255,255,255,0.4)', margin: '0 8px', fontSize: 11 }} /><span style={{ color: '#52c41a' }}>{item.suggestion}</span></span>}
-                      description={<span style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)' }}>采纳 {item.count} 次 · 最近 {new Date(item.lastSeen).toLocaleString('zh-CN')} · 来源 {item.source || 'user'}</span>}
+                      title={<span style={{ fontSize: 13 }}><span style={{ color: '#dc2626', textDecoration: 'line-through' }}>{item.original}</span><SwapOutlined style={{ color: '#6b6892', margin: '0 8px', fontSize: 11 }} /><span style={{ color: '#16a34a' }}>{item.suggestion}</span></span>}
+                      description={<span style={{ fontSize: 12, color: '#6b6892' }}>采纳 {item.count} 次 · 最近 {new Date(item.lastSeen).toLocaleString('zh-CN')} · 来源 {item.source || 'user'}</span>}
                     />
                   </List.Item>
                 )}
@@ -509,17 +509,17 @@ function ReviewFlow(props: {
       {/* 文档卡片 */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 14, padding: '14px 22px', marginBottom: 44,
-        background: 'rgba(77,159,255,0.05)', border: '1px solid rgba(77,159,255,0.15)', borderRadius: 12,
+        background: 'rgba(99,102,241,0.05)', border: '1px solid rgba(99,102,241,0.15)', borderRadius: 12,
       }}>
         <div style={{
           width: 44, height: 44, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center',
-          background: 'rgba(77,159,255,0.12)', color: '#4d9fff', fontSize: 20,
+          background: 'rgba(99,102,241,0.12)', color: '#6366f1', fontSize: 20,
         }}><FileTextOutlined /></div>
         <div>
-          <div style={{ color: 'rgba(255,255,255,0.9)', fontSize: 14, fontWeight: 600, maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <div style={{ color: '#1e1b2e', fontSize: 14, fontWeight: 600, maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {fileName}
           </div>
-          <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12, marginTop: 3 }}>
+          <div style={{ color: '#6b6892', fontSize: 12, marginTop: 3 }}>
             {fileSize}{textLen > 0 ? ` · ${textLen.toLocaleString()} 字` : ''}
             {!isFinished && phase !== 'parsing' ? ` · 已用时 ${elapsed}s` : ''}
           </div>
@@ -537,31 +537,31 @@ function ReviewFlow(props: {
                 <div style={{
                   width: 40, height: 40, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
                   fontSize: 17, transition: 'all 0.4s',
-                  background: stepState === 'finish' ? 'rgba(82,196,26,0.15)'
-                    : stepState === 'active' ? 'rgba(77,159,255,0.18)'
-                    : 'rgba(255,255,255,0.04)',
-                  border: `1.5px solid ${stepState === 'finish' ? 'rgba(82,196,26,0.5)'
-                    : stepState === 'active' ? '#4d9fff'
-                    : 'rgba(255,255,255,0.12)'}`,
-                  color: stepState === 'finish' ? '#52c41a'
-                    : stepState === 'active' ? '#4d9fff'
-                    : 'rgba(255,255,255,0.25)',
-                  boxShadow: stepState === 'active' ? '0 0 0 0 rgba(77,159,255,0.35)' : 'none',
+                  background: stepState === 'finish' ? 'rgba(22,163,74,0.15)'
+                    : stepState === 'active' ? 'rgba(99,102,241,0.18)'
+                    : '#ffffff',
+                  border: `1.5px solid ${stepState === 'finish' ? 'rgba(22,163,74,0.5)'
+                    : stepState === 'active' ? '#6366f1'
+                    : '#e9e7f4'}`,
+                  color: stepState === 'finish' ? '#16a34a'
+                    : stepState === 'active' ? '#6366f1'
+                    : '#9d9ab8',
+                  boxShadow: stepState === 'active' ? '0 0 0 0 rgba(99,102,241,0.35)' : 'none',
                   animation: stepState === 'active' ? 'reviewPulse 1.6s ease-out infinite' : 'none',
                 }}>{s.icon}</div>
                 <div style={{
                   marginTop: 8, fontSize: 12, fontWeight: stepState === 'active' ? 600 : 400, textAlign: 'center',
-                  color: stepState === 'finish' ? 'rgba(82,196,26,0.9)'
-                    : stepState === 'active' ? '#7cb8ff'
-                    : 'rgba(255,255,255,0.35)',
+                  color: stepState === 'finish' ? 'rgba(22,163,74,0.9)'
+                    : stepState === 'active' ? '#6366f1'
+                    : '#9d9ab8',
                 }}>{s.label}</div>
                 {s.desc && stepState !== 'wait' && (
-                  <div style={{ marginTop: 2, fontSize: 10.5, color: 'rgba(255,255,255,0.3)', textAlign: 'center', maxWidth: 80, lineHeight: 1.4 }}>{s.desc}</div>
+                  <div style={{ marginTop: 2, fontSize: 10.5, color: '#9d9ab8', textAlign: 'center', maxWidth: 80, lineHeight: 1.4 }}>{s.desc}</div>
                 )}
               </div>
               {/* 连接线 */}
               {i < steps.length - 1 && (
-                <div style={{ flex: 1, height: 1.5, marginTop: 20, margin: '20px 4px 0', background: i < activeIdx || isFinished ? 'rgba(82,196,26,0.4)' : 'rgba(255,255,255,0.08)', transition: 'background 0.4s' }} />
+                <div style={{ flex: 1, height: 1.5, marginTop: 20, margin: '20px 4px 0', background: i < activeIdx || isFinished ? 'rgba(22,163,74,0.4)' : '#eeedf8', transition: 'background 0.4s' }} />
               )}
             </div>
           );
@@ -571,7 +571,7 @@ function ReviewFlow(props: {
       {/* 阶段提示 + 进度光带 */}
       <div style={{ marginTop: 36, width: '100%', maxWidth: 560, textAlign: 'center' }}>
         <div style={{
-          color: isFinished ? '#52c41a' : 'rgba(255,255,255,0.65)', fontSize: 13.5, fontWeight: 500,
+          color: isFinished ? '#16a34a' : '#46436a', fontSize: 13.5, fontWeight: 500,
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
         }}>
           {!isFinished && phase !== 'parsing' && <Spin size="small" />}
@@ -580,14 +580,14 @@ function ReviewFlow(props: {
         {/* 动态进度条（未完成时流动光带） */}
         <div style={{
           marginTop: 16, height: 4, borderRadius: 2, overflow: 'hidden',
-          background: 'rgba(255,255,255,0.06)',
+          background: '#eeedf8',
         }}>
           {isFinished ? (
-            <div style={{ width: '100%', height: '100%', background: 'linear-gradient(90deg, rgba(82,196,26,0.7), #52c41a)', borderRadius: 2, transition: 'width 0.6s' }} />
+            <div style={{ width: '100%', height: '100%', background: 'linear-gradient(90deg, rgba(22,163,74,0.7), #16a34a)', borderRadius: 2, transition: 'width 0.6s' }} />
           ) : (
             <div style={{
               width: '36%', height: '100%', borderRadius: 2,
-              background: 'linear-gradient(90deg, transparent, #4d9fff, transparent)',
+              background: 'linear-gradient(90deg, transparent, #6366f1, transparent)',
               animation: 'reviewFlow 1.8s ease-in-out infinite',
             }} />
           )}
@@ -597,9 +597,9 @@ function ReviewFlow(props: {
       {/* 呼吸点动画 keyframes */}
       <style>{`
         @keyframes reviewPulse {
-          0% { box-shadow: 0 0 0 0 rgba(77,159,255,0.35); }
-          70% { box-shadow: 0 0 0 10px rgba(77,159,255,0); }
-          100% { box-shadow: 0 0 0 0 rgba(77,159,255,0); }
+          0% { box-shadow: 0 0 0 0 rgba(99,102,241,0.35); }
+          70% { box-shadow: 0 0 0 10px rgba(99,102,241,0); }
+          100% { box-shadow: 0 0 0 0 rgba(99,102,241,0); }
         }
         @keyframes reviewFlow {
           0% { transform: translateX(-120%); }
@@ -624,28 +624,28 @@ function TopBar(props: {
   return (
     <div style={{
       display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 14, rowGap: 10, padding: '14px 18px',
-      background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12,
+      background: '#f6f5fc', border: '1px solid #e9e7f4', borderRadius: 12,
     }}>
       {/* 文件信息 */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-        <FileTextOutlined style={{ fontSize: 22, color: reviewed ? '#52c41a' : '#4d9fff' }} />
+        <FileTextOutlined style={{ fontSize: 22, color: reviewed ? '#16a34a' : '#6366f1' }} />
         <div>
-          <div style={{ color: 'rgba(255,255,255,0.95)', fontSize: 14, fontWeight: 600, maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <div style={{ color: '#1e1b2e', fontSize: 14, fontWeight: 600, maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {hasFile ? fileName : '测试报告审核'}
           </div>
-          <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, marginTop: 2 }}>
+          <div style={{ color: '#6b6892', fontSize: 12, marginTop: 2 }}>
             {hasFile ? `${fileSize} · ${rawTextLen.toLocaleString()} 字` : '上传 Word/PDF 报告，AI 自动审核错别字'}
           </div>
         </div>
       </div>
 
-      <div style={{ width: 1, height: 36, background: 'rgba(255,255,255,0.08)' }} />
+      <div style={{ width: 1, height: 36, background: '#e9e7f4' }} />
 
       {/* 审核统计 */}
       {reviewing ? (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <Spin size="small" />
-          <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: 13 }}>
+          <span style={{ color: '#46436a', fontSize: 13 }}>
             {phase === 'parsing' ? '解析文档中...' : phase === 'dict' ? '词典扫描中...' : `AI 深度审核中... ${elapsed != null ? `${elapsed}s` : ''}`}
           </span>
         </div>
@@ -660,7 +660,7 @@ function TopBar(props: {
             )}
             {reviewStats.merged > 0 && (
               <Tooltip title={`AI 检出 ${reviewStats.aiErrors} / 词典 ${reviewStats.ruleErrors} / 去重 ${reviewStats.merged}`}>
-                <span style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12, cursor: 'help', whiteSpace: 'nowrap' }}>（AI {reviewStats.aiErrors} · 词典 {reviewStats.ruleErrors}）</span>
+                <span style={{ color: '#6b6892', fontSize: 12, cursor: 'help', whiteSpace: 'nowrap' }}>（AI {reviewStats.aiErrors} · 词典 {reviewStats.ruleErrors}）</span>
               </Tooltip>
             )}
           </div>
@@ -668,33 +668,33 @@ function TopBar(props: {
           {/* 修复进度条 */}
           {errors.length > 0 && (
             <div style={{ flex: '1 1 160px', maxWidth: 280, minWidth: 140, display: 'flex', alignItems: 'center', gap: 10 }}>
-              <Progress percent={fixProgress} size="small" strokeColor={fixProgress === 100 ? '#52c41a' : '#4d9fff'} trailColor="rgba(255,255,255,0.08)" style={{ flex: 1, margin: 0, minWidth: 0 }} />
-              <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, whiteSpace: 'nowrap' }}>{fixedCount}/{errors.length}</span>
+              <Progress percent={fixProgress} size="small" strokeColor={fixProgress === 100 ? '#16a34a' : '#6366f1'} trailColor="#f6f5fc" style={{ flex: 1, margin: 0, minWidth: 0 }} />
+              <span style={{ color: '#6b6892', fontSize: 12, whiteSpace: 'nowrap' }}>{fixedCount}/{errors.length}</span>
             </div>
           )}
 
           {/* 操作按钮组：整体不可压缩、不换行，空间不足时随外层换行到下一行，绝不与数据重叠 */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginLeft: 'auto', flexShrink: 0, flexWrap: 'nowrap' }}>
             <Tooltip title="点击管理已学习的纠错">
-              <Button size="middle" icon={<BookOutlined />} onClick={onManageLib} style={{ borderRadius: 8, color: 'rgba(255,255,255,0.65)', borderColor: 'rgba(255,255,255,0.12)', background: 'rgba(82,196,26,0.06)', flexShrink: 0 }}>
+              <Button size="middle" icon={<BookOutlined />} onClick={onManageLib} style={{ borderRadius: 8, color: '#46436a', borderColor: '#d9d5f0', background: 'rgba(22,163,74,0.06)', flexShrink: 0 }}>
                 学习库 {learnedSize}
               </Button>
             </Tooltip>
             {unfixedCount > 0 && (
-              <Popconfirm title="一键修改全部错别字？" description={`将修改 ${unfixedCount} 处错别字并加入学习库，此操作不可撤销。`} onConfirm={onFixAll} okText="确认修改" cancelText="取消" okButtonProps={{ style: { background: '#faad14', borderColor: '#faad14' } }}>
-                <Button icon={<WarningOutlined />} style={{ borderRadius: 8, borderColor: 'rgba(250,173,20,0.4)', color: '#faad14', background: 'rgba(250,173,20,0.08)', flexShrink: 0 }}>
+              <Popconfirm title="一键修改全部错别字？" description={`将修改 ${unfixedCount} 处错别字并加入学习库，此操作不可撤销。`} onConfirm={onFixAll} okText="确认修改" cancelText="取消" okButtonProps={{ style: { background: '#d97706', borderColor: '#d97706' } }}>
+                <Button icon={<WarningOutlined />} style={{ borderRadius: 8, borderColor: 'rgba(217,119,6,0.4)', color: '#d97706', background: 'rgba(217,119,6,0.08)', flexShrink: 0 }}>
                   一键修改（{unfixedCount}）
                 </Button>
               </Popconfirm>
             )}
             <Button type="primary" icon={<DownloadOutlined />} loading={exporting} onClick={onExport} style={{ borderRadius: 8, fontWeight: 500, flexShrink: 0 }}>导出文档</Button>
-            <Button icon={<ReloadOutlined />} onClick={onReset} style={{ borderRadius: 8, color: 'rgba(255,255,255,0.5)', borderColor: 'rgba(255,255,255,0.1)', flexShrink: 0 }}>重新上传</Button>
+            <Button icon={<ReloadOutlined />} onClick={onReset} style={{ borderRadius: 8, color: '#6b6892', borderColor: '#d9d5f0', flexShrink: 0 }}>重新上传</Button>
           </div>
         </>
       ) : hasFile ? null : (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginLeft: 'auto', flexShrink: 0 }}>
           <Tooltip title="点击管理已学习的纠错">
-            <Button size="middle" icon={<BookOutlined />} onClick={onManageLib} style={{ borderRadius: 8, color: 'rgba(255,255,255,0.65)', borderColor: 'rgba(255,255,255,0.12)', background: 'rgba(82,196,26,0.06)', flexShrink: 0 }}>
+            <Button size="middle" icon={<BookOutlined />} onClick={onManageLib} style={{ borderRadius: 8, color: '#46436a', borderColor: '#d9d5f0', background: 'rgba(22,163,74,0.06)', flexShrink: 0 }}>
               学习库 {learnedSize}
             </Button>
           </Tooltip>
@@ -717,12 +717,12 @@ function ErrorList(props: {
     : 'AI 审核中...';
 
   return (
-    <div style={{ width: 340, flexShrink: 0, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+    <div style={{ width: 340, flexShrink: 0, background: '#f6f5fc', border: '1px solid #e9e7f4', borderRadius: 12, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       {/* header */}
-      <div style={{ padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <span style={{ color: 'rgba(255,255,255,0.85)', fontSize: 14, fontWeight: 600 }}>错别字列表</span>
+      <div style={{ padding: '12px 16px', borderBottom: '1px solid #e9e7f4', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span style={{ color: '#1e1b2e', fontSize: 14, fontWeight: 600 }}>错别字列表</span>
         {reviewed && (
-          <span style={{ color: errors.length > 0 ? '#ff7875' : 'rgba(255,255,255,0.4)', fontSize: 13, fontWeight: 500 }}>
+          <span style={{ color: errors.length > 0 ? '#dc2626' : '#6b6892', fontSize: 13, fontWeight: 500 }}>
             {errors.length > 0 ? `${errors.length} 处` : '无'}
           </span>
         )}
@@ -733,44 +733,44 @@ function ErrorList(props: {
         {reviewing ? (
           <div style={{ textAlign: 'center', padding: 50 }}>
             <Spin size="small" />
-            <div style={{ marginTop: 12, color: 'rgba(255,255,255,0.5)', fontSize: 13 }}>{phaseText}</div>
+            <div style={{ marginTop: 12, color: '#6b6892', fontSize: 13 }}>{phaseText}</div>
           </div>
         ) : !reviewed ? (
-          <div style={{ textAlign: 'center', padding: 50, color: 'rgba(255,255,255,0.3)', fontSize: 13 }}>
+          <div style={{ textAlign: 'center', padding: 50, color: '#9d9ab8', fontSize: 13 }}>
             {hasFile ? '等待 AI 审核...' : '上传文档后自动审核'}
           </div>
         ) : errors.length === 0 ? (
           <div style={{ textAlign: 'center', padding: 50 }}>
-            <CheckCircleOutlined style={{ fontSize: 36, color: '#52c41a' }} />
-            <div style={{ marginTop: 12, color: 'rgba(255,255,255,0.6)', fontSize: 13 }}>未发现错别字</div>
+            <CheckCircleOutlined style={{ fontSize: 36, color: '#16a34a' }} />
+            <div style={{ marginTop: 12, color: '#46436a', fontSize: 13 }}>未发现错别字</div>
           </div>
         ) : (
           errors.map((err) => (
             <div key={err.id} onClick={() => onJump(err.id)} style={{
               marginBottom: 10, padding: '12px 14px', cursor: 'pointer', borderRadius: 8, transition: 'all 0.2s',
-              background: activeErrorId === err.id ? (err.fixed ? 'rgba(82,196,26,0.12)' : 'rgba(255,77,79,0.12)') : (err.fixed ? 'rgba(82,196,26,0.05)' : 'rgba(255,77,79,0.04)'),
-              border: `1px solid ${activeErrorId === err.id ? (err.fixed ? 'rgba(82,196,26,0.3)' : 'rgba(255,77,79,0.3)') : (err.fixed ? 'rgba(82,196,26,0.12)' : 'rgba(255,77,79,0.12)')}`,
+              background: activeErrorId === err.id ? (err.fixed ? 'rgba(22,163,74,0.12)' : 'rgba(220,38,38,0.12)') : (err.fixed ? 'rgba(22,163,74,0.05)' : 'rgba(220,38,38,0.04)'),
+              border: `1px solid ${activeErrorId === err.id ? (err.fixed ? 'rgba(22,163,74,0.3)' : 'rgba(220,38,38,0.3)') : (err.fixed ? 'rgba(22,163,74,0.12)' : 'rgba(220,38,38,0.12)')}`,
             }}>
               {/* 序号 + 原文 → 建议 */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                 <span style={{
                   minWidth: 22, height: 22, borderRadius: 4, padding: '0 6px', fontSize: 12, fontWeight: 600,
                   display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-                  background: err.fixed ? 'rgba(82,196,26,0.15)' : 'rgba(255,77,79,0.15)',
-                  color: err.fixed ? '#52c41a' : '#ff7875',
+                  background: err.fixed ? 'rgba(22,163,74,0.15)' : 'rgba(220,38,38,0.15)',
+                  color: err.fixed ? '#16a34a' : '#dc2626',
                 }}>
                   {err.fixed ? '✓' : err.id}
                 </span>
-                <span style={{ color: '#ff7875', fontSize: 13, textDecoration: err.fixed ? 'line-through' : 'none', opacity: err.fixed ? 0.5 : 1 }}>{err.original}</span>
-                <SwapOutlined style={{ color: 'rgba(255,255,255,0.35)', fontSize: 11 }} />
-                <span style={{ color: '#52c41a', fontSize: 13, fontWeight: 500 }}>{err.suggestion}</span>
+                <span style={{ color: '#dc2626', fontSize: 13, textDecoration: err.fixed ? 'line-through' : 'none', opacity: err.fixed ? 0.5 : 1 }}>{err.original}</span>
+                <SwapOutlined style={{ color: '#9d9ab8', fontSize: 11 }} />
+                <span style={{ color: '#16a34a', fontSize: 13, fontWeight: 500 }}>{err.suggestion}</span>
               </div>
 
               {/* 上下文 */}
               {err.context && (
                 <div style={{
-                  color: 'rgba(255,255,255,0.5)', fontSize: 12, lineHeight: 1.5, marginBottom: 8,
-                  padding: '6px 10px', background: 'rgba(255,255,255,0.03)', borderRadius: 4,
+                  color: '#6b6892', fontSize: 12, lineHeight: 1.5, marginBottom: 8,
+                  padding: '6px 10px', background: '#f6f5fc', borderRadius: 4,
                   overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
                 }}>
                   ...{err.context}...
@@ -781,14 +781,14 @@ function ErrorList(props: {
               {!err.fixed && (
                 <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
                   <Popconfirm title="修改并加入学习库？" description={`「${err.original}」→「${err.suggestion}」`} onConfirm={(e) => { e?.stopPropagation(); onFix(err.id); }} onCancel={(e) => e?.stopPropagation()} okText="确认" cancelText="取消">
-                    <Button size="small" type="link" icon={<EditOutlined />} onClick={(e) => e.stopPropagation()} style={{ padding: 0, color: '#4d9fff', fontSize: 12, fontWeight: 500 }}>修改</Button>
+                    <Button size="small" type="link" icon={<EditOutlined />} onClick={(e) => e.stopPropagation()} style={{ padding: 0, color: '#6366f1', fontSize: 12, fontWeight: 500 }}>修改</Button>
                   </Popconfirm>
                   <Popconfirm title="仅采纳为纠错？" description="加入学习库但保留原文" onConfirm={(e) => { e?.stopPropagation(); onAdopt(err.id); }} onCancel={(e) => e?.stopPropagation()} okText="确认" cancelText="取消">
-                    <Button size="small" type="link" onClick={(e) => e.stopPropagation()} style={{ padding: 0, color: 'rgba(255,255,255,0.45)', fontSize: 12 }}>仅采纳</Button>
+                    <Button size="small" type="link" onClick={(e) => e.stopPropagation()} style={{ padding: 0, color: '#6b6892', fontSize: 12 }}>仅采纳</Button>
                   </Popconfirm>
                 </div>
               )}
-              {err.fixed && <span style={{ fontSize: 12, color: 'rgba(82,196,26,0.7)' }}>✓ 已修改并加入学习库</span>}
+              {err.fixed && <span style={{ fontSize: 12, color: 'rgba(22,163,74,0.75)' }}>✓ 已修改并加入学习库</span>}
             </div>
           ))
         )}

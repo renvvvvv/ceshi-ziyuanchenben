@@ -34,10 +34,10 @@ const { Option } = Select;
 
 const getFileIcon = (fileType?: string) => {
   const t = fileType?.toLowerCase();
-  if (t === 'pdf') return <FilePdfOutlined style={{ fontSize: 36, color: '#ff4d4f' }} />;
-  if (t === 'doc' || t === 'docx') return <FileWordOutlined style={{ fontSize: 36, color: '#4d9fff' }} />;
-  if (t === 'xls' || t === 'xlsx') return <FileExcelOutlined style={{ fontSize: 36, color: '#52c41a' }} />;
-  if (t === 'jpg' || t === 'jpeg' || t === 'png') return <FileImageOutlined style={{ fontSize: 36, color: '#722ed1' }} />;
+  if (t === 'pdf') return <FilePdfOutlined style={{ fontSize: 36, color: '#dc2626' }} />;
+  if (t === 'doc' || t === 'docx') return <FileWordOutlined style={{ fontSize: 36, color: '#6366f1' }} />;
+  if (t === 'xls' || t === 'xlsx') return <FileExcelOutlined style={{ fontSize: 36, color: '#16a34a' }} />;
+  if (t === 'jpg' || t === 'jpeg' || t === 'png') return <FileImageOutlined style={{ fontSize: 36, color: '#7c3aed' }} />;
   return <FileOutlined style={{ fontSize: 36, color: '#8c8c8c' }} />;
 };
 
@@ -152,10 +152,10 @@ function TestGuide() {
   };
 
   const categoryColors: Record<string, string> = {
-    '电气系统': '#faad14',
-    '暖通系统': '#52c41a',
-    '弱电系统': '#4d9fff',
-    '消防系统': '#eb576c',
+    '电气系统': '#d97706',
+    '暖通系统': '#16a34a',
+    '弱电系统': '#6366f1',
+    '消防系统': '#ec4899',
   };
 
   return (
@@ -186,7 +186,7 @@ function TestGuide() {
           </h3>
           <p
             style={{
-              color: 'rgba(255,255,255,0.45)',
+              color: '#6b6892',
               marginTop: 6,
               fontSize: 13,
               fontFamily: 'var(--font-primary)',
@@ -200,13 +200,13 @@ function TestGuide() {
           icon={<CloudUploadOutlined />}
           onClick={() => setUploadModalOpen(true)}
           style={{
-            background: 'linear-gradient(135deg, #4d9fff 0%, #2b6cb0 100%)',
+            background: 'linear-gradient(135deg, #6366f1, #a855f7)',
             border: 'none',
             borderRadius: 8,
             fontFamily: 'var(--font-primary)',
             fontWeight: 500,
             height: 38,
-            boxShadow: '0 4px 12px rgba(77,159,255,0.25)',
+            boxShadow: '0 4px 12px rgba(99,102,241,0.25)',
           }}
         >
           上传文件
@@ -236,12 +236,12 @@ function TestGuide() {
                 fontSize: 13,
                 fontFamily: 'var(--font-primary)',
                 border: selectedCategory === cat
-                  ? '1px solid rgba(77,159,255,0.5)'
-                  : '1px solid rgba(255,255,255,0.12)',
+                  ? '1px solid rgba(99,102,241,0.5)'
+                  : '1px solid #e9e7f4',
                 background: selectedCategory === cat
-                  ? 'rgba(77,159,255,0.18)'
-                  : 'rgba(255,255,255,0.03)',
-                color: selectedCategory === cat ? '#4d9fff' : 'rgba(255,255,255,0.6)',
+                  ? 'rgba(99,102,241,0.18)'
+                  : '#f6f5fc',
+                color: selectedCategory === cat ? '#6366f1' : '#46436a',
                 transition: 'all 0.2s',
                 cursor: 'pointer',
               }}
@@ -252,13 +252,13 @@ function TestGuide() {
         </div>
         <Input
           placeholder="搜索文件名称或内容"
-          prefix={<SearchOutlined style={{ color: 'rgba(255,255,255,0.3)' }} />}
+          prefix={<SearchOutlined style={{ color: '#9d9ab8' }} />}
           value={searchText}
           onChange={(e) => setSearchText(e.target.value)}
           style={{
             width: 260,
-            background: 'rgba(255,255,255,0.04)',
-            border: '1px solid rgba(255,255,255,0.08)',
+            background: '#f8f7fd',
+            border: '1px solid #e9e7f4',
             borderRadius: 8,
             color: 'var(--text-primary)',
             fontFamily: 'var(--font-primary)',
@@ -272,7 +272,7 @@ function TestGuide() {
         <Empty
           description="暂无匹配的文件"
           image={Empty.PRESENTED_IMAGE_SIMPLE}
-          style={{ color: 'rgba(255,255,255,0.4)', marginTop: 60 }}
+          style={{ color: '#6b6892', marginTop: 60 }}
         />
       ) : (
         <div
@@ -296,9 +296,9 @@ function TestGuide() {
                 position: 'relative',
               }}
               onMouseEnter={(e) => {
-                (e.currentTarget as HTMLElement).style.borderColor = 'rgba(77,159,255,0.25)';
+                (e.currentTarget as HTMLElement).style.borderColor = 'rgba(99,102,241,0.25)';
                 (e.currentTarget as HTMLElement).style.transform = 'translateY(-2px)';
-                (e.currentTarget as HTMLElement).style.boxShadow = '0 8px 24px rgba(0,0,0,0.2)';
+                (e.currentTarget as HTMLElement).style.boxShadow = '0 8px 24px rgba(99,102,241,0.10)';
               }}
               onMouseLeave={(e) => {
                 (e.currentTarget as HTMLElement).style.borderColor = 'var(--glass-border)';
@@ -313,12 +313,12 @@ function TestGuide() {
                     width: 56,
                     height: 56,
                     borderRadius: 10,
-                    background: 'rgba(255,255,255,0.04)',
+                    background: '#f8f7fd',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     flexShrink: 0,
-                    border: '1px solid rgba(255,255,255,0.06)',
+                    border: '1px solid #e9e7f4',
                   }}
                 >
                   {getFileIcon(doc.fileType)}
@@ -340,9 +340,9 @@ function TestGuide() {
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                     <Tag
                       style={{
-                        background: `${categoryColors[doc.category] || '#4d9fff'}18`,
-                        border: `1px solid ${categoryColors[doc.category] || '#4d9fff'}33`,
-                        color: categoryColors[doc.category] || '#4d9fff',
+                        background: `${categoryColors[doc.category] || '#6366f1'}18`,
+                        border: `1px solid ${categoryColors[doc.category] || '#6366f1'}33`,
+                        color: categoryColors[doc.category] || '#6366f1',
                         fontSize: 11,
                         borderRadius: 4,
                         padding: '0 8px',
@@ -356,7 +356,7 @@ function TestGuide() {
                       <span
                         style={{
                           fontSize: 11,
-                          color: 'rgba(255,255,255,0.35)',
+                          color: '#9d9ab8',
                           fontFamily: 'var(--font-primary)',
                         }}
                       >
@@ -373,7 +373,7 @@ function TestGuide() {
                   style={{
                     marginTop: 12,
                     fontSize: 12,
-                    color: 'rgba(255,255,255,0.45)',
+                    color: '#6b6892',
                     fontFamily: 'var(--font-primary)',
                     lineHeight: 1.6,
                     display: '-webkit-box',
@@ -391,7 +391,7 @@ function TestGuide() {
                 style={{
                   marginTop: 14,
                   paddingTop: 14,
-                  borderTop: '1px solid rgba(255,255,255,0.06)',
+                  borderTop: '1px solid #e9e7f4',
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center',
@@ -400,7 +400,7 @@ function TestGuide() {
                 <span
                   style={{
                     fontSize: 11,
-                    color: 'rgba(255,255,255,0.3)',
+                    color: '#9d9ab8',
                     fontFamily: 'var(--font-primary)',
                     display: 'flex',
                     alignItems: 'center',
@@ -417,7 +417,7 @@ function TestGuide() {
                     icon={<DownloadOutlined />}
                     onClick={() => handleDownload(doc)}
                     style={{
-                      color: '#4d9fff',
+                      color: '#6366f1',
                       fontSize: 12,
                       fontFamily: 'var(--font-primary)',
                     }}
@@ -437,7 +437,7 @@ function TestGuide() {
                       size="small"
                       icon={<DeleteOutlined />}
                       style={{
-                        color: '#ff7875',
+                        color: '#f87171',
                         fontSize: 12,
                         fontFamily: 'var(--font-primary)',
                       }}
@@ -457,8 +457,8 @@ function TestGuide() {
         style={{
           marginTop: 24,
           padding: '16px 20px',
-          background: 'rgba(255,255,255,0.02)',
-          border: '1px solid rgba(255,255,255,0.06)',
+          background: '#f6f5fc',
+          border: '1px solid #e9e7f4',
           borderRadius: 10,
           display: 'flex',
           gap: 24,
@@ -466,8 +466,8 @@ function TestGuide() {
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <FileTextOutlined style={{ color: '#4d9fff', fontSize: 16 }} />
-          <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, fontFamily: 'var(--font-primary)' }}>
+          <FileTextOutlined style={{ color: '#6366f1', fontSize: 16 }} />
+          <span style={{ color: '#6b6892', fontSize: 13, fontFamily: 'var(--font-primary)' }}>
             共 <strong style={{ color: 'var(--text-primary)' }}>{docs.length}</strong> 个文件
           </span>
         </div>
@@ -480,10 +480,10 @@ function TestGuide() {
                   width: 8,
                   height: 8,
                   borderRadius: '50%',
-                  background: categoryColors[cat] || '#4d9fff',
+                  background: categoryColors[cat] || '#6366f1',
                 }}
               />
-              <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, fontFamily: 'var(--font-primary)' }}>
+              <span style={{ color: '#6b6892', fontSize: 13, fontFamily: 'var(--font-primary)' }}>
                 {cat} <strong style={{ color: 'var(--text-primary)' }}>{count}</strong> 个
               </span>
             </div>
@@ -507,16 +507,16 @@ function TestGuide() {
         width={520}
         styles={{
           content: {
-            background: '#0d1f3c',
-            border: '1px solid rgba(255,255,255,0.08)',
+            background: '#ffffff',
+            border: '1px solid #e9e7f4',
             borderRadius: 12,
           },
           header: {
-            background: '#0d1f3c',
-            borderBottom: '1px solid rgba(255,255,255,0.08)',
+            background: '#ffffff',
+            borderBottom: '1px solid #e9e7f4',
           },
           body: {
-            background: '#0d1f3c',
+            background: '#ffffff',
             padding: '24px',
           },
           mask: {
@@ -543,9 +543,9 @@ function TestGuide() {
                 icon={<UploadOutlined />}
                 block
                 style={{
-                  background: 'rgba(255,255,255,0.04)',
-                  border: '1px dashed rgba(255,255,255,0.15)',
-                  color: 'rgba(255,255,255,0.6)',
+                  background: '#f8f7fd',
+                  border: '1px dashed #d9d5f0',
+                  color: '#46436a',
                   borderRadius: 8,
                   height: 80,
                   fontFamily: 'var(--font-primary)',
@@ -554,7 +554,7 @@ function TestGuide() {
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
                   <CloudUploadOutlined style={{ fontSize: 20 }} />
                   <span>点击或拖拽文件到此处上传</span>
-                  <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>
+                  <span style={{ fontSize: 11, color: '#9d9ab8' }}>
                     支持 PDF、Word、Excel、图片等格式
                   </span>
                 </div>
@@ -572,13 +572,13 @@ function TestGuide() {
             <Select
               placeholder="选择专业分类"
               style={{
-                background: 'rgba(255,255,255,0.04)',
+                background: '#f8f7fd',
                 borderRadius: 6,
                 fontFamily: 'var(--font-primary)',
               }}
               dropdownStyle={{
-                background: '#0d1f3c',
-                border: '1px solid rgba(255,255,255,0.1)',
+                background: '#ffffff',
+                border: '1px solid #dcd9f2',
               }}
             >
               {docCategories.slice(1).map((cat) => (
@@ -589,7 +589,7 @@ function TestGuide() {
                         width: 8,
                         height: 8,
                         borderRadius: '50%',
-                        background: categoryColors[cat] || '#4d9fff',
+                        background: categoryColors[cat] || '#6366f1',
                       }}
                     />
                     {cat}
@@ -608,8 +608,8 @@ function TestGuide() {
             <Input
               placeholder="输入文件名称"
               style={{
-                background: 'rgba(255,255,255,0.04)',
-                border: '1px solid rgba(255,255,255,0.08)',
+                background: '#f8f7fd',
+                border: '1px solid #e9e7f4',
                 borderRadius: 6,
                 color: 'var(--text-primary)',
                 fontFamily: 'var(--font-primary)',
@@ -622,8 +622,8 @@ function TestGuide() {
               placeholder="输入文件描述（可选）"
               rows={3}
               style={{
-                background: 'rgba(255,255,255,0.04)',
-                border: '1px solid rgba(255,255,255,0.08)',
+                background: '#f8f7fd',
+                border: '1px solid #e9e7f4',
                 borderRadius: 6,
                 color: 'var(--text-primary)',
                 fontFamily: 'var(--font-primary)',

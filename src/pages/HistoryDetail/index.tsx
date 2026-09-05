@@ -9,18 +9,18 @@ import type { ProjectPhase, ProjectPhaseFile } from '../../types';
 
 const PHASE_STATUS_CONFIG: Record<string, { color: string; label: string }> = {
   pending: { color: '#8c8c8c', label: '待开始' },
-  in_progress: { color: '#4d9fff', label: '进行中' },
-  completed: { color: '#52c41a', label: '已完成' },
+  in_progress: { color: '#6366f1', label: '进行中' },
+  completed: { color: '#16a34a', label: '已完成' },
 };
 
 /** 文件类型颜色 */
 function getFileIcon(fileType?: string) {
   const map: Record<string, string> = {
-    pdf: '#ff4d4f',
-    xlsx: '#52c41a',
-    docx: '#1890ff',
-    pptx: '#faad14',
-    zip: '#b37feb',
+    pdf: '#dc2626',
+    xlsx: '#16a34a',
+    docx: '#6366f1',
+    pptx: '#d97706',
+    zip: '#a855f7',
     default: '#8c8c8c',
   };
   return map[fileType || ''] || map['default'];
@@ -163,10 +163,10 @@ function HistoryDetail() {
         {/* 阶段头部 */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 6 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontWeight: 600, fontSize: 13.5, color: 'rgba(255,255,255,0.9)', lineHeight: 1.3 }}>
+            <div style={{ fontWeight: 600, fontSize: 13.5, color: '#1e1b2e', lineHeight: 1.3 }}>
               {phase.name}
             </div>
-            <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.42)', marginTop: 2, lineHeight: 1.4 }}>
+            <div style={{ fontSize: 11.5, color: '#6b6892', marginTop: 2, lineHeight: 1.4 }}>
               {phase.description}
             </div>
           </div>
@@ -189,7 +189,7 @@ function HistoryDetail() {
 
         {/* 完成日期 */}
         {phase.date && (
-          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.32)', marginBottom: 6 }}>
+          <div style={{ fontSize: 11, color: '#9d9ab8', marginBottom: 6 }}>
             完成时间：{phase.date}
           </div>
         )}
@@ -201,8 +201,8 @@ function HistoryDetail() {
               marginTop: 8,
               padding: phase.files.length > 0 ? '10px 12px' : '14px',
               borderRadius: 8,
-              border: '1px dashed rgba(77,159,255,0.25)',
-              background: 'rgba(77,159,255,0.04)',
+              border: '1px dashed rgba(99,102,241,0.25)',
+              background: 'rgba(99,102,241,0.04)',
             }}
           >
             {/* 已上传文件列表 */}
@@ -217,8 +217,8 @@ function HistoryDetail() {
                       justifyContent: 'space-between',
                       padding: '6px 10px',
                       borderRadius: 6,
-                      background: 'rgba(13,31,60,0.7)',
-                      border: '1px solid rgba(255,255,255,0.06)',
+                      background: '#f6f5fc',
+                      border: '1px solid #e9e7f4',
                       transition: 'all 0.2s',
                     }}
                   >
@@ -226,7 +226,7 @@ function HistoryDetail() {
                       <FileOutlined style={{ color: getFileIcon(file.fileType), fontSize: 14, flexShrink: 0 }} />
                       <span
                         style={{
-                          color: 'rgba(255,255,255,0.78)',
+                          color: '#46436a',
                           fontSize: 12,
                           overflow: 'hidden',
                           textOverflow: 'ellipsis',
@@ -236,16 +236,16 @@ function HistoryDetail() {
                       >
                         {file.fileName}
                       </span>
-                      <span style={{ color: 'rgba(255,255,255,0.28)', fontSize: 11, flexShrink: 0 }}>
+                      <span style={{ color: '#9d9ab8', fontSize: 11, flexShrink: 0 }}>
                         ({file.fileSize})
                       </span>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                      <span style={{ color: 'rgba(255,255,255,0.25)', fontSize: 10 }}>
+                      <span style={{ color: '#9d9ab8', fontSize: 10 }}>
                         {file.uploadedAt}
                       </span>
                       <DownloadOutlined
-                        style={{ color: 'rgba(124,184,255,0.5)', fontSize: 12, cursor: 'pointer' }}
+                        style={{ color: 'rgba(129,140,248,0.5)', fontSize: 12, cursor: 'pointer' }}
                         title={`下载：${file.fileName}`}
                       />
                       <Button
@@ -254,7 +254,7 @@ function HistoryDetail() {
                         icon={<DeleteOutlined />}
                         onClick={() => handleDeleteFile(phase.key, file.id)}
                         danger
-                        style={{ color: 'rgba(255,77,79,0.45)', fontSize: 11, padding: '0 4px' }}
+                        style={{ color: 'rgba(220,38,38,0.45)', fontSize: 11, padding: '0 4px' }}
                       />
                     </div>
                   </div>
@@ -272,8 +272,8 @@ function HistoryDetail() {
                 icon={<UploadOutlined />}
                 size="small"
                 style={{
-                  borderColor: 'rgba(77,159,255,0.35)',
-                  color: '#4d9fff',
+                  borderColor: 'rgba(99,102,241,0.35)',
+                  color: '#6366f1',
                   fontFamily: 'var(--font-primary)',
                   borderRadius: 6,
                   fontSize: 12,
@@ -290,8 +290,8 @@ function HistoryDetail() {
         {!phase.allowUpload && phase.files.length === 0 && (
           <div style={{
             marginTop: 8, padding: '10px 12px', borderRadius: 8,
-            border: '1px dashed rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.02)',
-            color: 'rgba(255,255,255,0.25)', fontSize: 11.5, textAlign: 'center',
+            border: '1px dashed #e9e7f4', background: '#f6f5fc',
+            color: '#9d9ab8', fontSize: 11.5, textAlign: 'center',
           }}>
             暂无归档文件
           </div>
@@ -303,9 +303,9 @@ function HistoryDetail() {
   const timelineItems = phases.map((phase) => ({
     color:
       phase.status === 'in_progress'
-        ? '#1677ff'
+        ? '#6366f1'
         : phase.status === 'completed'
-          ? '#52c41a'
+          ? '#16a34a'
           : 'gray',
     children: renderPhaseContent(phase),
   }));
@@ -325,14 +325,14 @@ function HistoryDetail() {
       {project.status === '已完成' && (
         <div style={{
           marginBottom: 14, padding: '10px 16px',
-          background: 'linear-gradient(135deg, rgba(82,196,26,0.08), rgba(82,196,26,0.03))',
-          border: '1px solid rgba(82,196,26,0.2)',
+          background: 'linear-gradient(135deg, rgba(22,163,74,0.08), rgba(22,163,74,0.03))',
+          border: '1px solid rgba(22,163,74,0.2)',
           borderRadius: 10,
           display: 'flex', alignItems: 'center', gap: 10,
         }}>
           <span style={{ fontSize: 16 }}>📦</span>
-          <span style={{ color: '#52c41a', fontSize: 13, fontWeight: 500 }}>该项目已交付归档</span>
-          <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12 }}>
+          <span style={{ color: '#16a34a', fontSize: 13, fontWeight: 500 }}>该项目已交付归档</span>
+          <span style={{ color: '#6b6892', fontSize: 12 }}>
             · 共 {fileStats.total} 份归档文件，{fileStats.completedPhases}/{fileStats.totalPhases} 个阶段已完成
           </span>
           {project.docLink && (
@@ -340,7 +340,7 @@ function HistoryDetail() {
               href={project.docLink}
               target="_blank"
               rel="noopener noreferrer"
-              style={{ marginLeft: 'auto', color: '#4d9fff', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}
+              style={{ marginLeft: 'auto', color: '#6366f1', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}
             >
               <LinkOutlined /> 测试管理文档
             </a>
@@ -364,7 +364,7 @@ function HistoryDetail() {
           <Card title="项目详情" className="detail-info-card">
             <Descriptions column={1} size="small" labelStyle={{ width: 80 }}>
               <Descriptions.Item label="项目经理">
-                <Avatar size="small" icon={<ProjectOutlined />} style={{ marginRight: 8, backgroundColor: '#1677ff' }} />
+                <Avatar size="small" icon={<ProjectOutlined />} style={{ marginRight: 8, backgroundColor: '#6366f1' }} />
                 {project.manager}
               </Descriptions.Item>
               <Descriptions.Item label="开始日期">{project.startDate}</Descriptions.Item>
@@ -389,7 +389,7 @@ function HistoryDetail() {
           title={
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span>项目阶段时间线</span>
-              <Tag style={{ background: 'rgba(77,159,255,0.12)', color: '#4d9fff', border: '1px solid rgba(77,159,255,0.2)', fontSize: 11 }}>
+              <Tag style={{ background: 'rgba(99,102,241,0.12)', color: '#6366f1', border: '1px solid rgba(99,102,241,0.2)', fontSize: 11 }}>
                 支持上传
               </Tag>
             </div>

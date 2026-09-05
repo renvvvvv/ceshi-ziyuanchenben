@@ -27,21 +27,21 @@ interface TabProps {
 // ============== 统一样式（CONVENTIONS.md） ==============
 
 const CARD: CSSProperties = {
-  background: 'rgba(255,255,255,0.03)',
-  border: '1px solid rgba(255,255,255,0.08)',
+  background: '#f6f5fc',
+  border: '1px solid #e9e7f4',
   borderRadius: 12,
   padding: 16,
   marginBottom: 16,
 };
-const CARD_TITLE: CSSProperties = { fontSize: 14, fontWeight: 600, color: 'rgba(255,255,255,0.9)' };
-const CARD_SUB: CSSProperties = { fontSize: 12, color: 'rgba(255,255,255,0.4)', marginLeft: 8 };
-const SUMMARY_BG: CSSProperties = { background: 'rgba(30,58,95,0.35)' };
-const SUMMARY_TEXT: CSSProperties = { color: '#7cb8ff', fontWeight: 600, fontSize: 12 };
-const NUM_COLOR = '#7cb8ff';
+const CARD_TITLE: CSSProperties = { fontSize: 14, fontWeight: 600, color: '#1e1b2e' };
+const CARD_SUB: CSSProperties = { fontSize: 12, color: '#6b6892', marginLeft: 8 };
+const SUMMARY_BG: CSSProperties = { background: '#f1f0fe' };
+const SUMMARY_TEXT: CSSProperties = { color: '#6366f1', fontWeight: 600, fontSize: 12 };
+const NUM_COLOR = '#6366f1';
 /** 派生总天数胶囊（对应原工具 td.auto-total：软底/主色/加粗，后缀"天"） */
 const AUTO_PILL: CSSProperties = {
   display: 'inline-block', minWidth: 48, padding: '2px 8px', borderRadius: 8,
-  background: 'rgba(77,159,255,0.12)', color: NUM_COLOR, fontWeight: 700, fontSize: 12.5,
+  background: 'rgba(99,102,241,0.12)', color: NUM_COLOR, fontWeight: 700, fontSize: 12.5,
 };
 
 // ============== 工具函数（逻辑照抄原工具） ==============
@@ -94,7 +94,7 @@ const ROLE_OPTIONS = ['主测', '测试工程师', '经理', '组员'];
 
 /** 差值着色：0 灰 / +N 绿 / -N 橙（原 renderPersonnelCompare 的 delta L2584） */
 function Delta({ d }: { d: number }) {
-  const color = d === 0 ? 'rgba(255,255,255,0.35)' : d > 0 ? '#52c41a' : '#faad14';
+  const color = d === 0 ? '#9d9ab8' : d > 0 ? '#16a34a' : '#d97706';
   return <span style={{ color, fontWeight: 600 }}>{d === 0 ? '0' : d > 0 ? `+${d}` : `${d}`}</span>;
 }
 
@@ -176,7 +176,7 @@ export default function PersonnelTab({ data, canEdit, patch }: TabProps) {
 
   const personnelColumns: ColumnsType<PersonnelRow> = [
     { title: '#', key: 'idx', width: 40, align: 'center',
-      render: (_: unknown, __: PersonnelRow, i: number) => <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: 11 }}>{i + 1}</span> },
+      render: (_: unknown, __: PersonnelRow, i: number) => <span style={{ color: '#9d9ab8', fontSize: 11 }}>{i + 1}</span> },
     { title: '岗位', dataIndex: 'post', width: 150,
       render: (t: string, r: PersonnelRow) => canEdit
         ? <Input size="small" className="rc-cell-input" value={t ?? ''} onChange={(e) => patchPersonnel(r.id, 'post', e.target.value)} />
@@ -302,7 +302,7 @@ export default function PersonnelTab({ data, canEdit, patch }: TabProps) {
 
   const staffColumns: ColumnsType<StaffRow> = [
     { title: '#', key: 'idx', width: 40, align: 'center',
-      render: (_: unknown, __: StaffRow, i: number) => <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: 11 }}>{i + 1}</span> },
+      render: (_: unknown, __: StaffRow, i: number) => <span style={{ color: '#9d9ab8', fontSize: 11 }}>{i + 1}</span> },
     { title: '姓名', dataIndex: 'name', width: 110,
       render: (t: string, r: StaffRow) => canEdit
         ? <Input size="small" className="rc-cell-input" value={t ?? ''} onChange={(e) => patchStaff(r.id, 'name', e.target.value)} />
@@ -395,7 +395,7 @@ export default function PersonnelTab({ data, canEdit, patch }: TabProps) {
 
   const mergedColumns: ColumnsType<MergedGroup> = [
     { title: '#', key: 'idx', width: 40, align: 'center',
-      render: (_: unknown, __: MergedGroup, i: number) => <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: 11 }}>{i + 1}</span> },
+      render: (_: unknown, __: MergedGroup, i: number) => <span style={{ color: '#9d9ab8', fontSize: 11 }}>{i + 1}</span> },
     { title: '等级', dataIndex: 'level', width: 80, align: 'center',
       render: (t: string) => (t ? <span style={{ fontWeight: 600 }}>{levelDisplay(t as StaffLevel)}</span> : '—') },
     { title: '岗位', dataIndex: 'post', width: 120, render: (t: string) => t || '—' },
@@ -405,7 +405,7 @@ export default function PersonnelTab({ data, canEdit, patch }: TabProps) {
       render: (t: number) => <span style={{ fontWeight: 700, color: NUM_COLOR }}>{t} 人</span> },
     { title: '成员', dataIndex: 'names',
       render: (t: string[]) => (
-        <span style={{ color: 'rgba(255,255,255,0.55)', fontSize: 12 }}>
+        <span style={{ color: '#6b6892', fontSize: 12 }}>
           成员：{t.length ? t.join('、') : '（未命名）'}
         </span>
       ) },
@@ -462,7 +462,7 @@ export default function PersonnelTab({ data, canEdit, patch }: TabProps) {
           <Tag style={{ margin: '0 0 0 8px' }}>{staff.length} 人</Tag>
           <span style={CARD_SUB}>支持按岗位逐人填写职级与天数</span>
           <div style={{ flex: 1 }} />
-          <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginRight: 10 }}>
+          <span style={{ fontSize: 11, color: '#9d9ab8', marginRight: 10 }}>
             将同等级、同岗位、同投入天数的人合并为一行
           </span>
           <Segmented size="small" value={staffMerged ? 'merged' : 'detail'}

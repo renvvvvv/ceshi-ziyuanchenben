@@ -26,19 +26,19 @@ interface TabProps {
 // ============== 统一样式（CONVENTIONS.md） ==============
 
 const CARD: CSSProperties = {
-  background: 'rgba(255,255,255,0.03)',
-  border: '1px solid rgba(255,255,255,0.08)',
+  background: '#f6f5fc',
+  border: '1px solid #e9e7f4',
   borderRadius: 12,
   padding: 16,
   marginBottom: 16,
 };
-const CARD_TITLE: CSSProperties = { fontSize: 14, fontWeight: 600, color: 'rgba(255,255,255,0.9)' };
-const CARD_SUB: CSSProperties = { fontSize: 12, color: 'rgba(255,255,255,0.4)', marginLeft: 8 };
-const SUMMARY_BG: CSSProperties = { background: 'rgba(30,58,95,0.35)' };
-const SUMMARY_TEXT: CSSProperties = { color: '#7cb8ff', fontWeight: 600, fontSize: 12 };
-const NUM_COLOR = '#7cb8ff';
+const CARD_TITLE: CSSProperties = { fontSize: 14, fontWeight: 600, color: '#1e1b2e' };
+const CARD_SUB: CSSProperties = { fontSize: 12, color: '#6b6892', marginLeft: 8 };
+const SUMMARY_BG: CSSProperties = { background: '#f1f0fe' };
+const SUMMARY_TEXT: CSSProperties = { color: '#6366f1', fontWeight: 600, fontSize: 12 };
+const NUM_COLOR = '#6366f1';
 /** 联动提示：浅色小字（原 .link-hint，带 🔗/📅 图标） */
-const LINK_HINT: CSSProperties = { fontSize: 11, color: 'rgba(255,255,255,0.38)', marginTop: 2, lineHeight: '16px' };
+const LINK_HINT: CSSProperties = { fontSize: 11, color: '#6b6892', marginTop: 2, lineHeight: '16px' };
 
 // ============== 工具函数（逻辑照抄原工具） ==============
 
@@ -125,7 +125,7 @@ export default function SubsidyTab({ data, canEdit, patch }: TabProps) {
    */
   const renderSubsidyColumns: ColumnsType<SubsidyRow> = [
     { title: '#', key: 'idx', width: 40, align: 'center',
-      render: (_: unknown, __: SubsidyRow, i: number) => <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: 11 }}>{i + 1}</span> },
+      render: (_: unknown, __: SubsidyRow, i: number) => <span style={{ color: '#9d9ab8', fontSize: 11 }}>{i + 1}</span> },
     { title: '测试岗位', dataIndex: 'post', width: 170,
       render: (t: string, r: SubsidyRow) => canEdit
         ? <Select size="small" style={{ width: '100%' }} value={t || undefined} placeholder="选择测试岗位"
@@ -217,7 +217,7 @@ export default function SubsidyTab({ data, canEdit, patch }: TabProps) {
 
   const externalColumns: ColumnsType<ExternalRow> = [
     { title: '#', key: 'idx', width: 40, align: 'center',
-      render: (_: unknown, __: ExternalRow, i: number) => <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: 11 }}>{i + 1}</span> },
+      render: (_: unknown, __: ExternalRow, i: number) => <span style={{ color: '#9d9ab8', fontSize: 11 }}>{i + 1}</span> },
     { title: '名称', dataIndex: 'name', width: 160,
       render: (t: string, r: ExternalRow) => canEdit
         ? <Input size="small" className="rc-cell-input" value={t ?? ''} onChange={(e) => patchExternal(r.id, 'name', e.target.value)} />
@@ -286,13 +286,13 @@ export default function SubsidyTab({ data, canEdit, patch }: TabProps) {
           { label: '🧑‍💼 外部租赁人员', value: external.length, sub: '类目数量' },
         ].map((c) => (
           <div key={c.label} style={{
-            background: 'linear-gradient(135deg, rgba(30,58,95,0.45), rgba(30,58,95,0.2))',
-            border: '1px solid rgba(77,159,255,0.18)',
+            background: 'linear-gradient(135deg,#f6f5fc,#f1f0fe)',
+            border: '1px solid rgba(99,102,241,0.18)',
             borderRadius: 10, padding: '12px 16px',
           }}>
             <div style={{ fontSize: 22, fontWeight: 700, color: NUM_COLOR }}>{c.value}</div>
-            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 4 }}>{c.label}</div>
-            <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>{c.sub}</div>
+            <div style={{ fontSize: 12, color: '#6b6892', marginTop: 4 }}>{c.label}</div>
+            <div style={{ fontSize: 11.5, color: '#9d9ab8', marginTop: 2 }}>{c.sub}</div>
           </div>
         ))}
       </div>

@@ -32,10 +32,10 @@ const genId = () => Date.now().toString(36) + Math.random().toString(36).slice(2
 /** 行内徽章（原 .badge b-ok/b-warn/b-rent/b-miss，深色主题适配） */
 function badgeStyle(kind: 'ok' | 'warn' | 'rent' | 'miss'): CSSProperties {
   const color: Record<typeof kind, CSSProperties> = {
-    ok: { background: 'rgba(82,196,26,0.12)', border: '1px solid rgba(82,196,26,0.45)', color: '#95de64' },
-    warn: { background: 'rgba(250,173,20,0.12)', border: '1px solid rgba(250,173,20,0.45)', color: '#ffc53d' },
-    rent: { background: 'rgba(255,77,79,0.10)', border: '1px solid rgba(255,77,79,0.40)', color: '#ff7875' },
-    miss: { background: 'rgba(114,46,209,0.12)', border: '1px solid rgba(114,46,209,0.45)', color: '#b37feb' },
+    ok: { background: 'rgba(22,163,74,0.12)', border: '1px solid rgba(22,163,74,0.45)', color: '#16a34a' },
+    warn: { background: 'rgba(217,119,6,0.12)', border: '1px solid rgba(217,119,6,0.45)', color: '#d97706' },
+    rent: { background: 'rgba(220,38,38,0.10)', border: '1px solid rgba(220,38,38,0.40)', color: '#dc2626' },
+    miss: { background: 'rgba(168,85,247,0.12)', border: '1px solid rgba(168,85,247,0.45)', color: '#a855f7' },
   };
   return {
     display: 'inline-block', fontSize: 10.5, lineHeight: 1.5, padding: '1px 7px',
@@ -46,9 +46,9 @@ function badgeStyle(kind: 'ok' | 'warn' | 'rent' | 'miss'): CSSProperties {
 /** 库存覆盖提示条（原 .lib-tip / .lib-tip.warn / .lib-tip.gray） */
 function LibTip({ kind, children }: { kind: 'ok' | 'warn' | 'gray'; children: React.ReactNode }) {
   const style: Record<typeof kind, CSSProperties> = {
-    ok: { background: 'rgba(82,196,26,0.08)', border: '1px solid rgba(82,196,26,0.35)', color: '#95de64' },
-    warn: { background: 'rgba(250,173,20,0.08)', border: '1px solid rgba(250,173,20,0.35)', color: '#ffc53d' },
-    gray: { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.5)' },
+    ok: { background: 'rgba(22,163,74,0.08)', border: '1px solid rgba(22,163,74,0.35)', color: '#16a34a' },
+    warn: { background: 'rgba(217,119,6,0.08)', border: '1px solid rgba(217,119,6,0.35)', color: '#d97706' },
+    gray: { background: '#f8f7fd', border: '1px solid #d9d5f0', color: '#6b6892' },
   };
   return <div style={{ marginBottom: 12, padding: '9px 14px', borderRadius: 8, fontSize: 12.5, lineHeight: 1.6, ...style[kind] }}>{children}</div>;
 }
@@ -213,7 +213,7 @@ export default function InstrumentsTab({ data, assets, canEdit, patch }: TabProp
 
   const columns: ColumnsType<InstrumentRow> = [
     { title: '#', key: 'idx', width: 36, align: 'center', fixed: 'left' as const,
-      render: (_v, _r, i) => <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: 11 }}>{i + 1}</span> },
+      render: (_v, _r, i) => <span style={{ color: '#9d9ab8', fontSize: 11 }}>{i + 1}</span> },
     {
       title: '测试工具',
       dataIndex: 'name', width: 240,
@@ -243,9 +243,9 @@ export default function InstrumentsTab({ data, assets, canEdit, patch }: TabProp
             onChange={(v) => setDemand(r.id, typeof v === 'number' ? v : 0)} style={{ width: '100%' }} />
         : (r.demand ?? 0) },
     { title: '自有', key: 'own', width: 62, align: 'center',
-      render: (_v, r) => <span style={{ fontWeight: 600, color: '#52c41a' }}>{Math.round((insAlloc[r.id] || { own: 0 }).own * 10) / 10}</span> },
+      render: (_v, r) => <span style={{ fontWeight: 600, color: '#16a34a' }}>{Math.round((insAlloc[r.id] || { own: 0 }).own * 10) / 10}</span> },
     { title: '需租赁', key: 'rent', width: 66, align: 'center',
-      render: (_v, r) => <span style={{ fontWeight: 600, color: '#faad14' }}>{Math.round((insAlloc[r.id] || { rent: 0 }).rent * 10) / 10}</span> },
+      render: (_v, r) => <span style={{ fontWeight: 600, color: '#d97706' }}>{Math.round((insAlloc[r.id] || { rent: 0 }).rent * 10) / 10}</span> },
     { title: '天数', dataIndex: 'days', width: 70, align: 'center',
       render: (_v, r) => canEdit
         ? <InputNumber size="small" min={1} precision={0} value={r.days ?? 40} className="rc-cell-input"
@@ -268,21 +268,21 @@ export default function InstrumentsTab({ data, assets, canEdit, patch }: TabProp
     }] : []),
   ];
 
-  const sumColor: CSSProperties = { color: '#7cb8ff', fontWeight: 600 };
+  const sumColor: CSSProperties = { color: '#6366f1', fontWeight: 600 };
 
   return (
     <div>
       {/* 页头 4 统计卡 */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 14 }}>
         {[
-          { label: '仪表种类', value: visible.length, color: '#7cb8ff' },
-          { label: '需求总数', value: stats.req, color: '#7cb8ff' },
-          { label: '自有可覆盖', value: stats.own, color: '#52c41a' },
-          { label: '需租赁', value: stats.rent, color: '#faad14' },
+          { label: '仪表种类', value: visible.length, color: '#6366f1' },
+          { label: '需求总数', value: stats.req, color: '#6366f1' },
+          { label: '自有可覆盖', value: stats.own, color: '#16a34a' },
+          { label: '需租赁', value: stats.rent, color: '#d97706' },
         ].map((c, i) => (
-          <div key={i} style={{ background: 'linear-gradient(135deg, rgba(30,58,95,0.45), rgba(30,58,95,0.2))', border: '1px solid rgba(77,159,255,0.18)', borderRadius: 10, padding: '12px 16px' }}>
+          <div key={i} style={{ background: 'linear-gradient(135deg,#f6f5fc,#f1f0fe)', border: '1px solid rgba(99,102,241,0.18)', borderRadius: 10, padding: '12px 16px' }}>
             <div style={{ fontSize: 22, fontWeight: 700, color: c.color, lineHeight: 1.2 }}>{c.value}</div>
-            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 4 }}>{c.label}</div>
+            <div style={{ fontSize: 12, color: '#6b6892', marginTop: 4 }}>{c.label}</div>
           </div>
         ))}
       </div>
@@ -305,10 +305,10 @@ export default function InstrumentsTab({ data, assets, canEdit, patch }: TabProp
       )}
 
       {/* 表格卡片 */}
-      <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: 16, marginBottom: 16 }}>
+      <div style={{ background: '#f6f5fc', border: '1px solid #e9e7f4', borderRadius: 12, padding: 16, marginBottom: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 6 }}>
-          <span style={{ fontSize: 14, fontWeight: 600, color: 'rgba(255,255,255,0.9)' }}>📟 工具仪表清单</span>
-          <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)' }}>
+          <span style={{ fontSize: 14, fontWeight: 600, color: '#1e1b2e' }}>📟 工具仪表清单</span>
+          <span style={{ fontSize: 12, color: '#6b6892' }}>
             {stats.libMatched > 0
               ? '🏠 已按「需求 vs 资源库自有数量」自动分配：自有优先、超出自动转为租赁'
               : '资源库暂无匹配仪器，已按需求自动算租赁；去🏠自有资源库添加仪器后可自动匹配'}
@@ -325,19 +325,19 @@ export default function InstrumentsTab({ data, assets, canEdit, patch }: TabProp
           rowKey="id" size="small" columns={columns} dataSource={visible} pagination={false}
           className="rc-edit-table" scroll={{ x: 'max-content' }}
           locale={{ emptyText: (
-            <div style={{ padding: '28px 0', textAlign: 'center', color: 'rgba(255,255,255,0.4)' }}>
+            <div style={{ padding: '28px 0', textAlign: 'center', color: '#6b6892' }}>
               <div style={{ fontSize: 30, marginBottom: 6 }}>📟</div>
               还没有仪表配置<br />点上方「<b>＋ 添加仪表</b>」开始配置
             </div>
           ) }}
           summary={() => (visible.length > 0 ? (
             <Table.Summary fixed>
-              <Table.Summary.Row style={{ background: 'rgba(30,58,95,0.35)' }}>
+              <Table.Summary.Row style={{ background: '#f1f0fe' }}>
                 <Table.Summary.Cell index={0} />
                 <Table.Summary.Cell index={1}><span style={sumColor}>合计</span></Table.Summary.Cell>
                 <Table.Summary.Cell index={2} align="center"><span style={sumColor}>{stats.req}</span></Table.Summary.Cell>
-                <Table.Summary.Cell index={3} align="center"><span style={{ ...sumColor, color: '#52c41a' }}>{Math.round(stats.own * 10) / 10}</span></Table.Summary.Cell>
-                <Table.Summary.Cell index={4} align="center"><span style={{ ...sumColor, color: '#faad14' }}>{Math.round(stats.rent * 10) / 10}</span></Table.Summary.Cell>
+                <Table.Summary.Cell index={3} align="center"><span style={{ ...sumColor, color: '#16a34a' }}>{Math.round(stats.own * 10) / 10}</span></Table.Summary.Cell>
+                <Table.Summary.Cell index={4} align="center"><span style={{ ...sumColor, color: '#d97706' }}>{Math.round(stats.rent * 10) / 10}</span></Table.Summary.Cell>
                 <Table.Summary.Cell index={5} />
                 <Table.Summary.Cell index={6} />
                 <Table.Summary.Cell index={7} />
@@ -346,7 +346,7 @@ export default function InstrumentsTab({ data, assets, canEdit, patch }: TabProp
             </Table.Summary>
           ) : null)}
         />
-        <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, lineHeight: 1.7, marginTop: 8 }}>
+        <div style={{ color: '#6b6892', fontSize: 12, lineHeight: 1.7, marginTop: 8 }}>
           新增行后在「测试工具」下拉中选择仪器仪表（名称来自🏠自有资源库，同名库存自动累加，也可自由输入）；「⚡ 按资源库分配」会把实时分配结果写入各行的自有/需租赁字段。
         </div>
       </div>

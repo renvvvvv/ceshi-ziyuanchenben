@@ -168,7 +168,7 @@ function History() {
         key: 'name',
         width: 220,
         render: (text: string, record: HistoricalProject) => (
-          <a onClick={() => navigate(`/history/${record.id}`)} style={{ color: '#7cb8ff', fontWeight: 500 }}>{text}</a>
+          <a onClick={() => navigate(`/history/${record.id}`)} style={{ color: '#818cf8', fontWeight: 500 }}>{text}</a>
         ),
       },
       {
@@ -176,7 +176,7 @@ function History() {
         dataIndex: 'city',
         key: 'city',
         width: 80,
-        render: (text?: string) => <span style={{ color: 'rgba(255,255,255,0.7)' }}>{text || '-'}</span>,
+        render: (text?: string) => <span style={{ color: '#46436a' }}>{text || '-'}</span>,
       },
       {
         title: '客户',
@@ -184,14 +184,14 @@ function History() {
         key: 'customer',
         width: 140,
         ellipsis: true,
-        render: (text: string) => <span style={{ color: 'rgba(255,255,255,0.7)' }}>{text}</span>,
+        render: (text: string) => <span style={{ color: '#46436a' }}>{text}</span>,
       },
       {
         title: '项目经理',
         dataIndex: 'manager',
         key: 'manager',
         width: 100,
-        render: (text: string) => <span style={{ color: 'rgba(255,255,255,0.7)' }}>{text}</span>,
+        render: (text: string) => <span style={{ color: '#46436a' }}>{text}</span>,
       },
       {
         title: '状态',
@@ -206,7 +206,7 @@ function History() {
         key: 'startDate',
         width: 110,
         sorter: (a, b) => a.startDate.localeCompare(b.startDate),
-        render: (text: string) => <span style={{ color: 'rgba(255,255,255,0.6)' }}>{text}</span>,
+        render: (text: string) => <span style={{ color: '#46436a' }}>{text}</span>,
       },
       {
         title: '结束日期',
@@ -214,7 +214,7 @@ function History() {
         key: 'endDate',
         width: 110,
         sorter: (a, b) => a.endDate.localeCompare(b.endDate),
-        render: (text: string) => <span style={{ color: 'rgba(255,255,255,0.6)' }}>{text || '-'}</span>,
+        render: (text: string) => <span style={{ color: '#46436a' }}>{text || '-'}</span>,
       },
       {
         title: '计划交付',
@@ -222,7 +222,7 @@ function History() {
         key: 'plannedDeliveryDate',
         width: 110,
         sorter: (a, b) => (a.plannedDeliveryDate || '').localeCompare(b.plannedDeliveryDate || ''),
-        render: (text?: string) => <span style={{ color: 'rgba(255,255,255,0.6)' }}>{text || '-'}</span>,
+        render: (text?: string) => <span style={{ color: '#46436a' }}>{text || '-'}</span>,
       },
       {
         title: '实际交付',
@@ -231,7 +231,7 @@ function History() {
         width: 180,
         sorter: (a, b) => (a.actualDeliveryDate || '').localeCompare(b.actualDeliveryDate || ''),
         render: (text?: string, record?: HistoricalProject) => {
-          if (!text) return <span style={{ color: 'rgba(255,255,255,0.3)' }}>-</span>;
+          if (!text) return <span style={{ color: '#9d9ab8' }}>-</span>;
           // 对比计划交付日期，显示提前/延期（nowrap 防止日期+标签溢出列宽与固定操作列叠压）
           if (record?.plannedDeliveryDate) {
             const isEarly = text < record.plannedDeliveryDate;
@@ -239,27 +239,27 @@ function History() {
             if (isOnTime) {
               return (
                 <span style={{ whiteSpace: 'nowrap' }}>
-                  <span style={{ color: 'rgba(255,255,255,0.6)' }}>{text}</span>
-                  <Tag style={{ marginLeft: 6, fontSize: 10, background: 'rgba(82,196,26,0.15)', color: '#52c41a', border: '1px solid rgba(82,196,26,0.3)', borderRadius: 4, padding: '0 4px' }}>准时</Tag>
+                  <span style={{ color: '#46436a' }}>{text}</span>
+                  <Tag style={{ marginLeft: 6, fontSize: 10, background: '#f0fdf4', color: '#16a34a', border: '1px solid rgba(22,163,74,0.3)', borderRadius: 4, padding: '0 4px' }}>准时</Tag>
                 </span>
               );
             }
             if (isEarly) {
               return (
                 <span style={{ whiteSpace: 'nowrap' }}>
-                  <span style={{ color: 'rgba(255,255,255,0.6)' }}>{text}</span>
-                  <Tag style={{ marginLeft: 6, fontSize: 10, background: 'rgba(82,196,26,0.15)', color: '#52c41a', border: '1px solid rgba(82,196,26,0.3)', borderRadius: 4, padding: '0 4px' }}>提前</Tag>
+                  <span style={{ color: '#46436a' }}>{text}</span>
+                  <Tag style={{ marginLeft: 6, fontSize: 10, background: '#f0fdf4', color: '#16a34a', border: '1px solid rgba(22,163,74,0.3)', borderRadius: 4, padding: '0 4px' }}>提前</Tag>
                 </span>
               );
             }
             return (
               <span style={{ whiteSpace: 'nowrap' }}>
-                <span style={{ color: 'rgba(255,255,255,0.6)' }}>{text}</span>
-                <Tag style={{ marginLeft: 6, fontSize: 10, background: 'rgba(255,77,79,0.15)', color: '#ff4d4f', border: '1px solid rgba(255,77,79,0.3)', borderRadius: 4, padding: '0 4px' }}>延期</Tag>
+                <span style={{ color: '#46436a' }}>{text}</span>
+                <Tag style={{ marginLeft: 6, fontSize: 10, background: '#fef2f2', color: '#dc2626', border: '1px solid rgba(220,38,38,0.3)', borderRadius: 4, padding: '0 4px' }}>延期</Tag>
               </span>
             );
           }
-          return <span style={{ color: 'rgba(255,255,255,0.6)' }}>{text}</span>;
+          return <span style={{ color: '#46436a' }}>{text}</span>;
         },
       },
       {
@@ -268,7 +268,7 @@ function History() {
         key: 'itOutput',
         width: 110,
         sorter: (a, b) => a.itOutput - b.itOutput,
-        render: (val: number) => <span style={{ color: '#7cb8ff' }}>{val} MW</span>,
+        render: (val: number) => <span style={{ color: '#6366f1' }}>{val} MW</span>,
       },
       {
         title: '投入人力',
@@ -276,7 +276,7 @@ function History() {
         key: 'plannedManpower',
         width: 90,
         sorter: (a, b) => (a.plannedManpower || 0) - (b.plannedManpower || 0),
-        render: (val?: number) => <span style={{ color: 'rgba(255,255,255,0.6)' }}>{val != null ? `${val} 人` : '-'}</span>,
+        render: (val?: number) => <span style={{ color: '#46436a' }}>{val != null ? `${val} 人` : '-'}</span>,
       },
       {
         title: '业务类型',
@@ -284,8 +284,8 @@ function History() {
         key: 'businessType',
         width: 110,
         render: (text?: string) => text
-          ? <Tag style={{ margin: 0, borderRadius: 4, fontSize: 12, color: 'rgba(255,255,255,0.75)', background: 'rgba(77,159,255,0.1)', border: '1px solid rgba(77,159,255,0.25)' }}>{text}</Tag>
-          : <span style={{ color: 'rgba(255,255,255,0.3)' }}>-</span>,
+          ? <Tag style={{ margin: 0, borderRadius: 4, fontSize: 12, color: '#46436a', background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.25)' }}>{text}</Tag>
+          : <span style={{ color: '#9d9ab8' }}>-</span>,
       },
       {
         title: '项目描述',
@@ -293,7 +293,7 @@ function History() {
         key: 'description',
         width: 200,
         ellipsis: true,
-        render: (text?: string) => <span style={{ color: 'rgba(255,255,255,0.5)' }}>{text || '-'}</span>,
+        render: (text?: string) => <span style={{ color: '#6b6892' }}>{text || '-'}</span>,
       },
       {
         title: '测试管理链接',
@@ -302,11 +302,11 @@ function History() {
         width: 120,
         render: (link: string) =>
           link ? (
-            <a href={link} target="_blank" rel="noopener noreferrer" style={{ color: '#4d9fff' }}>
+            <a href={link} target="_blank" rel="noopener noreferrer" style={{ color: '#6366f1' }}>
               <LinkOutlined /> 查看
             </a>
           ) : (
-            <span style={{ color: 'rgba(255,255,255,0.3)' }}>-</span>
+            <span style={{ color: '#9d9ab8' }}>-</span>
           ),
       },
       {
@@ -316,10 +316,10 @@ function History() {
         render: (_: unknown, record: HistoricalProject) => (
           <Space size={0} split={null}>
             <Tooltip title="查看详情">
-              <Button type="text" size="small" icon={<EyeOutlined />} onClick={() => navigate(`/history/${record.id}`)} style={{ color: '#7cb8ff', width: 32, height: 28 }} />
+              <Button type="text" size="small" icon={<EyeOutlined />} onClick={() => navigate(`/history/${record.id}`)} style={{ color: '#818cf8', width: 32, height: 28 }} />
             </Tooltip>
             <Tooltip title="编辑项目">
-              <Button type="text" size="small" icon={<EditOutlined />} onClick={() => handleEdit(record)} style={{ color: '#faad14', width: 32, height: 28 }} />
+              <Button type="text" size="small" icon={<EditOutlined />} onClick={() => handleEdit(record)} style={{ color: '#d97706', width: 32, height: 28 }} />
             </Tooltip>
             <Popconfirm
               title="确认删除"
@@ -344,19 +344,19 @@ function History() {
       <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <h3>历史测试项目看板</h3>
-          <p style={{ color: 'rgba(255,255,255,0.4)', marginTop: 4, fontSize: 13 }}>历史项目复盘分析</p>
+          <p style={{ color: '#6b6892', marginTop: 4, fontSize: 13 }}>历史项目复盘分析</p>
         </div>
         <Button
           type="primary"
           icon={<PlusOutlined />}
           onClick={handleAdd}
           style={{
-            background: 'linear-gradient(135deg, #4d9fff, #69b1ff)',
+            background: 'linear-gradient(135deg, #6366f1, #818cf8)',
             border: 'none',
             fontFamily: 'var(--font-primary)',
             fontWeight: 500,
             borderRadius: 8,
-            boxShadow: '0 4px 14px rgba(77,159,255,0.35)',
+            boxShadow: '0 4px 14px rgba(99,102,241,0.35)',
           }}
         >
           添加记录
@@ -408,16 +408,16 @@ function History() {
         </Select>
         <Input
           placeholder="搜索项目名称、客户或城市"
-          prefix={<SearchOutlined style={{ color: 'rgba(255,255,255,0.3)' }} />}
+          prefix={<SearchOutlined style={{ color: '#9d9ab8' }} />}
           value={searchText}
           onChange={(e) => setSearchText(e.target.value)}
-          style={{ width: 250, fontFamily: 'var(--font-primary)', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)', color: '#fff' }}
+          style={{ width: 250, fontFamily: 'var(--font-primary)', background: '#f6f5fc', border: '1px solid #e9e7f4', color: '#1e1b2e' }}
           allowClear
           variant="borderless"
         />
       </div>
 
-      <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, overflow: 'hidden' }}>
+      <div style={{ background: '#f8f7fd', border: '1px solid #dcd9f2', borderRadius: 12, overflow: 'hidden' }}>
         <Table
           columns={columns}
           dataSource={filteredData}
@@ -434,7 +434,7 @@ function History() {
             emptyText: (
               <Empty
                 description={
-                  <span style={{ color: 'rgba(255,255,255,0.4)', fontFamily: 'var(--font-primary)' }}>
+                  <span style={{ color: '#6b6892', fontFamily: 'var(--font-primary)' }}>
                     暂无历史项目记录
                   </span>
                 }
@@ -457,8 +457,8 @@ function History() {
         width={640}
         okText={editingProject ? '保存更新' : '确认添加'}
         cancelText="取消"
-        okButtonProps={{ style: { background: 'linear-gradient(135deg, #4d9fff, #69b1ff)', border: 'none' } }}
-        bodyStyle={{ background: 'rgba(13,31,60,0.95)' }}
+        okButtonProps={{ style: { background: 'linear-gradient(135deg, #6366f1, #818cf8)', border: 'none' } }}
+        bodyStyle={{ background: '#ffffff' }}
         style={{ top: 60 }}
       >
         <Form form={form} layout="vertical" style={{ marginTop: 16 }}>

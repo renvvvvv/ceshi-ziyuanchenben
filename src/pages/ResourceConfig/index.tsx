@@ -253,7 +253,7 @@ function ResourceConfig() {
   const columns: ColumnsType<RcRow> = [
     { title: '项目名称', dataIndex: 'name', width: 220, ellipsis: true,
       render: (t: string, r: RcRow) => (
-        <a onClick={() => navigate(`/resource-config/${r.id}`)} style={{ color: '#7cb8ff', fontWeight: 500 }}>{t}</a>
+        <a onClick={() => navigate(`/resource-config/${r.id}`)} style={{ color: '#818cf8', fontWeight: 500 }}>{t}</a>
       ) },
     { title: '规模', dataIndex: 'mw', width: 80, render: (t: string) => t || '-' },
     { title: '地点', dataIndex: 'site', width: 100, render: (t: string) => t || '-' },
@@ -277,13 +277,13 @@ function ResourceConfig() {
     { title: '操作', key: 'action', width: 190, align: 'center',
       render: (_: unknown, r: RcRow) => (
         <Space size={0}>
-          <Tooltip title="查看概览"><Button type="text" size="small" icon={<EyeOutlined />} onClick={() => openDetail(r)} style={{ color: '#7cb8ff', width: 32 }} /></Tooltip>
-          <Tooltip title="编辑明细"><Button type="text" size="small" icon={<FormOutlined />} onClick={() => navigate(`/resource-config/${r.id}`)} style={{ color: '#b37feb', width: 32 }} /></Tooltip>
-          {editAllowed && <Tooltip title="编辑"><Button type="text" size="small" icon={<EditOutlined />} onClick={() => openEdit(r)} style={{ color: '#faad14', width: 32 }} /></Tooltip>}
-          {editAllowed && <Tooltip title="导出 JSON（兼容原工具）"><Button type="text" size="small" icon={<DownloadOutlined />} onClick={() => handleExport(r)} style={{ color: '#52c41a', width: 32 }} /></Tooltip>}
+          <Tooltip title="查看概览"><Button type="text" size="small" icon={<EyeOutlined />} onClick={() => openDetail(r)} style={{ color: '#818cf8', width: 32 }} /></Tooltip>
+          <Tooltip title="编辑明细"><Button type="text" size="small" icon={<FormOutlined />} onClick={() => navigate(`/resource-config/${r.id}`)} style={{ color: '#a855f7', width: 32 }} /></Tooltip>
+          {editAllowed && <Tooltip title="编辑"><Button type="text" size="small" icon={<EditOutlined />} onClick={() => openEdit(r)} style={{ color: '#d97706', width: 32 }} /></Tooltip>}
+          {editAllowed && <Tooltip title="导出 JSON（兼容原工具）"><Button type="text" size="small" icon={<DownloadOutlined />} onClick={() => handleExport(r)} style={{ color: '#16a34a', width: 32 }} /></Tooltip>}
           {editAllowed && r.status !== '已交付' && (
             <Popconfirm title="归档交付快照？" description="将当前配置快照存入交付存档，状态转为已交付" onConfirm={() => handleDeliver(r)} okText="确认" cancelText="取消">
-              <Tooltip title="交付归档"><Button type="text" size="small" icon={<SendOutlined />} style={{ color: '#4d9fff', width: 32 }} /></Tooltip>
+              <Tooltip title="交付归档"><Button type="text" size="small" icon={<SendOutlined />} style={{ color: '#6366f1', width: 32 }} /></Tooltip>
             </Popconfirm>
           )}
           {deleteAllowed && (
@@ -339,8 +339,8 @@ function ResourceConfig() {
     <div>
       {/* 顶部操作条 */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
-        <AppstoreOutlined style={{ color: '#4d9fff', fontSize: 18 }} />
-        <span style={{ fontSize: 16, fontWeight: 600, color: 'rgba(255,255,255,0.9)' }}>测试资源配置</span>
+        <AppstoreOutlined style={{ color: '#6366f1', fontSize: 18 }} />
+        <span style={{ fontSize: 16, fontWeight: 600, color: '#1e1b2e' }}>测试资源配置</span>
         <Tag style={{ margin: 0 }}>共 {stats.total}</Tag>
         <Tag color="processing" style={{ margin: 0 }}>配置中 {stats.configuring}</Tag>
         <Tag color="success" style={{ margin: 0 }}>已交付 {stats.delivered}</Tag>
@@ -388,7 +388,7 @@ function ResourceConfig() {
             <Col span={6}><Form.Item name="dateRange" label="测试周期"><DatePicker.RangePicker style={{ width: '100%' }} /></Form.Item></Col>
           </Row>
           <Form.Item name="remark" label="备注"><Input.TextArea rows={2} placeholder="可选" /></Form.Item>
-          <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12 }}>
+          <div style={{ color: '#6b6892', fontSize: 12 }}>
             人员/负载/仪表等明细在创建后通过"导入原工具备份"带入，或等待明细编辑功能上线。
           </div>
         </Form>
@@ -411,12 +411,12 @@ function ResourceConfig() {
               <Col span={6}><Statistic title="投入明细" value={overview.staff} suffix="人" /></Col>
               <Col span={6}><Statistic title="假负载类型" value={overview.loads} suffix="种" /></Col>
               <Col span={6}><Statistic title="仪表种类" value={overview.instruments} suffix="种" /></Col>
-              <Col span={6}><Statistic title="劳务人天合计" value={overview.laborManDays} suffix="人天" valueStyle={{ color: '#4d9fff' }} /></Col>
-              <Col span={6}><Statistic title="劳务人数合计" value={overview.laborWorkers} suffix="人" valueStyle={{ color: '#4d9fff' }} /></Col>
-              <Col span={6}><Statistic title="假负载需租赁" value={overview.loadRent} suffix="台" valueStyle={{ color: '#faad14' }} /></Col>
-              <Col span={6}><Statistic title="仪表需租赁" value={overview.insRent} suffix="台" valueStyle={{ color: '#faad14' }} /></Col>
+              <Col span={6}><Statistic title="劳务人天合计" value={overview.laborManDays} suffix="人天" valueStyle={{ color: '#6366f1' }} /></Col>
+              <Col span={6}><Statistic title="劳务人数合计" value={overview.laborWorkers} suffix="人" valueStyle={{ color: '#6366f1' }} /></Col>
+              <Col span={6}><Statistic title="假负载需租赁" value={overview.loadRent} suffix="台" valueStyle={{ color: '#d97706' }} /></Col>
+              <Col span={6}><Statistic title="仪表需租赁" value={overview.insRent} suffix="台" valueStyle={{ color: '#d97706' }} /></Col>
             </Row>
-            <div style={{ marginTop: 16, color: 'rgba(255,255,255,0.4)', fontSize: 12 }}>
+            <div style={{ marginTop: 16, color: '#6b6892', fontSize: 12 }}>
               租赁数为按自有资源库（部门级）自动分配后的缺口。明细编辑界面将在下一版本提供。
             </div>
           </div>
@@ -431,8 +431,8 @@ function ResourceConfig() {
         width={560}
       >
         {editAllowed && (assetEditing || !assetEditing) && (
-          <div style={{ marginBottom: 16, padding: 12, background: 'rgba(255,255,255,0.03)', borderRadius: 8 }}>
-            <div style={{ fontWeight: 600, marginBottom: 8, color: 'rgba(255,255,255,0.85)' }}>
+          <div style={{ marginBottom: 16, padding: 12, background: '#f6f5fc', borderRadius: 8 }}>
+            <div style={{ fontWeight: 600, marginBottom: 8, color: '#1e1b2e' }}>
               {assetEditing ? `编辑 · ${assetEditing.name}` : '新增资源'}
             </div>
             <Form form={assetForm} layout="inline" style={{ rowGap: 8 }}>
@@ -470,7 +470,7 @@ function ResourceConfig() {
                   <Button type="text" size="small" icon={<EditOutlined />} onClick={() => {
                     setAssetEditing(a);
                     assetForm.setFieldsValue({ cat: a.cat, name: a.name, spec: a.spec, count: a.count, note: a.note });
-                  }} style={{ color: '#faad14', width: 30 }} />
+                  }} style={{ color: '#d97706', width: 30 }} />
                   {deleteAllowed && (
                     <Popconfirm title="删除该资源？" onConfirm={() => handleAssetDelete(a)} okText="删除" cancelText="取消" okButtonProps={{ danger: true }}>
                       <Button type="text" size="small" danger icon={<DeleteOutlined />} style={{ width: 30 }} />
@@ -480,7 +480,7 @@ function ResourceConfig() {
               ) : '-' },
           ]}
         />
-        <div style={{ marginTop: 12, color: 'rgba(255,255,255,0.4)', fontSize: 12 }}>
+        <div style={{ marginTop: 12, color: '#6b6892', fontSize: 12 }}>
           <FileOutlined /> 规格中的功率数字（如 6KW）会被自动识别，用于假负载的自有/租赁分配。
         </div>
       </Drawer>

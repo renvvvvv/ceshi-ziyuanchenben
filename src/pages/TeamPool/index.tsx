@@ -19,9 +19,9 @@ import { useData } from '../../store/DataContext';
 import type { TeamMember, MemberStatus, MemberProject, Project } from '../../types';
 
 const statusConfig: Record<MemberStatus, { bg: string; color: string; dot: string }> = {
-  '空闲': { bg: 'rgba(82, 196, 26, 0.12)', color: '#52c41a', dot: '#52c41a' },
-  '测试中': { bg: 'rgba(235, 87, 108, 0.12)', color: '#eb576c', dot: '#eb576c' },
-  '休假': { bg: 'rgba(24, 144, 255, 0.12)', color: '#1890ff', dot: '#1890ff' },
+  '空闲': { bg: 'rgba(22, 163, 74,0.12)', color: '#16a34a', dot: '#16a34a' },
+  '测试中': { bg: 'rgba(236, 72, 153,0.12)', color: '#ec4899', dot: '#ec4899' },
+  '休假': { bg: 'rgba(99, 102, 241,0.12)', color: '#6366f1', dot: '#6366f1' },
 };
 
 /** 安全获取状态配置：未知 status 兜底为'空闲'，永远不返回 undefined */
@@ -366,21 +366,21 @@ function TeamPool() {
               boxShadow: `0 0 4px ${cfg.dot}`,
             }}
           />
-          <span style={{ color: '#fff', fontFamily: 'var(--font-primary)', fontSize: 13 }}>{item.name}</span>
-          <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11 }}>{item.employeeId}</span>
+          <span style={{ color: '#1e1b2e', fontFamily: 'var(--font-primary)', fontSize: 13 }}>{item.name}</span>
+          <span style={{ color: '#9d9ab8', fontSize: 11 }}>{item.employeeId}</span>
         </div>
         {item.skills.length > 0 && (
           <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', paddingLeft: 12 }}>
             {item.skills.slice(0, 3).map((s) => (
               <span key={s} style={{
-                fontSize: 10, color: 'rgba(255,255,255,0.45)',
-                background: 'rgba(255,255,255,0.05)', borderRadius: 3, padding: '0 4px',
+                fontSize: 10, color: '#6b6892',
+                background: '#f6f5fc', borderRadius: 3, padding: '0 4px',
               }}>{s}</span>
             ))}
           </div>
         )}
         {item.currentProjects.length > 0 && (
-          <div style={{ fontSize: 10, color: 'rgba(235,87,108,0.7)', paddingLeft: 12 }}>
+          <div style={{ fontSize: 10, color: 'rgba(236,72,153,0.7)', paddingLeft: 12 }}>
             {item.currentProjects.length > 1 ? `${item.currentProjects[0]} 等${item.currentProjects.length}个项目` : item.currentProjects[0]}
           </div>
         )}
@@ -398,8 +398,8 @@ function TeamPool() {
       <div style={{ display: 'flex', gap: 16, marginBottom: 20, flexWrap: 'wrap' }}>
         <div style={{
           flex: 1, minWidth: 140, maxWidth: 200,
-          background: 'rgba(235, 87, 108, 0.08)',
-          border: '1px solid rgba(235, 87, 108, 0.2)',
+          background: 'rgba(236, 72, 153,0.08)',
+          border: '1px solid rgba(236, 72, 153,0.2)',
           borderRadius: 10,
           padding: '16px 20px',
           display: 'flex',
@@ -408,20 +408,20 @@ function TeamPool() {
         }}>
           <div style={{
             width: 40, height: 40, borderRadius: '50%',
-            background: 'rgba(235, 87, 108, 0.15)',
+            background: 'rgba(236, 72, 153,0.15)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
-            <TeamOutlined style={{ color: '#eb576c', fontSize: 20 }} />
+            <TeamOutlined style={{ color: '#ec4899', fontSize: 20 }} />
           </div>
           <div>
-            <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12, marginBottom: 2 }}>测试中</div>
-            <div style={{ color: '#eb576c', fontSize: 24, fontWeight: 700, lineHeight: 1 }}>{stats.testingCount}</div>
+            <div style={{ color: '#6b6892', fontSize: 12, marginBottom: 2 }}>测试中</div>
+            <div style={{ color: '#ec4899', fontSize: 24, fontWeight: 700, lineHeight: 1 }}>{stats.testingCount}</div>
           </div>
         </div>
         <div style={{
           flex: 1, minWidth: 140, maxWidth: 200,
-          background: 'rgba(82, 196, 26, 0.08)',
-          border: '1px solid rgba(82, 196, 26, 0.2)',
+          background: 'rgba(22, 163, 74,0.08)',
+          border: '1px solid rgba(22, 163, 74,0.2)',
           borderRadius: 10,
           padding: '16px 20px',
           display: 'flex',
@@ -430,20 +430,20 @@ function TeamPool() {
         }}>
           <div style={{
             width: 40, height: 40, borderRadius: '50%',
-            background: 'rgba(82, 196, 26, 0.15)',
+            background: 'rgba(22, 163, 74,0.15)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
-            <TeamOutlined style={{ color: '#52c41a', fontSize: 20 }} />
+            <TeamOutlined style={{ color: '#16a34a', fontSize: 20 }} />
           </div>
           <div>
-            <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12, marginBottom: 2 }}>空闲</div>
-            <div style={{ color: '#52c41a', fontSize: 24, fontWeight: 700, lineHeight: 1 }}>{stats.idleCount}</div>
+            <div style={{ color: '#6b6892', fontSize: 12, marginBottom: 2 }}>空闲</div>
+            <div style={{ color: '#16a34a', fontSize: 24, fontWeight: 700, lineHeight: 1 }}>{stats.idleCount}</div>
           </div>
         </div>
         <div style={{
           flex: 1, minWidth: 140, maxWidth: 200,
-          background: 'rgba(24, 144, 255, 0.08)',
-          border: '1px solid rgba(24, 144, 255, 0.2)',
+          background: 'rgba(99, 102, 241,0.08)',
+          border: '1px solid rgba(99, 102, 241,0.2)',
           borderRadius: 10,
           padding: '16px 20px',
           display: 'flex',
@@ -452,20 +452,20 @@ function TeamPool() {
         }}>
           <div style={{
             width: 40, height: 40, borderRadius: '50%',
-            background: 'rgba(24, 144, 255, 0.15)',
+            background: 'rgba(99, 102, 241,0.15)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
-            <TeamOutlined style={{ color: '#1890ff', fontSize: 20 }} />
+            <TeamOutlined style={{ color: '#6366f1', fontSize: 20 }} />
           </div>
           <div>
-            <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12, marginBottom: 2 }}>休假</div>
-            <div style={{ color: '#1890ff', fontSize: 24, fontWeight: 700, lineHeight: 1 }}>{stats.onLeaveCount}</div>
+            <div style={{ color: '#6b6892', fontSize: 12, marginBottom: 2 }}>休假</div>
+            <div style={{ color: '#6366f1', fontSize: 24, fontWeight: 700, lineHeight: 1 }}>{stats.onLeaveCount}</div>
           </div>
         </div>
         <div style={{
           flex: 1, minWidth: 140, maxWidth: 200,
-          background: 'rgba(250, 173, 20, 0.08)',
-          border: '1px solid rgba(250, 173, 20, 0.2)',
+          background: 'rgba(217, 119, 6,0.08)',
+          border: '1px solid rgba(217, 119, 6,0.2)',
           borderRadius: 10,
           padding: '16px 20px',
           display: 'flex',
@@ -474,14 +474,14 @@ function TeamPool() {
         }}>
           <div style={{
             width: 40, height: 40, borderRadius: '50%',
-            background: 'rgba(250, 173, 20, 0.15)',
+            background: 'rgba(217, 119, 6,0.15)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
-            <WarningOutlined style={{ color: '#faad14', fontSize: 20 }} />
+            <WarningOutlined style={{ color: '#d97706', fontSize: 20 }} />
           </div>
           <div>
-            <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12, marginBottom: 2 }}>时间冲突</div>
-            <div style={{ color: '#faad14', fontSize: 24, fontWeight: 700, lineHeight: 1 }}>{stats.conflictCount}</div>
+            <div style={{ color: '#6b6892', fontSize: 12, marginBottom: 2 }}>时间冲突</div>
+            <div style={{ color: '#d97706', fontSize: 24, fontWeight: 700, lineHeight: 1 }}>{stats.conflictCount}</div>
           </div>
         </div>
       </div>
@@ -495,11 +495,11 @@ function TeamPool() {
               onChange={() => setStatusFilter(s)}
               style={{
                 padding: '4px 16px',
-                border: statusFilter === s ? '1px solid rgba(77,159,255,0.5)' : '1px solid rgba(255,255,255,0.15)',
+                border: statusFilter === s ? '1px solid rgba(99,102,241,0.5)' : '1px solid #f1f0fe',
                 borderRadius: 20,
                 fontSize: 13,
-                background: statusFilter === s ? 'rgba(77,159,255,0.15)' : 'rgba(255,255,255,0.04)',
-                color: statusFilter === s ? '#7cb8ff' : 'rgba(255,255,255,0.5)',
+                background: statusFilter === s ? 'rgba(99,102,241,0.15)' : '#f8f7fd',
+                color: statusFilter === s ? '#818cf8' : '#6b6892',
                 fontFamily: 'var(--font-primary)',
               }}
             >
@@ -533,12 +533,12 @@ function TeamPool() {
           icon={<PlusOutlined />}
           onClick={openAdd}
           style={{
-            background: 'linear-gradient(135deg, #4d9fff, #69b1ff)',
+            background: 'linear-gradient(135deg, #6366f1, #818cf8)',
             border: 'none',
             fontFamily: 'var(--font-primary)',
             fontWeight: 500,
             borderRadius: 8,
-            boxShadow: '0 4px 14px rgba(77,159,255,0.35)',
+            boxShadow: '0 4px 14px rgba(99,102,241,0.35)',
           }}
         >
           添加人员
@@ -551,9 +551,9 @@ function TeamPool() {
             batchForm.resetFields();
           }}
           style={{
-            background: 'rgba(77,159,255,0.12)',
-            border: '1px solid rgba(77,159,255,0.3)',
-            color: '#7cb8ff',
+            background: 'rgba(99,102,241,0.12)',
+            border: '1px solid rgba(99,102,241,0.3)',
+            color: '#818cf8',
             fontFamily: 'var(--font-primary)',
             fontWeight: 500,
             borderRadius: 8,
@@ -565,9 +565,9 @@ function TeamPool() {
           icon={<WarningOutlined />}
           onClick={() => setConflictModalOpen(true)}
           style={{
-            background: stats.conflictCount > 0 ? 'rgba(250,173,20,0.15)' : 'rgba(250,173,20,0.05)',
-            border: `1px solid ${stats.conflictCount > 0 ? 'rgba(250,173,20,0.4)' : 'rgba(250,173,20,0.2)'}`,
-            color: stats.conflictCount > 0 ? '#faad14' : 'rgba(250,173,20,0.6)',
+            background: stats.conflictCount > 0 ? 'rgba(217,119,6,0.15)' : 'rgba(217,119,6,0.05)',
+            border: `1px solid ${stats.conflictCount > 0 ? 'rgba(217,119,6,0.4)' : 'rgba(217,119,6,0.2)'}`,
+            color: stats.conflictCount > 0 ? '#d97706' : 'rgba(217,119,6,0.6)',
             fontFamily: 'var(--font-primary)',
             fontWeight: 500,
             borderRadius: 8,
@@ -586,7 +586,7 @@ function TeamPool() {
           ))}
         </div>
       ) : filteredMembers.length === 0 ? (
-        <Empty description={<span style={{ color: 'rgba(255,255,255,0.4)', fontFamily: 'var(--font-primary)' }}>暂无匹配的团队成员</span>} />
+        <Empty description={<span style={{ color: '#6b6892', fontFamily: 'var(--font-primary)' }}>暂无匹配的团队成员</span>} />
       ) : (
         <div className="team-grid">
 {filteredMembers.map((member) => {
@@ -622,7 +622,7 @@ function TeamPool() {
                     top: 12,
                     right: 12,
                     fontSize: 18,
-                    color: '#4d9fff',
+                    color: '#6366f1',
                     cursor: 'pointer',
                     transition: 'color 0.2s',
                     zIndex: 2,
@@ -632,10 +632,10 @@ function TeamPool() {
                     openEdit(member);
                   }}
                   onMouseEnter={(e) => {
-                    (e.target as HTMLElement).style.color = '#7cb8ff';
+                    (e.target as HTMLElement).style.color = '#818cf8';
                   }}
                   onMouseLeave={(e) => {
-                    (e.target as HTMLElement).style.color = '#4d9fff';
+                    (e.target as HTMLElement).style.color = '#6366f1';
                   }}
                 />
 
@@ -648,7 +648,7 @@ function TeamPool() {
                         {conflicts.map((c, i) => (
                           <div key={i}>
                             「{c.project1}」与「{c.project2}」重叠 {c.overlapDays} 天
-                            <span style={{ color: 'rgba(255,255,255,0.5)' }}>（{c.overlapStart} ~ {c.overlapEnd}）</span>
+                            <span style={{ color: '#6b6892' }}>（{c.overlapStart} ~ {c.overlapEnd}）</span>
                           </div>
                         ))}
                       </div>
@@ -661,7 +661,7 @@ function TeamPool() {
                         top: 12,
                         right: 40,
                         fontSize: 16,
-                        color: '#faad14',
+                        color: '#d97706',
                         cursor: 'pointer',
                         zIndex: 2,
                       }}
@@ -674,9 +674,9 @@ function TeamPool() {
                   <Avatar
                     size={64}
                     style={{
-                      background: 'linear-gradient(135deg, #4d9fff, #69b1ff)',
+                      background: 'linear-gradient(135deg, #6366f1, #818cf8)',
                       marginBottom: 10,
-                      boxShadow: '0 4px 12px rgba(77,159,255,0.3)',
+                      boxShadow: '0 4px 12px rgba(99,102,241,0.3)',
                       fontSize: 20,
                       fontWeight: 600,
                       fontFamily: 'var(--font-primary)',
@@ -685,7 +685,7 @@ function TeamPool() {
                     {getAvatarText(member.name)}
                   </Avatar>
                   <span className="member-name">{member.name}</span>
-                  <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: 11, fontFamily: 'var(--font-primary)', marginTop: 2 }}>
+                  <span style={{ color: '#9d9ab8', fontSize: 11, fontFamily: 'var(--font-primary)', marginTop: 2 }}>
                     {member.employeeId}
                   </span>
                 </div>
@@ -693,7 +693,7 @@ function TeamPool() {
                 <div
                   style={{
                     fontSize: 12,
-                    color: 'rgba(255,255,255,0.4)',
+                    color: '#6b6892',
                     marginBottom: 4,
                     fontFamily: 'var(--font-primary)',
                     textAlign: 'center',
@@ -708,7 +708,7 @@ function TeamPool() {
                 <div
                   style={{
                     fontSize: 12,
-                    color: 'rgba(255,255,255,0.4)',
+                    color: '#6b6892',
                     marginBottom: 10,
                     fontFamily: 'var(--font-primary)',
                     textAlign: 'center',
@@ -726,19 +726,19 @@ function TeamPool() {
                   <div
                     style={{
                       fontSize: 12,
-                      color: 'rgba(255,255,255,0.5)',
+                      color: '#6b6892',
                       marginBottom: 8,
                       fontFamily: 'var(--font-primary)',
-                      background: 'rgba(24,144,255,0.08)',
+                      background: 'rgba(99,102,241,0.08)',
                       borderRadius: 6,
                       padding: '6px 8px',
-                      border: '1px solid rgba(24,144,255,0.15)',
+                      border: '1px solid rgba(99,102,241,0.15)',
                       textAlign: 'center',
                     }}
                   >
-                    <ClockCircleOutlined style={{ marginRight: 4, color: '#1890ff' }} />
-                    <span style={{ color: '#1890ff' }}>休假中</span>
-                    <span style={{ color: 'rgba(255,255,255,0.35)', marginLeft: 6 }}>
+                    <ClockCircleOutlined style={{ marginRight: 4, color: '#6366f1' }} />
+                    <span style={{ color: '#6366f1' }}>休假中</span>
+                    <span style={{ color: '#9d9ab8', marginLeft: 6 }}>
                       {fmtShort(member.leaveStartDate)} ~ {member.leaveEndDate ? fmtShort(member.leaveEndDate) : '未定'}
                     </span>
                   </div>
@@ -749,22 +749,22 @@ function TeamPool() {
                   <div
                     style={{
                       fontSize: 12,
-                      color: 'rgba(255,255,255,0.5)',
+                      color: '#6b6892',
                       marginBottom: 8,
                       fontFamily: 'var(--font-primary)',
-                      background: 'rgba(250,173,20,0.08)',
+                      background: 'rgba(217,119,6,0.08)',
                       borderRadius: 6,
                       padding: '6px 8px',
-                      border: '1px solid rgba(250,173,20,0.15)',
+                      border: '1px solid rgba(217,119,6,0.15)',
                       textAlign: 'center',
                     }}
                   >
-                    <ClockCircleOutlined style={{ marginRight: 4, color: '#faad14' }} />
-                    <span style={{ color: '#faad14' }}>即将参与</span>
+                    <ClockCircleOutlined style={{ marginRight: 4, color: '#d97706' }} />
+                    <span style={{ color: '#d97706' }}>即将参与</span>
                     {member.upcomingProjects.map((p) => (
                       <div key={p.projectName} style={{ marginBottom: 2 }}>
-                        <span style={{ color: 'rgba(255,255,255,0.6)' }}>{p.projectName}</span>
-                        <span style={{ color: 'rgba(255,255,255,0.35)', marginLeft: 6 }}>
+                        <span style={{ color: '#46436a' }}>{p.projectName}</span>
+                        <span style={{ color: '#9d9ab8', marginLeft: 6 }}>
                           {fmtShort(p.startDate)} ~ {fmtShort(p.endDate)}
                         </span>
                       </div>
@@ -776,13 +776,13 @@ function TeamPool() {
                 <div
                   style={{
                     fontSize: 12,
-                    color: 'rgba(255,255,255,0.5)',
+                    color: '#6b6892',
                     marginBottom: 8,
                     fontFamily: 'var(--font-primary)',
-                    background: 'rgba(255,255,255,0.04)',
+                    background: '#f8f7fd',
                     borderRadius: 6,
                     padding: '6px 8px',
-                    border: '1px solid rgba(255,255,255,0.06)',
+                    border: '1px solid #e9e7f4',
                     textAlign: 'center',
                   }}
                 >
@@ -791,8 +791,8 @@ function TeamPool() {
                       <ClockCircleOutlined style={{ marginRight: 4 }} />
                       {activeProjects.map((p) => (
                         <div key={p.projectName} style={{ marginBottom: 2 }}>
-                          <span style={{ color: '#faad14' }}>{p.projectName}</span>
-                          <span style={{ color: 'rgba(255,255,255,0.35)', marginLeft: 6 }}>
+                          <span style={{ color: '#d97706' }}>{p.projectName}</span>
+                          <span style={{ color: '#9d9ab8', marginLeft: 6 }}>
                             {fmtShort(p.startDate)} ~ {fmtShort(p.endDate)}
                           </span>
                         </div>
@@ -808,9 +808,9 @@ function TeamPool() {
                     <Tag
                       key={skill}
                       style={{
-                        background: 'rgba(77,159,255,0.12)',
-                        color: '#7cb8ff',
-                        border: '1px solid rgba(77,159,255,0.2)',
+                        background: 'rgba(99,102,241,0.12)',
+                        color: '#818cf8',
+                        border: '1px solid rgba(99,102,241,0.2)',
                         borderRadius: 4,
                         fontFamily: 'var(--font-primary)',
                         fontSize: 11,
@@ -839,8 +839,8 @@ function TeamPool() {
         }}
         okText={editingMember ? '保存修改' : '确认添加'}
         cancelText="取消"
-        okButtonProps={{ style: { background: 'linear-gradient(135deg, #4d9fff, #69b1ff)', border: 'none' } }}
-        bodyStyle={{ background: 'rgba(13,31,60,0.95)' }}
+        okButtonProps={{ style: { background: 'linear-gradient(135deg, #6366f1, #818cf8)', border: 'none' } }}
+        bodyStyle={{ background: '#ffffff' }}
         style={{ top: 120 }}
       >
         <Form form={form} layout="vertical" style={{ marginTop: 12 }}>
@@ -893,11 +893,11 @@ function TeamPool() {
             <div style={{ marginTop: 16 }}>
               <div
                 style={{
-                  color: 'rgba(255,255,255,0.6)',
+                  color: '#46436a',
                   fontSize: 13,
                   fontFamily: 'var(--font-primary)',
                   marginBottom: 8,
-                  borderBottom: '1px solid rgba(255,255,255,0.1)',
+                  borderBottom: '1px solid #dcd9f2',
                   paddingBottom: 6,
                 }}
               >
@@ -910,8 +910,8 @@ function TeamPool() {
                   <div
                     key={p.projectName}
                     style={{
-                      background: isActive ? 'rgba(250,173,20,0.08)' : 'rgba(255,255,255,0.03)',
-                      border: isActive ? '1px solid rgba(250,173,20,0.2)' : '1px solid rgba(255,255,255,0.06)',
+                      background: isActive ? 'rgba(217,119,6,0.08)' : '#f6f5fc',
+                      border: isActive ? '1px solid rgba(217,119,6,0.2)' : '1px solid #f6f5fc',
                       borderRadius: 6,
                       padding: '8px 10px',
                       marginBottom: 6,
@@ -919,10 +919,10 @@ function TeamPool() {
                       fontFamily: 'var(--font-primary)',
                     }}
                   >
-                    <div style={{ color: isActive ? '#faad14' : 'rgba(255,255,255,0.6)', fontWeight: 500 }}>
+                    <div style={{ color: isActive ? '#d97706' : '#46436a', fontWeight: 500 }}>
                       {p.projectName} {isActive && <Tag style={{ marginLeft: 4, fontSize: 10, lineHeight: '14px', padding: '0 4px' }}>进行中</Tag>}
                     </div>
-                    <div style={{ color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>
+                    <div style={{ color: '#6b6892', marginTop: 2 }}>
                       开始：{p.startDate}　结束：{p.endDate}
                     </div>
                   </div>
@@ -955,9 +955,9 @@ function TeamPool() {
                 }}
                 style={{
                   marginTop: 12,
-                  background: 'rgba(82, 196, 26, 0.12)',
-                  border: '1px solid rgba(82, 196, 26, 0.3)',
-                  color: '#52c41a',
+                  background: 'rgba(22, 163, 74,0.12)',
+                  border: '1px solid rgba(22, 163, 74,0.3)',
+                  color: '#16a34a',
                   fontFamily: 'var(--font-primary)',
                   fontWeight: 500,
                   borderRadius: 6,
@@ -978,35 +978,35 @@ function TeamPool() {
         onCancel={() => setConflictModalOpen(false)}
         footer={<Button onClick={() => setConflictModalOpen(false)}>关闭</Button>}
         width={820}
-        bodyStyle={{ background: 'rgba(13,31,60,0.95)' }}
+        bodyStyle={{ background: '#ffffff' }}
         style={{ top: 60 }}
       >
         {conflictRows.length === 0 ? (
-          <div style={{ padding: 40, textAlign: 'center', color: 'rgba(255,255,255,0.3)' }}>
+          <div style={{ padding: 40, textAlign: 'center', color: '#9d9ab8' }}>
             当前没有时间冲突的人员
           </div>
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
-              <tr style={{ background: 'rgba(77,159,255,0.06)', borderBottom: '2px solid rgba(77,159,255,0.2)' }}>
-                <th style={{ padding: '10px 8px', textAlign: 'left', color: 'rgba(255,255,255,0.6)', fontWeight: 500 }}>人员</th>
-                <th style={{ padding: '10px 8px', textAlign: 'left', color: 'rgba(255,255,255,0.6)', fontWeight: 500 }}>冲突项目 A</th>
-                <th style={{ padding: '10px 8px', textAlign: 'left', color: 'rgba(255,255,255,0.6)', fontWeight: 500 }}>冲突项目 B</th>
-                <th style={{ padding: '10px 8px', textAlign: 'center', color: 'rgba(255,255,255,0.6)', fontWeight: 500 }}>重叠区间</th>
-                <th style={{ padding: '10px 8px', textAlign: 'center', color: 'rgba(255,255,255,0.6)', fontWeight: 500 }}>重叠天数</th>
+              <tr style={{ background: 'rgba(99,102,241,0.06)', borderBottom: '2px solid rgba(99,102,241,0.2)' }}>
+                <th style={{ padding: '10px 8px', textAlign: 'left', color: '#46436a', fontWeight: 500 }}>人员</th>
+                <th style={{ padding: '10px 8px', textAlign: 'left', color: '#46436a', fontWeight: 500 }}>冲突项目 A</th>
+                <th style={{ padding: '10px 8px', textAlign: 'left', color: '#46436a', fontWeight: 500 }}>冲突项目 B</th>
+                <th style={{ padding: '10px 8px', textAlign: 'center', color: '#46436a', fontWeight: 500 }}>重叠区间</th>
+                <th style={{ padding: '10px 8px', textAlign: 'center', color: '#46436a', fontWeight: 500 }}>重叠天数</th>
               </tr>
             </thead>
             <tbody>
               {conflictRows.map((r) => (
-                <tr key={r.key} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                  <td style={{ padding: '10px 8px', color: 'rgba(255,255,255,0.9)', fontWeight: 500 }}>{r.memberName}</td>
-                  <td style={{ padding: '10px 8px', color: 'rgba(255,255,255,0.7)' }}>{r.projectA}</td>
-                  <td style={{ padding: '10px 8px', color: 'rgba(255,255,255,0.7)' }}>{r.projectB}</td>
-                  <td style={{ padding: '10px 8px', textAlign: 'center', color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>
+                <tr key={r.key} style={{ borderBottom: '1px solid #eeedf8' }}>
+                  <td style={{ padding: '10px 8px', color: '#1e1b2e', fontWeight: 500 }}>{r.memberName}</td>
+                  <td style={{ padding: '10px 8px', color: '#46436a' }}>{r.projectA}</td>
+                  <td style={{ padding: '10px 8px', color: '#46436a' }}>{r.projectB}</td>
+                  <td style={{ padding: '10px 8px', textAlign: 'center', color: '#6b6892', fontSize: 12 }}>
                     {r.overlapStart} ~ {r.overlapEnd}
                   </td>
                   <td style={{ padding: '10px 8px', textAlign: 'center' }}>
-                    <span style={{ display: 'inline-block', padding: '2px 10px', background: 'rgba(250,173,20,0.12)', color: '#faad14', border: '1px solid rgba(250,173,20,0.3)', borderRadius: 4, fontSize: 12 }}>
+                    <span style={{ display: 'inline-block', padding: '2px 10px', background: 'rgba(217,119,6,0.12)', color: '#d97706', border: '1px solid rgba(217,119,6,0.3)', borderRadius: 4, fontSize: 12 }}>
                       {r.overlapDays} 天
                     </span>
                   </td>
@@ -1030,8 +1030,8 @@ function TeamPool() {
         okText="确认指派"
         cancelText="取消"
         width={680}
-        okButtonProps={{ style: { background: 'linear-gradient(135deg, #4d9fff, #69b1ff)', border: 'none' } }}
-        bodyStyle={{ background: 'rgba(13,31,60,0.95)' }}
+        okButtonProps={{ style: { background: 'linear-gradient(135deg, #6366f1, #818cf8)', border: 'none' } }}
+        bodyStyle={{ background: '#ffffff' }}
         style={{ top: 60 }}
       >
         <Form form={batchForm} layout="vertical" style={{ marginTop: 12 }}>
@@ -1056,38 +1056,38 @@ function TeamPool() {
               const isStarted = !dayjs(selectedProject.startDate).isAfter(now, 'day');
               const isEnded = dayjs(selectedProject.endDate).isBefore(now, 'day');
               const phase = !isStarted
-                ? { label: '未开始', color: '#7cb8ff' }
+                ? { label: '未开始', color: '#818cf8' }
                 : !isEnded
-                ? { label: '进行中', color: '#faad14' }
-                : { label: '已结束', color: 'rgba(255,255,255,0.5)' };
+                ? { label: '进行中', color: '#d97706' }
+                : { label: '已结束', color: '#6b6892' };
               return (
                 <div
                   style={{
                     marginBottom: 16,
                     padding: '12px 14px',
-                    background: 'rgba(77,159,255,0.08)',
-                    border: '1px solid rgba(77,159,255,0.2)',
+                    background: 'rgba(99,102,241,0.08)',
+                    border: '1px solid rgba(99,102,241,0.2)',
                     borderRadius: 8,
                     fontSize: 12,
                     fontFamily: 'var(--font-primary)',
-                    color: 'rgba(255,255,255,0.65)',
+                    color: '#46436a',
                     display: 'flex',
                     flexDirection: 'column',
                     gap: 6,
                   }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <ClockCircleOutlined style={{ color: '#4d9fff' }} />
-                    <span style={{ color: 'rgba(255,255,255,0.4)' }}>项目时间（自动同步）</span>
+                    <ClockCircleOutlined style={{ color: '#6366f1' }} />
+                    <span style={{ color: '#6b6892' }}>项目时间（自动同步）</span>
                   </div>
                   <div style={{ display: 'flex', gap: 24, paddingLeft: 22 }}>
                     <span>
-                      <span style={{ color: 'rgba(255,255,255,0.4)' }}>开始：</span>
-                      <span style={{ color: '#fff' }}>{selectedProject.startDate}</span>
+                      <span style={{ color: '#6b6892' }}>开始：</span>
+                      <span style={{ color: '#1e1b2e' }}>{selectedProject.startDate}</span>
                     </span>
                     <span>
-                      <span style={{ color: 'rgba(255,255,255,0.4)' }}>结束：</span>
-                      <span style={{ color: '#fff' }}>{selectedProject.endDate}</span>
+                      <span style={{ color: '#6b6892' }}>结束：</span>
+                      <span style={{ color: '#1e1b2e' }}>{selectedProject.endDate}</span>
                     </span>
                     <Tag
                       style={{
@@ -1104,7 +1104,7 @@ function TeamPool() {
                       {phase.label}
                     </Tag>
                   </div>
-                  <div style={{ paddingLeft: 22, color: 'rgba(255,255,255,0.4)', fontSize: 11 }}>
+                  <div style={{ paddingLeft: 22, color: '#6b6892', fontSize: 11 }}>
                     {phase.label === '进行中'
                       ? '指派后人员状态将自动转为「测试中」'
                       : phase.label === '未开始'
@@ -1119,7 +1119,7 @@ function TeamPool() {
         <div
           style={{
             marginBottom: 8,
-            color: 'rgba(255,255,255,0.5)',
+            color: '#6b6892',
             fontSize: 13,
             fontFamily: 'var(--font-primary)',
           }}
@@ -1141,8 +1141,8 @@ function TeamPool() {
           listStyle={{
             width: 280,
             height: 320,
-            background: 'rgba(255,255,255,0.04)',
-            border: '1px solid rgba(255,255,255,0.08)',
+            background: '#f8f7fd',
+            border: '1px solid #e9e7f4',
             borderRadius: 8,
           }}
           selectAllLabels={['全选', '全选']}
@@ -1152,30 +1152,30 @@ function TeamPool() {
       {/* Transfer 深色主题选中项样式覆盖 */}
       <style>{`
         .ant-transfer-list-content-item-checked {
-          background: rgba(77, 159, 255, 0.2) !important;
+          background: rgba(99,102,241, 0.2) !important;
         }
         .ant-transfer-list-content-item:hover {
-          background: rgba(77, 159, 255, 0.1) !important;
+          background: rgba(99,102,241, 0.1) !important;
         }
         .ant-transfer-list-content-item-checked .ant-transfer-list-content-item-text {
-          color: #fff !important;
+          color: #1e1b2e !important;
         }
         .ant-transfer-list-header {
-          background: rgba(255,255,255,0.06) !important;
-          border-bottom: 1px solid rgba(255,255,255,0.1) !important;
-          color: rgba(255,255,255,0.7) !important;
+          background: #f6f5fc !important;
+          border-bottom: 1px solid #dcd9f2 !important;
+          color: #46436a !important;
         }
         .ant-transfer-list-body-search-action {
-          color: rgba(255,255,255,0.5) !important;
+          color: #6b6892 !important;
         }
         .ant-transfer-list-body-search-action:hover {
-          color: #7cb8ff !important;
+          color: #818cf8 !important;
         }
         .ant-picker-input > input {
-          color: #fff !important;
+          color: #1e1b2e !important;
         }
         .ant-picker-suffix {
-          color: rgba(255,255,255,0.5) !important;
+          color: #6b6892 !important;
         }
       `}</style>
     </div>

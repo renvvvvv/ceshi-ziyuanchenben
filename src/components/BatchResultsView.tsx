@@ -11,12 +11,12 @@ function MiniReport({ report, input }: { report: ResourceReport; input: Resource
   const dur = input.total_duration;
 
   return (
-    <div style={{ padding: 16, background: '#fafafa', borderRadius: 8 }}>
+    <div style={{ padding: 16, background: '#f6f5fc', borderRadius: 8 }}>
       <Row gutter={16} style={{ marginBottom: 16 }}>
         <Col span={6}><Statistic title="总容量" value={input.total_mw} suffix="MW" /></Col>
         <Col span={6}><Statistic title="总工期" value={input.total_duration} suffix="天" /></Col>
-        <Col span={6}><Statistic title="峰值同时在场" value={report.汇总.峰值同时在场} suffix="人" valueStyle={{ color: '#1677ff' }} /></Col>
-        <Col span={6}><Statistic title="总人天" value={report.汇总.总人天} suffix="人·天" valueStyle={{ color: '#52c41a' }} /></Col>
+        <Col span={6}><Statistic title="峰值同时在场" value={report.汇总.峰值同时在场} suffix="人" valueStyle={{ color: '#6366f1' }} /></Col>
+        <Col span={6}><Statistic title="总人天" value={report.汇总.总人天} suffix="人·天" valueStyle={{ color: '#16a34a' }} /></Col>
       </Row>
 
       <Collapse size="small" items={[

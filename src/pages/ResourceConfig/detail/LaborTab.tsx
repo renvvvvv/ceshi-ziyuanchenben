@@ -134,7 +134,7 @@ export default function LaborTab({ data, canEdit, patch }: TabProps) {
     {
       title: '#', key: '__idx', width: 40, align: 'center',
       render: (_: unknown, _r: LaborRow, i: number) => (
-        <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: 11 }}>{i + 1}</span>
+        <span style={{ color: '#9d9ab8', fontSize: 11 }}>{i + 1}</span>
       ),
     },
     {
@@ -180,14 +180,14 @@ export default function LaborTab({ data, canEdit, patch }: TabProps) {
           // 反推参考值：作业数量 ÷ 人天（灰显只读，原 L4152）
           return (
             <Tooltip title="反推：作业数量 ÷ 人天（=人数×作业天数），仅作效率参考">
-              <span style={{ color: 'rgba(255,255,255,0.45)' }}>{fmtDays(c.daily)}</span>
+              <span style={{ color: '#6b6892' }}>{fmtDays(c.daily)}</span>
             </Tooltip>
           );
         }
         // 凭经验：不涉及强度计算（原 L4154）
         return (
           <Tooltip title="凭经验直接填人数，不涉及强度计算">
-            <span style={{ color: 'rgba(255,255,255,0.45)' }}>—</span>
+            <span style={{ color: '#6b6892' }}>—</span>
           </Tooltip>
         );
       },
@@ -196,7 +196,7 @@ export default function LaborTab({ data, canEdit, patch }: TabProps) {
       title: '使用天数(人天)', key: '__md', width: 95, align: 'center',
       render: (_: unknown, _r: LaborRow, i: number) => (
         <Tooltip title="使用天数(人天)：强度驱动=数量÷强度；按人数=人数×作业天数">
-          <span style={{ color: '#4d9fff', fontWeight: 600 }}>{fmtDays(calcs[i].manDays)}</span>
+          <span style={{ color: '#6366f1', fontWeight: 600 }}>{fmtDays(calcs[i].manDays)}</span>
         </Tooltip>
       ),
     },
@@ -208,7 +208,7 @@ export default function LaborTab({ data, canEdit, patch }: TabProps) {
       ),
     },
     {
-      title: <span>需要人数<span style={{ fontWeight: 400, color: 'rgba(255,255,255,0.4)', fontSize: 11 }}>（强度驱动可自定义 ↺）</span></span>,
+      title: <span>需要人数<span style={{ fontWeight: 400, color: '#6b6892', fontSize: 11 }}>（强度驱动可自定义 ↺）</span></span>,
       dataIndex: 'workers', width: 140, align: 'center',
       render: (_: unknown, r: LaborRow, i: number) => {
         const c = calcs[i];
@@ -234,8 +234,8 @@ export default function LaborTab({ data, canEdit, patch }: TabProps) {
             </Tooltip>
             {r.workersCustom && (
               <Tooltip title="已自定义人数">
-                <span style={{ fontSize: 11, lineHeight: '18px', color: '#ffc53d', background: 'rgba(255,197,61,0.08)',
-                  border: '1px solid rgba(255,197,61,0.4)', borderRadius: 4, padding: '0 4px', whiteSpace: 'nowrap' }}>
+                <span style={{ fontSize: 11, lineHeight: '18px', color: '#d97706', background: 'rgba(217,119,6,0.08)',
+                  border: '1px solid rgba(217,119,6,0.4)', borderRadius: 4, padding: '0 4px', whiteSpace: 'nowrap' }}>
                   ✎ 自定义
                 </span>
               </Tooltip>
@@ -268,7 +268,7 @@ export default function LaborTab({ data, canEdit, patch }: TabProps) {
       {/* auto 模式派生人数绿色显示（InputNumber 内层 input 需 CSS 覆盖） */}
       <style>{`
         .rc-labor-wk-auto .ant-input-number-input {
-          color: #52c41a !important;
+          color: #16a34a !important;
           font-weight: 600 !important;
         }
       `}</style>
@@ -276,37 +276,37 @@ export default function LaborTab({ data, canEdit, patch }: TabProps) {
       {/* 页头统计卡：劳务人天合计 / 劳务人数合计 / 工作项数 / 强度驱动项数 */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 14 }}>
         {([
-          { label: '👷 劳务人天合计（Σ 各作业使用人天）', value: fmtDays(sumManDays), color: '#7cb8ff' },
-          { label: '🧑‍🤝‍🧑 每日用工合计（Σ各作业需要人数）', value: sumWorkers, color: '#52c41a' },
-          { label: '工作项数', value: rows.length, color: '#7cb8ff' },
-          { label: '强度驱动项数', value: autoCount, color: '#7cb8ff' },
+          { label: '👷 劳务人天合计（Σ 各作业使用人天）', value: fmtDays(sumManDays), color: '#6366f1' },
+          { label: '🧑‍🤝‍🧑 每日用工合计（Σ各作业需要人数）', value: sumWorkers, color: '#16a34a' },
+          { label: '工作项数', value: rows.length, color: '#6366f1' },
+          { label: '强度驱动项数', value: autoCount, color: '#6366f1' },
         ] as Array<{ label: string; value: string | number; color: string }>).map((c, i) => (
           <div key={i} style={{
-            background: 'linear-gradient(135deg, rgba(30,58,95,0.45), rgba(30,58,95,0.2))',
-            border: '1px solid rgba(77,159,255,0.18)', borderRadius: 10, padding: '12px 16px',
+            background: 'linear-gradient(135deg,#f6f5fc,#f1f0fe)',
+            border: '1px solid rgba(99,102,241,0.18)', borderRadius: 10, padding: '12px 16px',
           }}>
             <div style={{ fontSize: 22, fontWeight: 700, color: c.color, lineHeight: 1.2 }}>{c.value}</div>
-            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 4 }}>{c.label}</div>
+            <div style={{ fontSize: 12, color: '#6b6892', marginTop: 4 }}>{c.label}</div>
           </div>
         ))}
       </div>
 
       {/* 模式说明（原页头 hint L932，扩为三模式） */}
       <div style={{
-        fontSize: 12, color: 'rgba(255,255,255,0.5)', lineHeight: 1.8,
-        background: 'rgba(77,159,255,0.05)', border: '1px solid rgba(77,159,255,0.15)',
+        fontSize: 12, color: '#6b6892', lineHeight: 1.8,
+        background: 'rgba(99,102,241,0.05)', border: '1px solid rgba(99,102,241,0.15)',
         borderRadius: 10, padding: '8px 12px', marginBottom: 14,
       }}>
-        📐 <b style={{ color: 'rgba(255,255,255,0.75)' }}>三种核算模式（每行可切换）：</b><br />
+        📐 <b style={{ color: '#46436a' }}>三种核算模式（每行可切换）：</b><br />
         ① <b>强度驱动（现状）</b>：填【作业数量 + 每人每天台数 + 作业天数】→ 使用天数(人天)=数量÷强度、需要人数=人天÷作业天数（向上取整），未自定义时人数实时联动；<br />
         ② <b>按人数安排</b>：填【作业数量 + 需要人数 + 作业天数】→ 使用天数(人天)=人数×作业天数，强度反推显示仅作效率参考；<br />
         ③ <b>自己凭经验判断</b>：直接填需要人数，不带入任何公式（强度列显示 —，人天=人数×作业天数仅用于汇总）。强度驱动下「需要人数」也可手动覆盖，点 ↺ 一键还原。
       </div>
 
       {/* 明细表 */}
-      <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: 16 }}>
+      <div style={{ background: '#f6f5fc', border: '1px solid #e9e7f4', borderRadius: 12, padding: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', marginBottom: 12 }}>
-          <span style={{ fontSize: 14, fontWeight: 600, color: 'rgba(255,255,255,0.9)' }}>👷 劳务作业用工明细</span>
+          <span style={{ fontSize: 14, fontWeight: 600, color: '#1e1b2e' }}>👷 劳务作业用工明细</span>
           <Tag style={{ margin: '0 0 0 8px' }}>{rows.length} 项</Tag>
           <div style={{ flex: 1 }} />
           {canEdit && (
@@ -323,17 +323,17 @@ export default function LaborTab({ data, canEdit, patch }: TabProps) {
           className="rc-edit-table" scroll={{ x: 'max-content' }}
           summary={() => (
             <Table.Summary fixed>
-              <Table.Summary.Row style={{ background: 'rgba(30,58,95,0.35)' }}>
+              <Table.Summary.Row style={{ background: '#f1f0fe' }}>
                 <Table.Summary.Cell index={0} />
                 <Table.Summary.Cell index={1} colSpan={5} align="right">
-                  <span style={{ color: '#7cb8ff', fontWeight: 600, fontSize: 12 }}>合计（{rows.length} 项作业）</span>
+                  <span style={{ color: '#6366f1', fontWeight: 600, fontSize: 12 }}>合计（{rows.length} 项作业）</span>
                 </Table.Summary.Cell>
                 <Table.Summary.Cell index={6} align="center">
-                  <span style={{ color: '#7cb8ff', fontWeight: 600 }}>{fmtDays(sumManDays)}</span>
+                  <span style={{ color: '#6366f1', fontWeight: 600 }}>{fmtDays(sumManDays)}</span>
                 </Table.Summary.Cell>
                 <Table.Summary.Cell index={7} />
                 <Table.Summary.Cell index={8} align="center">
-                  <span style={{ color: '#7cb8ff', fontWeight: 600 }}>{sumWorkers}</span>
+                  <span style={{ color: '#6366f1', fontWeight: 600 }}>{sumWorkers}</span>
                 </Table.Summary.Cell>
                 <Table.Summary.Cell index={9} />
                 <Table.Summary.Cell index={10} />
@@ -341,7 +341,7 @@ export default function LaborTab({ data, canEdit, patch }: TabProps) {
             </Table.Summary>
           )}
         />
-        <div style={{ marginTop: 6, fontSize: 12, color: 'rgba(255,255,255,0.35)' }}>
+        <div style={{ marginTop: 6, fontSize: 12, color: '#9d9ab8' }}>
           「从假负载带出数量」：按每行负载类型（风冷 / 液冷 / 集中式）汇总假负载计划的数量列，自动填入作业数量。
         </div>
       </div>

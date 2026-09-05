@@ -16,10 +16,10 @@ const POSITION_MAP: Record<string, string> = {
   '1021351': '测试工程师', '1021362': '助理测试工程师', '1021357': '测试工程师', '1021807': '项目经理',
 };
 const POSITION_STYLES: Record<string, { bg: string; color: string }> = {
-  助理测试工程师: { bg: 'rgba(77,159,255,0.1)', color: '#4d9fff' },
-  测试工程师: { bg: 'rgba(0,240,255,0.08)', color: '#00f0ff' },
-  项目主测: { bg: 'rgba(82,196,26,0.1)', color: '#52c41a' },
-  项目经理: { bg: 'rgba(255,77,79,0.1)', color: '#ff4d4f' },
+  助理测试工程师: { bg: 'rgba(99,102,241,0.1)', color: '#6366f1' },
+  测试工程师: { bg: 'rgba(6,182,212,0.08)', color: '#06b6d4' },
+  项目主测: { bg: 'rgba(22,163,74,0.1)', color: '#16a34a' },
+  项目经理: { bg: 'rgba(220,38,38,0.1)', color: '#dc2626' },
 };
 
 interface AttendanceRow {
@@ -407,59 +407,59 @@ function Attendance() {
     { title: '名称', dataIndex: 'memberName', width: 140, fixed: 'left',
       render: (v: string, record) => {
         if (record.children) {
-          return <span style={{ color: '#4d9fff', fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6 }}>
-            <FolderOutlined style={{ color: '#4d9fff' }} />{v}
+          return <span style={{ color: '#6366f1', fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <FolderOutlined style={{ color: '#6366f1' }} />{v}
           </span>;
         }
         const adjusted = (record as any)._adjusted;
-        return <span style={{ color: 'rgba(255,255,255,0.9)', display: 'flex', alignItems: 'center', gap: 6 }}>
-          <UserOutlined style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11 }} />
+        return <span style={{ color: '#1e1b2e', display: 'flex', alignItems: 'center', gap: 6 }}>
+          <UserOutlined style={{ color: '#9d9ab8', fontSize: 11 }} />
           {v}
-          {adjusted && <Tag style={{ background: 'rgba(250,173,20,0.15)', color: '#faad14', border: 'none', fontSize: 10, marginLeft: 4, padding: '0 4px' }}>已校准</Tag>}
+          {adjusted && <Tag style={{ background: 'rgba(217,119,6,0.15)', color: '#d97706', border: 'none', fontSize: 10, marginLeft: 4, padding: '0 4px' }}>已校准</Tag>}
         </span>;
       }
     },
     { title: '岗位', dataIndex: 'position', width: 130,
       render: (v: string, record) => {
-        if (record.children) return <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12 }}>{v}</span>;
+        if (record.children) return <span style={{ color: '#6b6892', fontSize: 12 }}>{v}</span>;
         const style = POSITION_STYLES[v] || POSITION_STYLES['测试工程师'];
         return <Tag style={{ background: style.bg, color: style.color, border: 'none', fontSize: 11 }}>{v}</Tag>;
       }
     },
     { title: '项目周期', width: 180,
-      render: (_: unknown, r: AttendanceNode) => <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>{r.projectStart} ~ {r.projectEnd}</span>
+      render: (_: unknown, r: AttendanceNode) => <span style={{ color: '#6b6892', fontSize: 12 }}>{r.projectStart} ~ {r.projectEnd}</span>
     },
     { title: '项目总天数', dataIndex: 'projectTotalDays', width: 100, align: 'center',
-      render: (v: number, record) => <span style={{ color: record.children ? '#4d9fff' : 'rgba(255,255,255,0.7)', fontWeight: record.children ? 500 : 400 }}>{v}</span>
+      render: (v: number, record) => <span style={{ color: record.children ? '#6366f1' : '#46436a', fontWeight: record.children ? 500 : 400 }}>{v}</span>
     },
     { title: '应出勤(天)', dataIndex: 'onDutyDays', width: 100, align: 'center',
       sorter: (a, b) => a.onDutyDays - b.onDutyDays,
-      render: (v: number, record) => <span style={{ color: record.children ? '#4d9fff' : 'rgba(255,255,255,0.85)', fontWeight: record.children ? 500 : 400 }}>{v}</span>
+      render: (v: number, record) => <span style={{ color: record.children ? '#6366f1' : '#1e1b2e', fontWeight: record.children ? 500 : 400 }}>{v}</span>
     },
     { title: '实际出勤(天)', dataIndex: 'attendDays', width: 110, align: 'center',
       sorter: (a, b) => a.attendDays - b.attendDays,
-      render: (v: number) => <span style={{ color: '#52c41a', fontWeight: 500 }}>{v}</span>
+      render: (v: number) => <span style={{ color: '#16a34a', fontWeight: 500 }}>{v}</span>
     },
     { title: '请假(天)', dataIndex: 'leaveDays', width: 90, align: 'center',
       sorter: (a, b) => a.leaveDays - b.leaveDays,
       render: (v: number) => v > 0
-        ? <Tag style={{ background: 'rgba(250,173,20,0.1)', color: '#faad14', border: '1px solid rgba(250,173,20,0.3)' }}>{v}</Tag>
-        : <span style={{ color: 'rgba(255,255,255,0.3)' }}>0</span>
+        ? <Tag style={{ background: 'rgba(217,119,6,0.1)', color: '#d97706', border: '1px solid rgba(217,119,6,0.3)' }}>{v}</Tag>
+        : <span style={{ color: '#9d9ab8' }}>0</span>
     },
     { title: '出勤率', dataIndex: 'rate', width: 110, align: 'center',
       sorter: (a, b) => a.rate - b.rate,
       render: (v: number, record) => {
         if (record.children) {
           const pct = (v * 100).toFixed(1) + '%';
-          const color = v >= 0.95 ? '#52c41a' : v >= 0.9 ? '#faad14' : '#ff4d4f';
+          const color = v >= 0.95 ? '#16a34a' : v >= 0.9 ? '#d97706' : '#dc2626';
           return <span style={{ color, fontWeight: 600 }}>{pct}</span>;
         }
         const pct = (v * 100).toFixed(1);
-        const color = v >= 0.95 ? '#52c41a' : v >= 0.9 ? '#faad14' : '#ff4d4f';
+        const color = v >= 0.95 ? '#16a34a' : v >= 0.9 ? '#d97706' : '#dc2626';
         // 背景色条：按出勤率比例填充
         return (
-          <div style={{ position: 'relative', width: 70, height: 22, margin: '0 auto', borderRadius: 4, overflow: 'hidden', background: 'rgba(255,255,255,0.06)' }}>
-            <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${Math.min(v * 100, 100)}%`, background: v >= 0.95 ? 'rgba(82,196,26,0.25)' : v >= 0.9 ? 'rgba(250,173,20,0.25)' : 'rgba(255,77,79,0.25)', transition: 'width 0.3s' }} />
+          <div style={{ position: 'relative', width: 70, height: 22, margin: '0 auto', borderRadius: 4, overflow: 'hidden', background: '#f6f5fc' }}>
+            <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${Math.min(v * 100, 100)}%`, background: v >= 0.95 ? 'rgba(22,163,74,0.25)' : v >= 0.9 ? 'rgba(217,119,6,0.25)' : 'rgba(220,38,38,0.25)', transition: 'width 0.3s' }} />
             <span style={{ position: 'relative', color, fontSize: 12, fontWeight: 600, lineHeight: '22px' }}>{pct}%</span>
           </div>
         );
@@ -468,10 +468,10 @@ function Attendance() {
   ];
 
   const kpiCards = [
-    { label: '参与考勤人数', value: kpi.memberCount, color: '#4d9fff' },
-    { label: '总应出勤(人天)', value: kpi.totalOnDuty, color: 'rgba(255,255,255,0.9)' },
-    { label: '总实际出勤(人天)', value: kpi.totalAttend, color: '#52c41a' },
-    { label: '总请假(天)', value: kpi.totalLeave, color: '#faad14' },
+    { label: '参与考勤人数', value: kpi.memberCount, color: '#6366f1' },
+    { label: '总应出勤(人天)', value: kpi.totalOnDuty, color: '#1e1b2e' },
+    { label: '总实际出勤(人天)', value: kpi.totalAttend, color: '#16a34a' },
+    { label: '总请假(天)', value: kpi.totalLeave, color: '#d97706' },
   ];
 
   return (
@@ -479,26 +479,26 @@ function Attendance() {
       <div className="page-header">
         <div>
           <h3 style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <CalendarOutlined style={{ color: '#4d9fff' }} />
+            <CalendarOutlined style={{ color: '#6366f1' }} />
             人员考勤
           </h3>
-          <div style={{ marginTop: 8, color: 'rgba(255,255,255,0.4)', fontSize: 12 }}>
+          <div style={{ marginTop: 8, color: '#6b6892', fontSize: 12 }}>
             当前周期：{cycleLabel} · 按项目分组 · 应出勤=项目周期∩考勤周期（含周末）{adjustedCount > 0 ? ` · 已校准 ${adjustedCount} 项` : ''}
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <Button icon={<EditOutlined />} onClick={openManualAdjust}
-            style={{ background: 'rgba(250,173,20,0.1)', border: '1px solid rgba(250,173,20,0.4)', color: '#faad14', borderRadius: 8 }}>
+            style={{ background: 'rgba(217,119,6,0.1)', border: '1px solid rgba(217,119,6,0.4)', color: '#d97706', borderRadius: 8 }}>
             人工校准
           </Button>
           <Button icon={<ThunderboltOutlined />} onClick={openBatchAdjust}
-            style={{ background: 'rgba(82,196,26,0.1)', border: '1px solid rgba(82,196,26,0.4)', color: '#52c41a', borderRadius: 8 }}>
+            style={{ background: 'rgba(22,163,74,0.1)', border: '1px solid rgba(22,163,74,0.4)', color: '#16a34a', borderRadius: 8 }}>
             批量人工校准
           </Button>
           <Button icon={<EyeOutlined />} onClick={() => setPreviewOpen(true)}
-            style={{ background: 'rgba(77,159,255,0.1)', border: '1px solid rgba(77,159,255,0.3)', color: '#7cb8ff', borderRadius: 8 }}>预览</Button>
+            style={{ background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.3)', color: '#818cf8', borderRadius: 8 }}>预览</Button>
           <Button type="primary" icon={<DownloadOutlined />} onClick={handleExport}
-            style={{ background: 'linear-gradient(135deg, #4d9fff, #69b1ff)', border: 'none', borderRadius: 8, fontWeight: 500 }}>一键导出 Excel</Button>
+            style={{ background: 'linear-gradient(135deg, #6366f1, #818cf8)', border: 'none', borderRadius: 8, fontWeight: 500 }}>一键导出 Excel</Button>
         </div>
       </div>
 
@@ -542,34 +542,34 @@ function Attendance() {
         footer={[<Button key="close" onClick={() => setPreviewOpen(false)}>关闭</Button>, <Button key="print" icon={<PrinterOutlined />} onClick={() => window.print()} type="primary">打印</Button>]}
       >
         <div style={{ maxHeight: '60vh', overflow: 'auto' }}>
-          {filteredRows.length === 0 ? <div style={{ padding: 40, textAlign: 'center', color: 'rgba(255,255,255,0.3)' }}>暂无数据</div> : (
+          {filteredRows.length === 0 ? <div style={{ padding: 40, textAlign: 'center', color: '#9d9ab8' }}>暂无数据</div> : (
             Object.entries(
               [...filteredRows].sort((a, b) => a.projectName.localeCompare(b.projectName)).reduce<Record<string, AttendanceRow[]>>((acc, r) => { (acc[r.projectName] = acc[r.projectName] || []).push(r); return acc; }, {}),
             ).map(([projectName, rows]) => (
               <div key={projectName} style={{ marginBottom: 16 }}>
-                <div style={{ padding: '8px 12px', background: 'rgba(77,159,255,0.06)', borderRadius: 6, marginBottom: 4, color: '#4d9fff', fontWeight: 500, fontSize: 13 }}>
+                <div style={{ padding: '8px 12px', background: 'rgba(99,102,241,0.06)', borderRadius: 6, marginBottom: 4, color: '#6366f1', fontWeight: 500, fontSize: 13 }}>
                   {projectName}（{rows.length} 人 · 项目总周期 {rows[0].projectTotalDays} 天）
                 </div>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                   <thead>
-                    <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-                      <th style={{ padding: '6px 8px', textAlign: 'left', color: 'rgba(255,255,255,0.5)', fontWeight: 400 }}>人员</th>
-                      <th style={{ padding: '6px 8px', textAlign: 'left', color: 'rgba(255,255,255,0.5)', fontWeight: 400 }}>岗位</th>
-                      <th style={{ padding: '6px 8px', textAlign: 'center', color: 'rgba(255,255,255,0.5)', fontWeight: 400 }}>应出勤</th>
-                      <th style={{ padding: '6px 8px', textAlign: 'center', color: 'rgba(255,255,255,0.5)', fontWeight: 400 }}>实际</th>
-                      <th style={{ padding: '6px 8px', textAlign: 'center', color: 'rgba(255,255,255,0.5)', fontWeight: 400 }}>请假</th>
-                      <th style={{ padding: '6px 8px', textAlign: 'center', color: 'rgba(255,255,255,0.5)', fontWeight: 400 }}>出勤率</th>
+                    <tr style={{ borderBottom: '1px solid #dcd9f2' }}>
+                      <th style={{ padding: '6px 8px', textAlign: 'left', color: '#6b6892', fontWeight: 400 }}>人员</th>
+                      <th style={{ padding: '6px 8px', textAlign: 'left', color: '#6b6892', fontWeight: 400 }}>岗位</th>
+                      <th style={{ padding: '6px 8px', textAlign: 'center', color: '#6b6892', fontWeight: 400 }}>应出勤</th>
+                      <th style={{ padding: '6px 8px', textAlign: 'center', color: '#6b6892', fontWeight: 400 }}>实际</th>
+                      <th style={{ padding: '6px 8px', textAlign: 'center', color: '#6b6892', fontWeight: 400 }}>请假</th>
+                      <th style={{ padding: '6px 8px', textAlign: 'center', color: '#6b6892', fontWeight: 400 }}>出勤率</th>
                     </tr>
                   </thead>
                   <tbody>
                     {rows.map((r) => (
-                      <tr key={r.key} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                        <td style={{ padding: '6px 8px', color: 'rgba(255,255,255,0.9)' }}>{r.memberName}</td>
-                        <td style={{ padding: '6px 8px', color: (POSITION_STYLES[r.position] || {}).color || 'rgba(255,255,255,0.6)' }}>{r.position}</td>
-                        <td style={{ padding: '6px 8px', textAlign: 'center', color: 'rgba(255,255,255,0.85)' }}>{r.onDutyDays}</td>
-                        <td style={{ padding: '6px 8px', textAlign: 'center', color: '#52c41a' }}>{r.attendDays}</td>
-                        <td style={{ padding: '6px 8px', textAlign: 'center', color: r.leaveDays > 0 ? '#faad14' : 'rgba(255,255,255,0.3)' }}>{r.leaveDays}</td>
-                        <td style={{ padding: '6px 8px', textAlign: 'center', color: r.rate >= 0.95 ? '#52c41a' : r.rate >= 0.9 ? '#faad14' : '#ff4d4f' }}>{(r.rate * 100).toFixed(1)}%</td>
+                      <tr key={r.key} style={{ borderBottom: '1px solid #eeedf8' }}>
+                        <td style={{ padding: '6px 8px', color: '#1e1b2e' }}>{r.memberName}</td>
+                        <td style={{ padding: '6px 8px', color: (POSITION_STYLES[r.position] || {}).color || '#46436a' }}>{r.position}</td>
+                        <td style={{ padding: '6px 8px', textAlign: 'center', color: '#1e1b2e' }}>{r.onDutyDays}</td>
+                        <td style={{ padding: '6px 8px', textAlign: 'center', color: '#16a34a' }}>{r.attendDays}</td>
+                        <td style={{ padding: '6px 8px', textAlign: 'center', color: r.leaveDays > 0 ? '#d97706' : '#9d9ab8' }}>{r.leaveDays}</td>
+                        <td style={{ padding: '6px 8px', textAlign: 'center', color: r.rate >= 0.95 ? '#16a34a' : r.rate >= 0.9 ? '#d97706' : '#dc2626' }}>{(r.rate * 100).toFixed(1)}%</td>
                       </tr>
                     ))}
                   </tbody>
@@ -585,9 +585,9 @@ function Attendance() {
         onCancel={() => { setManualOpen(false); manualForm.resetFields(); setManualMember(undefined); setManualProject(undefined); }}
         onOk={handleManualSave}
         okText="保存校准" cancelText="取消" width={520}
-        okButtonProps={{ style: { background: 'linear-gradient(135deg, #faad14, #ffc53d)', border: 'none' } }}
+        okButtonProps={{ style: { background: 'linear-gradient(135deg, #d97706, #f59e0b)', border: 'none' } }}
       >
-        <div style={{ background: 'rgba(250,173,20,0.06)', border: '1px solid rgba(250,173,20,0.15)', borderRadius: 6, padding: '8px 12px', marginBottom: 16, color: 'rgba(255,255,255,0.6)', fontSize: 12 }}>
+        <div style={{ background: 'rgba(217,119,6,0.06)', border: '1px solid rgba(217,119,6,0.15)', borderRadius: 6, padding: '8px 12px', marginBottom: 16, color: '#46436a', fontSize: 12 }}>
         手动指定某人员在某项目本周期内的应出勤/请假天数，会覆盖自动计算结果。保存后该人员在表中显示「已校准」标签。
         </div>
         <Form form={manualForm} layout="vertical">
@@ -617,7 +617,7 @@ function Attendance() {
               <InputNumber min={0} max={365} style={{ width: '100%' }} placeholder="自动填入系统计算值" />
             </Form.Item>
           </div>
-          <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11, marginTop: -8 }}>
+          <div style={{ color: '#9d9ab8', fontSize: 11, marginTop: -8 }}>
             提示：选择人员/项目后会自动填入系统计算值（基于项目周期∩考勤周期-休假），可在此基础上微调保存
           </div>
         </Form>
@@ -627,9 +627,9 @@ function Attendance() {
       <Modal
         title={
           <span>
-            <ThunderboltOutlined style={{ color: '#52c41a', marginRight: 8 }} />
+            <ThunderboltOutlined style={{ color: '#16a34a', marginRight: 8 }} />
             批量人工校准
-            <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginLeft: 12, fontWeight: 'normal' }}>
+            <span style={{ fontSize: 12, color: '#6b6892', marginLeft: 12, fontWeight: 'normal' }}>
               支持校准考勤（请假/应出勤）和岗位 · 仅保存实际修改的项
             </span>
           </span>
@@ -640,7 +640,7 @@ function Attendance() {
         okText="保存全部修改"
         cancelText="取消"
         width={960}
-        okButtonProps={{ style: { background: 'linear-gradient(135deg, #52c41a, #73d13d)', border: 'none' } }}
+        okButtonProps={{ style: { background: 'linear-gradient(135deg, #16a34a, #73d13d)', border: 'none' } }}
       >
         <Tabs
           activeKey={batchTab}
@@ -653,8 +653,8 @@ function Attendance() {
                 <Empty description="当前筛选无考勤数据" />
               ) : (
                 <div style={{ maxHeight: '55vh', overflowY: 'auto' }}>
-                  <div style={{ background: 'rgba(82,196,26,0.05)', border: '1px solid rgba(82,196,26,0.15)', borderRadius: 6, padding: '8px 12px', marginBottom: 12, color: 'rgba(255,255,255,0.6)', fontSize: 12 }}>
-                    <ToolOutlined style={{ color: '#52c41a', marginRight: 6 }} />
+                  <div style={{ background: 'rgba(22,163,74,0.05)', border: '1px solid rgba(22,163,74,0.15)', borderRadius: 6, padding: '8px 12px', marginBottom: 12, color: '#46436a', fontSize: 12 }}>
+                    <ToolOutlined style={{ color: '#16a34a', marginRight: 6 }} />
                     下方表格展示了「当前筛选条件下」的全部考勤行。修改「请假天数」保存后即覆盖自动计算结果。仅当数值与原值不同时才会落库。
                   </div>
                   <Table<AttendanceRow>
@@ -669,7 +669,7 @@ function Attendance() {
                         render: (name: string, r) => (
                           <div>
                             <div style={{ fontSize: 12 }}>{name}</div>
-                            <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)' }}>{r.position}</div>
+                            <div style={{ fontSize: 10, color: '#6b6892' }}>{r.position}</div>
                           </div>
                         ),
                       },
@@ -698,7 +698,7 @@ function Attendance() {
                       },
                       { title: '原值', key: 'orig', width: 100, align: 'center' as const,
                         render: (_v, r) => (
-                          <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11 }}>
+                          <span style={{ color: '#6b6892', fontSize: 11 }}>
                             应出 {r.onDutyDays} / 请假 {r.leaveDays}
                           </span>
                         ),
@@ -709,7 +709,7 @@ function Attendance() {
                           const dirty = (cur?.onDutyDays !== undefined && cur.onDutyDays !== r.onDutyDays) || (cur?.leaveDays !== undefined && cur.leaveDays !== r.leaveDays);
                           return dirty
                             ? <Tag color="orange" style={{ margin: 0 }}>已修改</Tag>
-                            : <Tag style={{ margin: 0, background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.4)', border: 'none' }}>未变</Tag>;
+                            : <Tag style={{ margin: 0, background: '#f6f5fc', color: '#6b6892', border: 'none' }}>未变</Tag>;
                         },
                       },
                     ]}
@@ -722,8 +722,8 @@ function Attendance() {
               label: <span><UserOutlined /> 批量校准岗位（{teamMembers.length} 人）</span>,
               children: (
                 <div style={{ maxHeight: '55vh', overflowY: 'auto' }}>
-                  <div style={{ background: 'rgba(77,159,255,0.05)', border: '1px solid rgba(77,159,255,0.15)', borderRadius: 6, padding: '8px 12px', marginBottom: 12, color: 'rgba(255,255,255,0.6)', fontSize: 12 }}>
-                    <UserOutlined style={{ color: '#4d9fff', marginRight: 6 }} />
+                  <div style={{ background: 'rgba(99,102,241,0.05)', border: '1px solid rgba(99,102,241,0.15)', borderRadius: 6, padding: '8px 12px', marginBottom: 12, color: '#46436a', fontSize: 12 }}>
+                    <UserOutlined style={{ color: '#6366f1', marginRight: 6 }} />
                     修改岗位后即时保存到团队成员档案（影响所有页面）。仅当与原值不同时才会落库。
                   </div>
                   <Table
@@ -759,7 +759,7 @@ function Attendance() {
                           const nv = batchPos[r.id] ?? cur;
                           return nv !== cur
                             ? <Tag color="orange" style={{ margin: 0 }}>已修改</Tag>
-                            : <Tag style={{ margin: 0, background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.4)', border: 'none' }}>未变</Tag>;
+                            : <Tag style={{ margin: 0, background: '#f6f5fc', color: '#6b6892', border: 'none' }}>未变</Tag>;
                         },
                       },
                     ]}
@@ -796,8 +796,8 @@ function StatisticsView(props: {
     <>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 20, marginTop: 16 }}>
         {kpiCards.map((c) => (
-          <div key={c.label} style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: '16px 20px' }}>
-            <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, marginBottom: 6 }}>{c.label}</div>
+          <div key={c.label} style={{ background: '#f8f7fd', border: '1px solid #e9e7f4', borderRadius: 12, padding: '16px 20px' }}>
+            <div style={{ color: '#6b6892', fontSize: 12, marginBottom: 6 }}>{c.label}</div>
             <div style={{ color: c.color, fontSize: 24, fontWeight: 500 }}>{c.value}</div>
           </div>
         ))}
@@ -817,8 +817,8 @@ function StatisticsView(props: {
           options={memberOptions.map((v) => ({ value: v, label: v }))} />
       </div>
 
-      <style>{`.att-row-low > td { background: rgba(255,77,79,0.04) !important; }`}</style>
-      <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, overflow: 'hidden' }}>
+      <style>{`.att-row-low > td { background: rgba(220,38,38,0.04) !important; }`}</style>
+      <div style={{ background: '#f6f5fc', border: '1px solid #e9e7f4', borderRadius: 12, overflow: 'hidden' }}>
         <Table<AttendanceNode> columns={columns} dataSource={treeData}
           pagination={{ pageSize: 20, showSizeChanger: true, pageSizeOptions: ['10', '20', '50'], showTotal: (t) => `共 ${t} 条` }}
           size="small" scroll={{ x: 1050 }}
@@ -829,17 +829,17 @@ function StatisticsView(props: {
             return (
               <Table.Summary fixed>
                 <Table.Summary.Row>
-                  <Table.Summary.Cell index={0} colSpan={3}><span style={{ color: '#4d9fff', fontWeight: 600 }}>总计（{treeData.length} 个项目）</span></Table.Summary.Cell>
-                  <Table.Summary.Cell index={3} align="center"><span style={{ color: 'rgba(255,255,255,0.5)' }}>-</span></Table.Summary.Cell>
-                  <Table.Summary.Cell index={4} align="center"><span style={{ color: '#4d9fff', fontWeight: 500 }}>{kpi.totalOnDuty}</span></Table.Summary.Cell>
-                  <Table.Summary.Cell index={5} align="center"><span style={{ color: '#52c41a', fontWeight: 500 }}>{kpi.totalAttend}</span></Table.Summary.Cell>
-                  <Table.Summary.Cell index={6} align="center"><span style={{ color: '#faad14', fontWeight: 500 }}>{kpi.totalLeave}</span></Table.Summary.Cell>
-                  <Table.Summary.Cell index={7} align="center"><span style={{ color: '#4d9fff', fontWeight: 500 }}>{(kpi.avgRate * 100).toFixed(1)}%</span></Table.Summary.Cell>
+                  <Table.Summary.Cell index={0} colSpan={3}><span style={{ color: '#6366f1', fontWeight: 600 }}>总计（{treeData.length} 个项目）</span></Table.Summary.Cell>
+                  <Table.Summary.Cell index={3} align="center"><span style={{ color: '#6b6892' }}>-</span></Table.Summary.Cell>
+                  <Table.Summary.Cell index={4} align="center"><span style={{ color: '#6366f1', fontWeight: 500 }}>{kpi.totalOnDuty}</span></Table.Summary.Cell>
+                  <Table.Summary.Cell index={5} align="center"><span style={{ color: '#16a34a', fontWeight: 500 }}>{kpi.totalAttend}</span></Table.Summary.Cell>
+                  <Table.Summary.Cell index={6} align="center"><span style={{ color: '#d97706', fontWeight: 500 }}>{kpi.totalLeave}</span></Table.Summary.Cell>
+                  <Table.Summary.Cell index={7} align="center"><span style={{ color: '#6366f1', fontWeight: 500 }}>{(kpi.avgRate * 100).toFixed(1)}%</span></Table.Summary.Cell>
                 </Table.Summary.Row>
               </Table.Summary>
             );
           }}
-          locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={<span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 13 }}>{dayjs(cycleStart).isAfter(dayjs().format('YYYY-MM-DD')) ? '该周期尚未开始' : '当前筛选无考勤数据'}</span>} /> }}
+          locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={<span style={{ color: '#9d9ab8', fontSize: 13 }}>{dayjs(cycleStart).isAfter(dayjs().format('YYYY-MM-DD')) ? '该周期尚未开始' : '当前筛选无考勤数据'}</span>} /> }}
         />
       </div>
     </>
@@ -1012,14 +1012,14 @@ function ProjectEntryView(props: {
           <Radio.Button value="month">自然月</Radio.Button>
         </Radio.Group>
         <DatePicker picker="month" value={props.monthFilter} onChange={(v) => v && props.setMonthFilter(v)} allowClear={false} style={{ width: 140 }} />
-        <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>{cycleLabel}</span>
+        <span style={{ color: '#6b6892', fontSize: 12 }}>{cycleLabel}</span>
       </div>
 
       {!selectedProject ? (
-        <Empty description={<span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 13 }}>请选择一个项目进行考勤录入</span>} style={{ padding: 60 }} />
+        <Empty description={<span style={{ color: '#9d9ab8', fontSize: 13 }}>请选择一个项目进行考勤录入</span>} style={{ padding: 60 }} />
       ) : projectRows.length === 0 ? (
         <div style={{ textAlign: 'center', padding: 60 }}>
-          <Empty description={<span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 13 }}>该项目在本周期内无在岗人员</span>} />
+          <Empty description={<span style={{ color: '#9d9ab8', fontSize: 13 }}>该项目在本周期内无在岗人员</span>} />
           <Button type="primary" icon={<PlusOutlined />} onClick={() => { setSelectedNewMembers([]); setAddMemberOpen(true); }}
             style={{ marginTop: 16, borderRadius: 8 }}>
             添加人员录入考勤
@@ -1028,15 +1028,15 @@ function ProjectEntryView(props: {
       ) : (
         <>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <div style={{ background: 'rgba(77,159,255,0.06)', border: '1px solid rgba(77,159,255,0.15)', borderRadius: 8, padding: '8px 14px', fontSize: 12, color: 'rgba(255,255,255,0.6)', flex: 1, marginRight: 12 }}>
+            <div style={{ background: 'rgba(99,102,241,0.06)', border: '1px solid rgba(99,102,241,0.15)', borderRadius: 8, padding: '8px 14px', fontSize: 12, color: '#46436a', flex: 1, marginRight: 12 }}>
               💡 应出勤 = 项目周期 ∩ 考勤周期（自动推算，含周末）· 实际出勤和岗位可直接编辑 · 修改后点击「一键保存」
             </div>
             <Button icon={<PlusOutlined />} onClick={() => { setSelectedNewMembers([]); setAddMemberOpen(true); }}
-              style={{ borderRadius: 8, borderColor: 'rgba(77,159,255,0.3)', color: '#4d9fff', background: 'rgba(77,159,255,0.06)', whiteSpace: 'nowrap' }}>
+              style={{ borderRadius: 8, borderColor: 'rgba(99,102,241,0.3)', color: '#6366f1', background: 'rgba(99,102,241,0.06)', whiteSpace: 'nowrap' }}>
               添加人员
             </Button>
           </div>
-          <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, overflow: 'hidden' }}>
+          <div style={{ background: '#f6f5fc', border: '1px solid #e9e7f4', borderRadius: 12, overflow: 'hidden' }}>
             <Table
               size="small" pagination={{ pageSize: 20, showSizeChanger: false, showTotal: (t) => `共 ${t} 人` }}
               dataSource={projectRows} rowKey="memberId"
@@ -1044,7 +1044,7 @@ function ProjectEntryView(props: {
                 { title: '人员', dataIndex: 'memberName', width: 100,
                   render: (name: string, r: any) => (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span style={{ color: 'rgba(255,255,255,0.9)', fontSize: 13 }}>{name}</span>
+                      <span style={{ color: '#1e1b2e', fontSize: 13 }}>{name}</span>
                       {savedKeys.has(r.memberId) && <Tag color="success" style={{ margin: 0, fontSize: 10 }}>已保存</Tag>}
                     </div>
                   ),
@@ -1093,7 +1093,7 @@ function ProjectEntryView(props: {
                     const s = editing[r.memberId]?.projectStart ?? r.projectStart;
                     const e = editing[r.memberId]?.projectEnd ?? r.projectEnd;
                     const duty = (s && e) ? daysBetween(s, e) : 0;
-                    return <span style={{ color: 'rgba(255,255,255,0.6)' }}>{duty}</span>;
+                    return <span style={{ color: '#46436a' }}>{duty}</span>;
                   },
                 },
                 { title: '实际出勤(天)', key: 'attend', width: 110, align: 'center' as const,
@@ -1125,7 +1125,7 @@ function ProjectEntryView(props: {
                     const attend = entered != null ? Math.min(entered, duty) : Math.max(duty - leave, 0);
                     const rate = duty > 0 ? attend / duty : 0;
                     const pct = (rate * 100).toFixed(0) + '%';
-                    const color = rate >= 0.95 ? '#52c41a' : rate >= 0.9 ? '#faad14' : '#ff4d4f';
+                    const color = rate >= 0.95 ? '#16a34a' : rate >= 0.9 ? '#d97706' : '#dc2626';
                     return <span style={{ color, fontWeight: 600 }}>{pct}</span>;
                   },
                 },
@@ -1134,10 +1134,10 @@ function ProjectEntryView(props: {
                 <Table.Summary fixed>
                   <Table.Summary.Row>
                     <Table.Summary.Cell index={0} colSpan={5}>
-                      <span style={{ color: '#4d9fff', fontWeight: 600 }}>项目汇总（{projectRows.length} 人）</span>
+                      <span style={{ color: '#6366f1', fontWeight: 600 }}>项目汇总（{projectRows.length} 人）</span>
                     </Table.Summary.Cell>
-                    <Table.Summary.Cell index={5} align="center"><span style={{ color: 'rgba(255,255,255,0.5)' }}>{projectRows.reduce((s, r) => { const st = editing[r.memberId]?.projectStart ?? r.projectStart; const en = editing[r.memberId]?.projectEnd ?? r.projectEnd; return s + ((st && en) ? daysBetween(st, en) : 0); }, 0)}</span></Table.Summary.Cell>
-                    <Table.Summary.Cell index={6} align="center"><span style={{ color: '#4d9fff', fontWeight: 600 }}>-</span></Table.Summary.Cell>
+                    <Table.Summary.Cell index={5} align="center"><span style={{ color: '#6b6892' }}>{projectRows.reduce((s, r) => { const st = editing[r.memberId]?.projectStart ?? r.projectStart; const en = editing[r.memberId]?.projectEnd ?? r.projectEnd; return s + ((st && en) ? daysBetween(st, en) : 0); }, 0)}</span></Table.Summary.Cell>
+                    <Table.Summary.Cell index={6} align="center"><span style={{ color: '#6366f1', fontWeight: 600 }}>-</span></Table.Summary.Cell>
                   </Table.Summary.Row>
                 </Table.Summary>
               )}
@@ -1176,7 +1176,7 @@ function ProjectEntryView(props: {
         cancelText="取消"
         width={520}
       >
-        <div style={{ marginBottom: 12, padding: '8px 12px', background: 'rgba(77,159,255,0.06)', border: '1px solid rgba(77,159,255,0.15)', borderRadius: 6, fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>
+        <div style={{ marginBottom: 12, padding: '8px 12px', background: 'rgba(99,102,241,0.06)', border: '1px solid rgba(99,102,241,0.15)', borderRadius: 6, fontSize: 12, color: '#46436a' }}>
           从团队池选择人员添加到本项目，添加后可录入其出勤天数和岗位。已在本项目列表中的人员不会重复显示。
         </div>
         <Select

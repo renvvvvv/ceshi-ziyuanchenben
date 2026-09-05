@@ -19,17 +19,17 @@ echarts.use([PieChart, BarChart, TitleComponent, TooltipComponent, LegendCompone
 // 状态筛选配置
 // ============================================================
 const STATUS_OPTIONS = [
-  { label: '未开始', value: '未开始', color: '#ff6b35' },
-  { label: '测试中', value: '测试中', color: '#00f0ff' },
-  { label: '已完成', value: '已完成', color: '#00ff88' },
-  { label: '阻塞', value: '阻塞', color: '#ff2d55' },
+  { label: '未开始', value: '未开始', color: '#ea580c' },
+  { label: '测试中', value: '测试中', color: '#06b6d4' },
+  { label: '已完成', value: '已完成', color: '#16a34a' },
+  { label: '阻塞', value: '阻塞', color: '#ec4899' },
 ];
 
 const STATUS_COLOR_MAP: Record<string, string> = {
-  '未开始': '#ff6b35',
-  '测试中': '#00f0ff',
-  '已完成': '#00ff88',
-  '阻塞': '#ff2d55',
+  '未开始': '#ea580c',
+  '测试中': '#06b6d4',
+  '已完成': '#16a34a',
+  '阻塞': '#ec4899',
 };
 
 function Dashboard() {
@@ -173,14 +173,14 @@ function Dashboard() {
     tooltip: {
       trigger: 'item' as const,
       formatter: '{b}: {c} 个 ({d}%)',
-      backgroundColor: 'rgba(13, 31, 60, 0.92)',
-      borderColor: 'rgba(77, 159, 255, 0.3)',
+      backgroundColor: 'rgba(255, 255, 255, 0.96)',
+      borderColor: 'rgba(99,102,241, 0.3)',
       borderWidth: 1,
-      textStyle: { color: 'rgba(255,255,255,0.85)', fontFamily: 'Outfit, Noto Sans SC, sans-serif', fontSize: 12 },
+      textStyle: { color: '#1e1b2e', fontFamily: 'Outfit, Noto Sans SC, sans-serif', fontSize: 12 },
     },
     legend: {
       bottom: 0,
-      textStyle: { color: 'rgba(255,255,255,0.5)', fontFamily: 'Outfit, Noto Sans SC, sans-serif', fontSize: 12 },
+      textStyle: { color: '#6b6892', fontFamily: 'Outfit, Noto Sans SC, sans-serif', fontSize: 12 },
     },
     series: [
       {
@@ -191,12 +191,12 @@ function Dashboard() {
         avoidLabelOverlap: false,
         itemStyle: {
           borderRadius: 6,
-          borderColor: 'rgba(8, 14, 28, 0.8)',
+          borderColor: '#ffffff',
           borderWidth: 3,
         },
         label: {
           show: true,
-          color: 'rgba(255,255,255,0.7)',
+          color: '#46436a',
           fontFamily: 'Outfit, Noto Sans SC, sans-serif',
           fontSize: 12,
           formatter: '{b}\n{d}%',
@@ -205,7 +205,7 @@ function Dashboard() {
           name: item.name,
           value: item.value,
           itemStyle: {
-            color: STATUS_COLOR_MAP[item.name] || '#fff',
+            color: STATUS_COLOR_MAP[item.name] || '#6366f1',
           },
         })),
       },
@@ -219,10 +219,10 @@ function Dashboard() {
       tooltip: {
         trigger: 'axis' as const,
         formatter: '{b}: {c} MW',
-        backgroundColor: 'rgba(13, 31, 60, 0.92)',
-        borderColor: 'rgba(77, 159, 255, 0.3)',
+        backgroundColor: 'rgba(255, 255, 255, 0.96)',
+        borderColor: 'rgba(99,102,241, 0.3)',
         borderWidth: 1,
-        textStyle: { color: 'rgba(255,255,255,0.85)', fontFamily: 'Outfit, Noto Sans SC, sans-serif', fontSize: 12 },
+        textStyle: { color: '#1e1b2e', fontFamily: 'Outfit, Noto Sans SC, sans-serif', fontSize: 12 },
       },
       grid: {
         left: '3%',
@@ -233,18 +233,18 @@ function Dashboard() {
       xAxis: {
         type: 'category' as const,
         data: sorted.map((item) => item.name),
-        axisLabel: { color: 'rgba(255,255,255,0.5)', fontFamily: 'Outfit, Noto Sans SC, sans-serif', fontSize: 11 },
-        axisLine: { lineStyle: { color: 'rgba(255,255,255,0.1)' } },
+        axisLabel: { color: '#6b6892', fontFamily: 'Outfit, Noto Sans SC, sans-serif', fontSize: 11 },
+        axisLine: { lineStyle: { color: '#e9e7f4' } },
         axisTick: { show: false },
       },
       yAxis: {
         type: 'value' as const,
         name: 'MW',
-        nameTextStyle: { color: 'rgba(255,255,255,0.4)', fontFamily: 'Outfit, Noto Sans SC, sans-serif', fontSize: 11 },
-        axisLabel: { color: 'rgba(255,255,255,0.5)', fontFamily: 'Outfit, Noto Sans SC, sans-serif', fontSize: 11 },
+        nameTextStyle: { color: '#6b6892', fontFamily: 'Outfit, Noto Sans SC, sans-serif', fontSize: 11 },
+        axisLabel: { color: '#6b6892', fontFamily: 'Outfit, Noto Sans SC, sans-serif', fontSize: 11 },
         axisLine: { show: false },
         axisTick: { show: false },
-        splitLine: { lineStyle: { color: 'rgba(255,255,255,0.06)' } },
+        splitLine: { lineStyle: { color: '#f6f5fc' } },
       },
       series: [
         {
@@ -253,12 +253,12 @@ function Dashboard() {
           data: sorted.map((item) => item.mwOutput),
           itemStyle: {
             color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-              { offset: 0, color: '#00f0ff' },
-              { offset: 0.4, color: '#4d9fff' },
-              { offset: 1, color: '#1a3a8f' },
+              { offset: 0, color: '#818cf8' },
+              { offset: 0.5, color: '#6366f1' },
+              { offset: 1, color: '#a855f7' },
             ]),
             borderRadius: [6, 6, 0, 0],
-            shadowColor: 'rgba(0, 240, 255, 0.35)',
+            shadowColor: 'rgba(99, 102, 241, 0.25)',
             shadowBlur: 12,
             shadowOffsetY: 4,
           },
@@ -266,7 +266,7 @@ function Dashboard() {
           label: {
             show: true,
             position: 'top' as const,
-            color: '#7cb8ff',
+            color: '#6366f1',
             fontSize: 11,
             fontFamily: 'Outfit, Noto Sans SC, sans-serif',
             formatter: '{c} MW',
@@ -305,7 +305,7 @@ function Dashboard() {
   // 自定义标签渲染（多选下拉框中的标签）
   const tagRender = (props: { label: React.ReactNode; value: string; closable: boolean; onClose: () => void }) => {
     const { label, value, closable, onClose } = props;
-    const color = STATUS_COLOR_MAP[value] || '#fff';
+    const color = STATUS_COLOR_MAP[value] || '#6366f1';
     return (
       <Tag
         color={color}
@@ -320,7 +320,7 @@ function Dashboard() {
 
   if (loading) {
     return (
-      <div style={{ textAlign: 'center', padding: 120, color: 'rgba(255,255,255,0.6)', fontFamily: 'var(--font-primary)' }}>
+      <div style={{ textAlign: 'center', padding: 120, color: '#46436a', fontFamily: 'var(--font-primary)' }}>
         <Spin size="large" tip="加载中..." />
       </div>
     );
@@ -334,7 +334,7 @@ function Dashboard() {
           icon={<ReloadOutlined />}
           onClick={handleRefresh}
           className="glass-btn"
-          style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.6)', fontFamily: 'var(--font-primary)', borderRadius: 8 }}
+          style={{ background: '#f6f5fc', border: '1px solid #d9d5f0', color: '#46436a', fontFamily: 'var(--font-primary)', borderRadius: 8 }}
         >
           刷新
         </Button>
@@ -352,8 +352,9 @@ function Dashboard() {
         {/* 进行中项目 */}
         <div
           style={{
-            background: 'rgba(8, 16, 32, 0.9)',
-            border: '1px solid rgba(0, 240, 255, 0.15)',
+            background: '#ffffff',
+            border: '1px solid #e9e7f4',
+            boxShadow: '0 8px 24px rgba(99,102,241,0.10)',
             borderRadius: 12,
             padding: '20px 24px',
             position: 'relative',
@@ -368,8 +369,8 @@ function Dashboard() {
               left: 0,
               right: 0,
               height: 2,
-              background: 'linear-gradient(90deg, transparent, #00f0ff, transparent)',
-              boxShadow: '0 0 12px rgba(0, 240, 255, 0.4)',
+              background: 'linear-gradient(90deg, transparent, #06b6d4, transparent)',
+              boxShadow: '0 0 12px rgba(6, 182, 212,0.4)',
             }}
           />
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
@@ -378,14 +379,14 @@ function Dashboard() {
                 width: 8,
                 height: 8,
                 borderRadius: '50%',
-                background: '#00f0ff',
-                boxShadow: '0 0 8px rgba(0, 240, 255, 0.8)',
+                background: '#06b6d4',
+                boxShadow: '0 0 8px rgba(6, 182, 212,0.8)',
                 animation: 'pulse 2s infinite',
               }}
             />
             <span
               style={{
-                color: '#00f0ff',
+                color: '#06b6d4',
                 fontSize: 14,
                 fontWeight: 600,
                 fontFamily: 'var(--font-primary)',
@@ -394,12 +395,12 @@ function Dashboard() {
             >
               进行中项目
             </span>
-            <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 12, marginLeft: 'auto' }}>
+            <span style={{ color: '#9d9ab8', fontSize: 12, marginLeft: 'auto' }}>
               {displayData.activeProjects.length} 个
             </span>
           </div>
           {displayData.activeProjects.length === 0 ? (
-            <div style={{ color: 'rgba(255,255,255,0.25)', fontSize: 13, padding: '8px 0', fontFamily: 'var(--font-primary)' }}>
+            <div style={{ color: '#9d9ab8', fontSize: 13, padding: '8px 0', fontFamily: 'var(--font-primary)' }}>
               暂无进行中的项目
             </div>
           ) : (
@@ -412,28 +413,28 @@ function Dashboard() {
                     alignItems: 'center',
                     justifyContent: 'space-between',
                     padding: '10px 14px',
-                    background: 'rgba(0, 240, 255, 0.05)',
-                    border: '1px solid rgba(0, 240, 255, 0.1)',
+                    background: 'rgba(6, 182, 212,0.05)',
+                    border: '1px solid rgba(6, 182, 212,0.1)',
                     borderRadius: 8,
                     cursor: 'pointer',
                     transition: 'all 0.2s',
                   }}
                   onClick={() => navigate(`/projects/${p.id}`)}
                   onMouseEnter={(e) => {
-                    (e.currentTarget as HTMLElement).style.background = 'rgba(0, 240, 255, 0.1)';
-                    (e.currentTarget as HTMLElement).style.borderColor = 'rgba(0, 240, 255, 0.25)';
+                    (e.currentTarget as HTMLElement).style.background = 'rgba(6, 182, 212,0.1)';
+                    (e.currentTarget as HTMLElement).style.borderColor = 'rgba(6, 182, 212,0.25)';
                   }}
                   onMouseLeave={(e) => {
-                    (e.currentTarget as HTMLElement).style.background = 'rgba(0, 240, 255, 0.05)';
-                    (e.currentTarget as HTMLElement).style.borderColor = 'rgba(0, 240, 255, 0.1)';
+                    (e.currentTarget as HTMLElement).style.background = 'rgba(6, 182, 212,0.05)';
+                    (e.currentTarget as HTMLElement).style.borderColor = 'rgba(6, 182, 212,0.1)';
                   }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-                    <ProjectOutlined style={{ color: '#00f0ff', fontSize: 14, flexShrink: 0 }} />
+                    <ProjectOutlined style={{ color: '#06b6d4', fontSize: 14, flexShrink: 0 }} />
                     <div style={{ minWidth: 0 }}>
                       <div
                         style={{
-                          color: 'rgba(255,255,255,0.85)',
+                          color: '#1e1b2e',
                           fontSize: 13,
                           fontWeight: 500,
                           fontFamily: 'var(--font-primary)',
@@ -445,12 +446,12 @@ function Dashboard() {
                       >
                         {p.name}
                       </div>
-                      <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 11, marginTop: 2 }}>
+                      <div style={{ color: '#9d9ab8', fontSize: 11, marginTop: 2 }}>
                         {p.city} · {p.startDate} ~ {p.endDate}
                       </div>
                     </div>
                   </div>
-                  <RightOutlined style={{ color: 'rgba(0, 240, 255, 0.4)', fontSize: 12, flexShrink: 0 }} />
+                  <RightOutlined style={{ color: 'rgba(6, 182, 212,0.4)', fontSize: 12, flexShrink: 0 }} />
                 </div>
               ))}
             </div>
@@ -460,8 +461,9 @@ function Dashboard() {
         {/* 即将开始项目 */}
         <div
           style={{
-            background: 'rgba(8, 16, 32, 0.9)',
-            border: '1px solid rgba(255, 107, 53, 0.15)',
+            background: '#ffffff',
+            border: '1px solid #e9e7f4',
+            boxShadow: '0 8px 24px rgba(99,102,241,0.10)',
             borderRadius: 12,
             padding: '20px 24px',
             position: 'relative',
@@ -475,15 +477,15 @@ function Dashboard() {
               left: 0,
               right: 0,
               height: 2,
-              background: 'linear-gradient(90deg, transparent, #ff6b35, transparent)',
-              boxShadow: '0 0 12px rgba(255, 107, 53, 0.4)',
+              background: 'linear-gradient(90deg, transparent, #ea580c, transparent)',
+              boxShadow: '0 0 12px rgba(234, 88, 12,0.4)',
             }}
           />
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-            <ClockCircleOutlined style={{ color: '#ff6b35', fontSize: 16 }} />
+            <ClockCircleOutlined style={{ color: '#ea580c', fontSize: 16 }} />
             <span
               style={{
-                color: '#ff6b35',
+                color: '#ea580c',
                 fontSize: 14,
                 fontWeight: 600,
                 fontFamily: 'var(--font-primary)',
@@ -492,12 +494,12 @@ function Dashboard() {
             >
               即将开始
             </span>
-            <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 12, marginLeft: 'auto' }}>
+            <span style={{ color: '#9d9ab8', fontSize: 12, marginLeft: 'auto' }}>
               未来 10 天 · {displayData.upcomingProjects.length} 个
             </span>
           </div>
           {displayData.upcomingProjects.length === 0 ? (
-            <div style={{ color: 'rgba(255,255,255,0.25)', fontSize: 13, padding: '8px 0', fontFamily: 'var(--font-primary)' }}>
+            <div style={{ color: '#9d9ab8', fontSize: 13, padding: '8px 0', fontFamily: 'var(--font-primary)' }}>
               暂无即将开始的项目
             </div>
           ) : (
@@ -512,28 +514,28 @@ function Dashboard() {
                       alignItems: 'center',
                       justifyContent: 'space-between',
                       padding: '10px 14px',
-                      background: 'rgba(255, 107, 53, 0.05)',
-                      border: '1px solid rgba(255, 107, 53, 0.1)',
+                      background: 'rgba(234, 88, 12,0.05)',
+                      border: '1px solid rgba(234, 88, 12,0.1)',
                       borderRadius: 8,
                       cursor: 'pointer',
                       transition: 'all 0.2s',
                     }}
                     onClick={() => navigate(`/projects/${p.id}`)}
                     onMouseEnter={(e) => {
-                      (e.currentTarget as HTMLElement).style.background = 'rgba(255, 107, 53, 0.1)';
-                      (e.currentTarget as HTMLElement).style.borderColor = 'rgba(255, 107, 53, 0.25)';
+                      (e.currentTarget as HTMLElement).style.background = 'rgba(234, 88, 12,0.1)';
+                      (e.currentTarget as HTMLElement).style.borderColor = 'rgba(234, 88, 12,0.25)';
                     }}
                     onMouseLeave={(e) => {
-                      (e.currentTarget as HTMLElement).style.background = 'rgba(255, 107, 53, 0.05)';
-                      (e.currentTarget as HTMLElement).style.borderColor = 'rgba(255, 107, 53, 0.1)';
+                      (e.currentTarget as HTMLElement).style.background = 'rgba(234, 88, 12,0.05)';
+                      (e.currentTarget as HTMLElement).style.borderColor = 'rgba(234, 88, 12,0.1)';
                     }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-                      <ProjectOutlined style={{ color: '#ff6b35', fontSize: 14, flexShrink: 0 }} />
+                      <ProjectOutlined style={{ color: '#ea580c', fontSize: 14, flexShrink: 0 }} />
                       <div style={{ minWidth: 0 }}>
                         <div
                           style={{
-                            color: 'rgba(255,255,255,0.85)',
+                            color: '#1e1b2e',
                             fontSize: 13,
                             fontWeight: 500,
                             fontFamily: 'var(--font-primary)',
@@ -545,14 +547,14 @@ function Dashboard() {
                         >
                           {p.name}
                         </div>
-                        <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 11, marginTop: 2 }}>
+                        <div style={{ color: '#9d9ab8', fontSize: 11, marginTop: 2 }}>
                           {p.city} · 开始日期：{p.startDate}
                         </div>
                       </div>
                     </div>
                     <div
                       style={{
-                        color: daysLeft <= 3 ? '#ff2d55' : '#ff6b35',
+                        color: daysLeft <= 3 ? '#ec4899' : '#ea580c',
                         fontSize: 11,
                         fontWeight: 600,
                         fontFamily: 'var(--font-primary)',
@@ -575,11 +577,11 @@ function Dashboard() {
         <div
           style={{
             background: displayData.overdueSevere.length > 0
-              ? 'linear-gradient(135deg, rgba(255,45,85,0.15) 0%, rgba(255,77,79,0.08) 100%)'
-              : 'linear-gradient(135deg, rgba(255,107,53,0.12) 0%, rgba(255,77,79,0.06) 100%)',
+              ? 'linear-gradient(135deg, rgba(236,72,153,0.12) 0%, rgba(236,72,153,0.05) 100%)'
+              : 'linear-gradient(135deg, rgba(234,88,12,0.10) 0%, rgba(217,119,6,0.05) 100%)',
             border: displayData.overdueSevere.length > 0
-              ? '1px solid rgba(255,45,85,0.4)'
-              : '1px solid rgba(255,77,79,0.3)',
+              ? '1px solid rgba(236,72,153,0.35)'
+              : '1px solid rgba(234,88,12,0.3)',
             borderRadius: 12,
             padding: '14px 20px',
             marginBottom: 20,
@@ -591,12 +593,12 @@ function Dashboard() {
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
             {displayData.overdueSevere.length > 0 ? (
-              <AlertOutlined style={{ color: '#ff2d55', fontSize: 18 }} />
+              <AlertOutlined style={{ color: '#ec4899', fontSize: 18 }} />
             ) : (
-              <WarningOutlined style={{ color: '#ff6b35', fontSize: 18 }} />
+              <WarningOutlined style={{ color: '#ea580c', fontSize: 18 }} />
             )}
             <span style={{
-              color: displayData.overdueSevere.length > 0 ? '#ff2d55' : '#ff6b35',
+              color: displayData.overdueSevere.length > 0 ? '#ec4899' : '#ea580c',
               fontSize: 14,
               fontWeight: 600,
               fontFamily: 'var(--font-primary)',
@@ -607,20 +609,20 @@ function Dashboard() {
           </div>
           <div style={{ display: 'flex', gap: 18, flex: 1, flexWrap: 'wrap' as const, fontSize: 12 }}>
             {displayData.dueToday.length > 0 && (
-              <span style={{ color: 'rgba(255,200,87,0.95)' }}>
-                <strong style={{ color: '#ffc857', fontSize: 14 }}>{displayData.dueToday.length}</strong>
+              <span style={{ color: '#46436a' }}>
+                <strong style={{ color: '#d97706', fontSize: 14 }}>{displayData.dueToday.length}</strong>
                 <span style={{ marginLeft: 4 }}>个项目今日到期</span>
               </span>
             )}
             {displayData.overdueMild.length > 0 && (
-              <span style={{ color: 'rgba(255,140,80,0.95)' }}>
-                <strong style={{ color: '#ff8c50', fontSize: 14 }}>{displayData.overdueMild.length}</strong>
+              <span style={{ color: '#46436a' }}>
+                <strong style={{ color: '#ea580c', fontSize: 14 }}>{displayData.overdueMild.length}</strong>
                 <span style={{ marginLeft: 4 }}>个项目轻度逾期（1-6 天）</span>
               </span>
             )}
             {displayData.overdueSevere.length > 0 && (
-              <span style={{ color: 'rgba(255,80,100,0.95)' }}>
-                <strong style={{ color: '#ff2d55', fontSize: 14 }}>{displayData.overdueSevere.length}</strong>
+              <span style={{ color: '#46436a' }}>
+                <strong style={{ color: '#ec4899', fontSize: 14 }}>{displayData.overdueSevere.length}</strong>
                 <span style={{ marginLeft: 4 }}>个项目严重逾期（7+ 天）</span>
               </span>
             )}
@@ -634,8 +636,8 @@ function Dashboard() {
               if (all.length > 0) navigate(`/projects/${all[0].id}`);
             }}
             style={{
-              borderColor: 'rgba(255,77,79,0.5)',
-              color: '#ff6b35',
+              borderColor: 'rgba(234,88,12,0.45)',
+              color: '#ea580c',
               flexShrink: 0,
             }}
           >
@@ -648,27 +650,27 @@ function Dashboard() {
         <KpiCard
           title="未开始项目数"
           value={kpiData.notStartedProjects}
-          icon={<ProjectOutlined style={{ color: '#ff6b35' }} />}
+          icon={<ProjectOutlined style={{ color: '#ea580c' }} />}
           tooltip="所有未开始的项目总数"
         />
         <KpiCard
           title="已完成项目数"
           value={kpiData.completedProjects}
-          icon={<CheckCircleOutlined style={{ color: '#52c41a' }} />}
+          icon={<CheckCircleOutlined style={{ color: '#16a34a' }} />}
           tooltip="已完成测试的项目总数"
         />
         <KpiCard
           title="总IT产出"
           value={kpiData.totalItOutput}
           suffix="MW"
-          icon={<ThunderboltOutlined style={{ color: '#faad14' }} />}
+          icon={<ThunderboltOutlined style={{ color: '#d97706' }} />}
           tooltip="累计IT产出量（MW）"
         />
         <KpiCard
           title="平均投入人力"
           value={kpiData.avgManpower}
           suffix="人"
-          icon={<TeamOutlined style={{ color: '#00d4aa' }} />}
+          icon={<TeamOutlined style={{ color: '#0d9488' }} />}
           tooltip="已完成项目的平均计划投入人力"
         />
       </div>
@@ -696,7 +698,7 @@ function Dashboard() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <h4 style={{ margin: 0 }}>项目进度甘特图</h4>
             {/* 时间单位选择器 */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(255,255,255,0.04)', borderRadius: 8, padding: 2 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: '#f8f7fd', borderRadius: 8, padding: 2 }}>
               {([
                 { value: 'day', label: '日' },
                 { value: 'week', label: '周' },
@@ -716,13 +718,13 @@ function Dashboard() {
                     cursor: 'pointer',
                     transition: 'all 0.2s',
                     background: ganttUnit === opt.value
-                      ? 'linear-gradient(135deg, #4d9fff, #00f0ff)'
+                      ? 'linear-gradient(135deg, #6366f1, #a855f7)'
                       : 'transparent',
                     color: ganttUnit === opt.value
                       ? '#fff'
-                      : 'rgba(255,255,255,0.4)',
+                      : '#6b6892',
                     fontWeight: ganttUnit === opt.value ? 600 : 400,
-                    boxShadow: ganttUnit === opt.value ? '0 2px 8px rgba(77,159,255,0.3)' : 'none',
+                    boxShadow: ganttUnit === opt.value ? '0 2px 8px rgba(99,102,241,0.3)' : 'none',
                   }}
                 >
                   {opt.label}
@@ -732,7 +734,7 @@ function Dashboard() {
           </div>
           {/* 状态筛选器 */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <FilterOutlined style={{ color: 'rgba(255,255,255,0.4)', fontSize: 14 }} />
+            <FilterOutlined style={{ color: '#6b6892', fontSize: 14 }} />
             <Select
               mode="multiple"
               value={selectedStatuses}
@@ -743,41 +745,41 @@ function Dashboard() {
               tagRender={tagRender}
               maxTagCount={3}
               maxTagPlaceholder={(omittedValues) => `+${omittedValues.length} 项`}
-              dropdownStyle={{ background: '#1a2744', border: '1px solid rgba(255,255,255,0.1)' }}
+              dropdownStyle={{ background: '#f6f5fc', border: '1px solid #dcd9f2' }}
               popupClassName="dark-select-dropdown"
             />
             <Button
               type="link"
               size="small"
               onClick={() => setSelectedStatuses(['未开始', '测试中'])}
-              style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, padding: '0 4px' }}
+              style={{ color: '#6b6892', fontSize: 12, padding: '0 4px' }}
             >
               重置
             </Button>
           </div>
         </div>
         <GanttChart projects={ganttProjects} unit={ganttUnit} />
-        <div style={{ marginTop: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: 'rgba(255,255,255,0.45)', fontSize: 12, flexWrap: 'wrap', gap: 8 }}>
+        <div style={{ marginTop: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#6b6892', fontSize: 12, flexWrap: 'wrap', gap: 8 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-              <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'rgba(255,255,255,0.4)', display: 'inline-block' }} />
-              未开始 <b style={{ color: 'rgba(255,255,255,0.85)' }}>{notStartedCount}</b>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#d97706', display: 'inline-block' }} />
+              未开始 <b style={{ color: '#1e1b2e' }}>{notStartedCount}</b>
             </span>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-              <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#52c41a', display: 'inline-block' }} />
-              测试中 <b style={{ color: 'rgba(255,255,255,0.85)' }}>{activeCount}</b>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#6366f1', display: 'inline-block' }} />
+              测试中 <b style={{ color: '#1e1b2e' }}>{activeCount}</b>
             </span>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-              <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#1677ff', display: 'inline-block' }} />
-              已完成 <b style={{ color: 'rgba(255,255,255,0.85)' }}>{completedCount}</b>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#16a34a', display: 'inline-block' }} />
+              已完成 <b style={{ color: '#1e1b2e' }}>{completedCount}</b>
             </span>
-            <span style={{ color: 'rgba(255,255,255,0.35)' }}>个项目</span>
+            <span style={{ color: '#9d9ab8' }}>个项目</span>
           </div>
           <Button
             type="link"
             size="small"
             onClick={() => navigate('/history')}
-            style={{ color: '#4d9fff', fontFamily: 'var(--font-primary)' }}
+            style={{ color: '#6366f1', fontFamily: 'var(--font-primary)' }}
           >
             查看历史项目（{historyProjects.filter((p) => p.status === '已完成').length}个）→
           </Button>

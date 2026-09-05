@@ -183,7 +183,7 @@ function Projects() {
       key: 'name',
       width: 240,
       render: (text: string, record: Project) => (
-        <a onClick={() => navigate(`/projects/${record.id}`)} style={{ color: '#7cb8ff' }}>{text}</a>
+        <a onClick={() => navigate(`/projects/${record.id}`)} style={{ color: '#818cf8' }}>{text}</a>
       ),
     },
     { title: '项目经理', dataIndex: 'manager', key: 'manager', width: 100 },
@@ -206,18 +206,18 @@ function Projects() {
       width: 180,
       sorter: (a, b) => (a.actualDeliveryDate || '').localeCompare(b.actualDeliveryDate || ''),
       render: (text?: string, record?: Project) => {
-        if (!text) return <span style={{ color: 'rgba(255,255,255,0.3)' }}>-</span>;
+        if (!text) return <span style={{ color: '#9d9ab8' }}>-</span>;
         if (record?.plannedDeliveryDate) {
           const isEarly = text < record.plannedDeliveryDate;
           const isOnTime = text === record.plannedDeliveryDate;
           const tag = isOnTime
-            ? <Tag style={{ marginLeft: 6, fontSize: 10, background: 'rgba(82,196,26,0.15)', color: '#52c41a', border: '1px solid rgba(82,196,26,0.3)', borderRadius: 4, padding: '0 4px' }}>准时</Tag>
+            ? <Tag style={{ marginLeft: 6, fontSize: 10, background: '#f0fdf4', color: '#16a34a', border: '1px solid rgba(22,163,74,0.3)', borderRadius: 4, padding: '0 4px' }}>准时</Tag>
             : isEarly
-              ? <Tag style={{ marginLeft: 6, fontSize: 10, background: 'rgba(82,196,26,0.15)', color: '#52c41a', border: '1px solid rgba(82,196,26,0.3)', borderRadius: 4, padding: '0 4px' }}>提前</Tag>
-              : <Tag style={{ marginLeft: 6, fontSize: 10, background: 'rgba(255,77,79,0.15)', color: '#ff4d4f', border: '1px solid rgba(255,77,79,0.3)', borderRadius: 4, padding: '0 4px' }}>延期</Tag>;
-          return <span style={{ whiteSpace: 'nowrap' }}><span style={{ color: 'rgba(255,255,255,0.6)' }}>{text}</span>{tag}</span>;
+              ? <Tag style={{ marginLeft: 6, fontSize: 10, background: '#f0fdf4', color: '#16a34a', border: '1px solid rgba(22,163,74,0.3)', borderRadius: 4, padding: '0 4px' }}>提前</Tag>
+              : <Tag style={{ marginLeft: 6, fontSize: 10, background: '#fef2f2', color: '#dc2626', border: '1px solid rgba(220,38,38,0.3)', borderRadius: 4, padding: '0 4px' }}>延期</Tag>;
+          return <span style={{ whiteSpace: 'nowrap' }}><span style={{ color: '#46436a' }}>{text}</span>{tag}</span>;
         }
-        return <span style={{ color: 'rgba(255,255,255,0.6)' }}>{text}</span>;
+        return <span style={{ color: '#46436a' }}>{text}</span>;
       },
     },
     {
@@ -226,7 +226,7 @@ function Projects() {
       key: 'plannedManpower',
       width: 110,
       sorter: (a, b) => (a.plannedManpower || 0) - (b.plannedManpower || 0),
-      render: (val?: number) => <span style={{ color: 'rgba(255,255,255,0.6)' }}>{val != null ? `${val} 人` : '-'}</span>,
+      render: (val?: number) => <span style={{ color: '#46436a' }}>{val != null ? `${val} 人` : '-'}</span>,
     },
     { title: 'IT产出（MW）', dataIndex: 'itOutput', key: 'itOutput', width: 110, sorter: (a, b) => a.itOutput - b.itOutput },
     {
@@ -235,8 +235,8 @@ function Projects() {
       key: 'businessType',
       width: 110,
       render: (text?: string) => text
-        ? <Tag style={{ margin: 0, borderRadius: 4, fontSize: 12, color: 'rgba(255,255,255,0.75)', background: 'rgba(77,159,255,0.1)', border: '1px solid rgba(77,159,255,0.25)' }}>{text}</Tag>
-        : <span style={{ color: 'rgba(255,255,255,0.3)' }}>-</span>,
+        ? <Tag style={{ margin: 0, borderRadius: 4, fontSize: 12, color: '#46436a', background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.25)' }}>{text}</Tag>
+        : <span style={{ color: '#9d9ab8' }}>-</span>,
     },
     {
       title: '测试管理链接',
@@ -245,11 +245,11 @@ function Projects() {
       width: 120,
       render: (link: string) =>
         link ? (
-          <a href={link} target="_blank" rel="noopener noreferrer" style={{ color: '#4d9fff' }}>
+          <a href={link} target="_blank" rel="noopener noreferrer" style={{ color: '#6366f1' }}>
             <LinkOutlined /> 查看
           </a>
         ) : (
-          <span style={{ color: 'rgba(255,255,255,0.3)' }}>-</span>
+          <span style={{ color: '#9d9ab8' }}>-</span>
         ),
     },
     {
@@ -259,10 +259,10 @@ function Projects() {
       render: (_: unknown, record: Project) => (
         <Space size={0} split={null}>
           <Tooltip title="查看详情">
-            <Button type="text" size="small" icon={<EyeOutlined />} onClick={() => navigate(`/projects/${record.id}`)} style={{ color: '#4d9fff', width: 32, height: 28 }} />
+            <Button type="text" size="small" icon={<EyeOutlined />} onClick={() => navigate(`/projects/${record.id}`)} style={{ color: '#6366f1', width: 32, height: 28 }} />
           </Tooltip>
           <Tooltip title="编辑项目">
-            <Button type="text" size="small" icon={<EditOutlined />} onClick={() => handleEdit(record)} style={{ color: '#faad14', width: 32, height: 28 }} />
+            <Button type="text" size="small" icon={<EditOutlined />} onClick={() => handleEdit(record)} style={{ color: '#d97706', width: 32, height: 28 }} />
           </Tooltip>
           {/* 仅"已完成"项目显示归档按钮（显式归档到历史项目板块） */}
           {record.status === '已完成' && (
@@ -278,7 +278,7 @@ function Projects() {
               cancelText="取消"
             >
               <Tooltip title="归档到历史项目">
-                <Button type="text" size="small" icon={<InboxOutlined />} style={{ color: '#b37feb', width: 32, height: 28 }} />
+                <Button type="text" size="small" icon={<InboxOutlined />} style={{ color: '#a855f7', width: 32, height: 28 }} />
               </Tooltip>
             </Popconfirm>
           )}
@@ -307,13 +307,13 @@ function Projects() {
           <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
             <span style={{
               display: 'inline-flex', alignItems: 'center', gap: 4,
-              padding: '2px 10px', background: 'rgba(77,159,255,0.1)', border: '1px solid rgba(77,159,255,0.2)',
-              borderRadius: 20, fontSize: 12, color: '#7cb8ff',
+              padding: '2px 10px', background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.2)',
+              borderRadius: 20, fontSize: 12, color: '#818cf8',
             }}>进行中 {stats.active}</span>
             <span style={{
               display: 'inline-flex', alignItems: 'center', gap: 4,
-              padding: '2px 10px', background: 'rgba(250,173,20,0.1)', border: '1px solid rgba(250,173,20,0.2)',
-              borderRadius: 20, fontSize: 12, color: '#faad14',
+              padding: '2px 10px', background: '#fff7ed', border: '1px solid rgba(217,119,6,0.25)',
+              borderRadius: 20, fontSize: 12, color: '#d97706',
             }}>未开始 {stats.pending}</span>
           </div>
         </div>
@@ -321,7 +321,7 @@ function Projects() {
           type="primary"
           icon={<PlusOutlined />}
           onClick={handleCreate}
-          style={{ background: 'linear-gradient(135deg, #4d9fff, #69b1ff)', border: 'none', fontFamily: 'var(--font-primary)', fontWeight: 500, borderRadius: 8, boxShadow: '0 4px 14px rgba(77,159,255,0.35)' }}
+          style={{ background: 'linear-gradient(135deg, #6366f1, #818cf8)', border: 'none', fontFamily: 'var(--font-primary)', fontWeight: 500, borderRadius: 8, boxShadow: '0 4px 14px rgba(99,102,241,0.35)' }}
         >
           创建项目
         </Button>
@@ -343,10 +343,10 @@ function Projects() {
         </Select>
         <Input
           placeholder="搜索项目名称、客户或城市"
-          prefix={<SearchOutlined style={{ color: 'rgba(255,255,255,0.3)' }} />}
+          prefix={<SearchOutlined style={{ color: '#9d9ab8' }} />}
           value={searchText}
           onChange={(e) => setSearchText(e.target.value)}
-          style={{ width: 250, fontFamily: 'var(--font-primary)', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)', color: '#fff' }}
+          style={{ width: 250, fontFamily: 'var(--font-primary)', background: '#f6f5fc', border: '1px solid #e9e7f4', color: '#1e1b2e' }}
           allowClear
           variant="borderless"
         />
@@ -355,12 +355,12 @@ function Projects() {
           icon={<SwapOutlined />}
           onClick={() => setReportOpen(true)}
           style={{
-            borderColor: 'rgba(179,126,235,0.4)',
-            color: '#b37feb',
+            borderColor: 'rgba(168,85,247,0.35)',
+            color: '#a855f7',
             fontFamily: 'var(--font-primary)',
             fontWeight: 500,
             borderRadius: 8,
-            background: 'rgba(179,126,235,0.08)',
+            background: 'rgba(168,85,247,0.08)',
             flexShrink: 0,
           }}
         >
@@ -369,7 +369,7 @@ function Projects() {
       </div>
 
       {/* 项目表格 */}
-      <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, overflow: 'hidden' }}>
+      <div style={{ background: '#f8f7fd', border: '1px solid #dcd9f2', borderRadius: 12, overflow: 'hidden' }}>
         <Table
           columns={columns}
           dataSource={filteredProjects}

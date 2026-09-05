@@ -6,16 +6,16 @@ import type { ProjectStatus, MemberStatus } from '../types';
 
 // -------------------- 状态颜色映射 --------------------
 export const PROJECT_STATUS_COLORS: Record<ProjectStatus, string> = {
-  '未开始': '#1890ff',  // 蓝色
-  '测试中': '#eb2f96',  // 粉色
-  '已完成': '#52c41a',  // 绿色
-  '阻塞': '#ff4d4f',    // 红色
+  '未开始': '#6366f1',  // 蓝色
+  '测试中': '#ec4899',  // 粉色
+  '已完成': '#16a34a',  // 绿色
+  '阻塞': '#dc2626',    // 红色
 };
 
 export const MEMBER_STATUS_COLORS: Record<MemberStatus, string> = {
-  '空闲': '#52c41a',    // 绿色
-  '测试中': '#eb2f96',  // 粉色
-  '休假': '#1890ff',    // 蓝色
+  '空闲': '#16a34a',    // 绿色
+  '测试中': '#ec4899',  // 粉色
+  '休假': '#6366f1',    // 蓝色
 };
 
 // -------------------- 状态显示文本 --------------------

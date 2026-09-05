@@ -55,16 +55,16 @@ function diffPercent(a: number, b: number): string {
 
 /** 差异方向 */
 function DiffArrow({ value }: { value: number }) {
-  if (value === 0) return <MinusOutlined style={{ color: '#8c8c8c', fontSize: 11 }} />;
-  if (value > 0) return <ArrowUpOutlined style={{ color: '#ff4d4f', fontSize: 11 }} />;
-  return <ArrowDownOutlined style={{ color: '#52c41a', fontSize: 11 }} />;
+  if (value === 0) return <MinusOutlined style={{ color: '#9d9ab8', fontSize: 11 }} />;
+  if (value > 0) return <ArrowUpOutlined style={{ color: '#dc2626', fontSize: 11 }} />;
+  return <ArrowDownOutlined style={{ color: '#16a34a', fontSize: 11 }} />;
 }
 
 const statusMap: Record<string, { color: string; label: string }> = {
-  '未开始': { color: '#8c8c8c', label: '未开始' },
-  '测试中': { color: '#4d9fff', label: '测试中' },
-  '已完成': { color: '#52c41a', label: '已完成' },
-  '阻塞': { color: '#ff7875', label: '阻塞' },
+  '未开始': { color: '#d97706', label: '未开始' },
+  '测试中': { color: '#6366f1', label: '测试中' },
+  '已完成': { color: '#16a34a', label: '已完成' },
+  '阻塞': { color: '#dc2626', label: '阻塞' },
 };
 
 function ComparisonReportModal({ open, currentProjects, historyProjects, onClose }: ComparisonReportModalProps) {
@@ -144,7 +144,7 @@ function ComparisonReportModal({ open, currentProjects, historyProjects, onClose
     <Modal
       title={
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <SwapOutlined style={{ color: '#7cb8ff' }} />
+          <SwapOutlined style={{ color: '#818cf8' }} />
           <span>历史交付数据对比</span>
         </div>
       }
@@ -155,9 +155,9 @@ function ComparisonReportModal({ open, currentProjects, historyProjects, onClose
       }}
       footer={null}
       width={1100}
-      bodyStyle={{ background: 'rgba(13,31,60,0.97)', padding: '20px 28px', maxHeight: '80vh', overflowY: 'auto' }}
+      bodyStyle={{ background: '#ffffff', padding: '20px 28px', maxHeight: '80vh', overflowY: 'auto' }}
       styles={{
-        header: { background: 'transparent', borderBottom: '1px solid rgba(255,255,255,0.08)' },
+        header: { background: 'transparent', borderBottom: '1px solid #e9e7f4' },
       }}
       destroyOnClose
     >
@@ -168,8 +168,8 @@ function ComparisonReportModal({ open, currentProjects, historyProjects, onClose
             <Col span={12}>
               <Card
                 size="small"
-                title={<span style={{ color: '#fff', fontSize: 14 }}>① 选择待对比项目</span>}
-                style={{ background: 'rgba(77,159,255,0.06)', border: '1px solid rgba(77,159,255,0.15)', borderRadius: 10 }}
+                title={<span style={{ color: '#1e1b2e', fontSize: 14 }}>① 选择待对比项目</span>}
+                style={{ background: 'rgba(99,102,241,0.06)', border: '1px solid rgba(99,102,241,0.15)', borderRadius: 10 }}
               >
                 <Select
                   value={selectedCurrentId || undefined}
@@ -186,7 +186,7 @@ function ComparisonReportModal({ open, currentProjects, historyProjects, onClose
                     .map((p) => (
                       <Select.Option key={p.id} value={p.id}>
                         <span>{p.name}</span>
-                        <span style={{ marginLeft: 8, color: 'rgba(255,255,255,0.35)', fontSize: 12 }}>
+                        <span style={{ marginLeft: 8, color: '#9d9ab8', fontSize: 12 }}>
                           ({p.city} · {p.customer} · {statusMap[p.status]?.label})
                         </span>
                       </Select.Option>
@@ -194,8 +194,8 @@ function ComparisonReportModal({ open, currentProjects, historyProjects, onClose
                 </Select>
 
                 {selectedCurrent && (
-                  <div style={{ marginTop: 16, padding: 14, background: 'rgba(13,31,60,0.6)', borderRadius: 8, border: '1px solid rgba(124,184,255,0.15)' }}>
-                    <Descriptions column={2} size="small" labelStyle={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }} contentStyle={{ color: '#fff', fontSize: 12 }}>
+                  <div style={{ marginTop: 16, padding: 14, background: '#f6f5fc', borderRadius: 8, border: '1px solid rgba(99,102,241,0.15)' }}>
+                    <Descriptions column={2} size="small" labelStyle={{ color: '#6b6892', fontSize: 12 }} contentStyle={{ color: '#1e1b2e', fontSize: 12 }}>
                       <Descriptions.Item label="项目名称"><strong>{selectedCurrent.name}</strong></Descriptions.Item>
                       <Descriptions.Item label="客户">{selectedCurrent.customer}</Descriptions.Item>
                       <Descriptions.Item label="城市">{selectedCurrent.city || '-'}</Descriptions.Item>
@@ -215,8 +215,8 @@ function ComparisonReportModal({ open, currentProjects, historyProjects, onClose
             <Col span={12}>
               <Card
                 size="small"
-                title={<span style={{ color: '#fff', fontSize: 14 }}>② 选择历史交付项目（可多选）</span>}
-                style={{ background: 'rgba(82,196,26,0.05)', border: '1px solid rgba(82,196,26,0.15)', borderRadius: 10 }}
+                title={<span style={{ color: '#1e1b2e', fontSize: 14 }}>② 选择历史交付项目（可多选）</span>}
+                style={{ background: 'rgba(22,163,74,0.05)', border: '1px solid rgba(22,163,74,0.15)', borderRadius: 10 }}
               >
                 <Select
                   mode="multiple"
@@ -233,7 +233,7 @@ function ComparisonReportModal({ open, currentProjects, historyProjects, onClose
                   {deliveredHistory.map((h) => (
                     <Select.Option key={h.id} value={h.id}>
                       {h.name}
-                      <span style={{ marginLeft: 8, color: 'rgba(255,255,255,0.3)', fontSize: 12 }}>
+                      <span style={{ marginLeft: 8, color: '#9d9ab8', fontSize: 12 }}>
                         ({h.city} · {h.itOutput}MW)
                       </span>
                     </Select.Option>
@@ -241,9 +241,9 @@ function ComparisonReportModal({ open, currentProjects, historyProjects, onClose
                 </Select>
 
                 {selectedHistoryItems.length > 0 && (
-                  <div style={{ marginTop: 12, color: 'rgba(255,255,255,0.45)', fontSize: 12 }}>
-                    已选 <span style={{ color: '#52c41a', fontWeight: 600 }}>{selectedHistoryItems.length}</span> 个历史交付项目，
-                    平均IT产出 <span style={{ color: '#7cb8ff' }}>{(selectedHistoryItems.reduce((s, h) => s + h.itOutput, 0) / selectedHistoryItems.length).toFixed(1)}</span> MW
+                  <div style={{ marginTop: 12, color: '#6b6892', fontSize: 12 }}>
+                    已选 <span style={{ color: '#16a34a', fontWeight: 600 }}>{selectedHistoryItems.length}</span> 个历史交付项目，
+                    平均IT产出 <span style={{ color: '#818cf8' }}>{(selectedHistoryItems.reduce((s, h) => s + h.itOutput, 0) / selectedHistoryItems.length).toFixed(1)}</span> MW
                   </div>
                 )}
               </Card>
@@ -258,14 +258,14 @@ function ComparisonReportModal({ open, currentProjects, historyProjects, onClose
               onClick={handleGenerateReport}
               disabled={!selectedCurrentId || selectedHistoryIds.length === 0}
               style={{
-                background: 'linear-gradient(135deg, #4d9fff, #69b1ff)',
+                background: 'linear-gradient(135deg, #6366f1, #818cf8)',
                 border: 'none',
                 fontFamily: 'var(--font-primary)',
                 fontWeight: 600,
                 borderRadius: 10,
                 padding: '0 36px',
                 height: 44,
-                boxShadow: '0 4px 20px rgba(77,159,255,0.4)',
+                boxShadow: '0 4px 20px rgba(99,102,241,0.4)',
               }}
             >
               生成对比报告
@@ -278,12 +278,12 @@ function ComparisonReportModal({ open, currentProjects, historyProjects, onClose
           {/* 报告头部：返回按钮 + 项目信息 */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <Button onClick={handleReset} style={{ borderColor: 'rgba(255,255,255,0.2)', color: 'rgba(255,255,255,0.65)', fontFamily: 'var(--font-primary)' }}>
+              <Button onClick={handleReset} style={{ borderColor: '#9d9ab8', color: '#46436a', fontFamily: 'var(--font-primary)' }}>
                 ← 重新选择
               </Button>
-              <div style={{ padding: '6px 16px', background: 'linear-gradient(135deg, rgba(77,159,255,0.12), rgba(105,177,255,0.08))', borderRadius: 8, border: '1px solid rgba(77,159,255,0.2)' }}>
-                <span style={{ color: '#7cb8ff', fontSize: 13, fontWeight: 500 }}>待对比项目：</span>
-                <span style={{ color: '#fff', fontWeight: 600, marginLeft: 4 }}>{selectedCurrent?.name}</span>
+              <div style={{ padding: '6px 16px', background: 'linear-gradient(135deg, rgba(99,102,241,0.12), rgba(168,85,247,0.08))', borderRadius: 8, border: '1px solid rgba(99,102,241,0.2)' }}>
+                <span style={{ color: '#818cf8', fontSize: 13, fontWeight: 500 }}>待对比项目：</span>
+                <span style={{ color: '#1e1b2e', fontWeight: 600, marginLeft: 4 }}>{selectedCurrent?.name}</span>
               </div>
             </div>
           </div>
@@ -294,17 +294,17 @@ function ComparisonReportModal({ open, currentProjects, historyProjects, onClose
               <Row gutter={[16, 16]} style={{ marginBottom: 22 }}>
                 {/* 1. 兆瓦数 */}
                 <Col span={6}>
-                  <Card size="small" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10 }} bodyStyle={{ padding: '16px 12px' }}>
+                  <Card size="small" style={{ background: '#f6f5fc', border: '1px solid #e9e7f4', borderRadius: 10 }} bodyStyle={{ padding: '16px 12px' }}>
                     <Statistic
-                      title={<span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}><ThunderboltOutlined style={{ marginRight: 4 }} />兆瓦数(MW)</span>}
+                      title={<span style={{ color: '#6b6892', fontSize: 12 }}><ThunderboltOutlined style={{ marginRight: 4 }} />兆瓦数(MW)</span>}
                       value={selectedCurrent?.itOutput || 0}
                       suffix="MW"
-                      valueStyle={{ color: '#7cb8ff', fontSize: 22, fontWeight: 700 }}
+                      valueStyle={{ color: '#818cf8', fontSize: 22, fontWeight: 700 }}
                       prefix={<DiffArrow value={(selectedCurrent?.itOutput || 0) - historyStats.avgItOutput} />}
                     />
-                    <div style={{ marginTop: 4, fontSize: 11, color: 'rgba(255,255,255,0.35)' }}>
+                    <div style={{ marginTop: 4, fontSize: 11, color: '#9d9ab8' }}>
                       历史均值: {historyStats.avgItOutput.toFixed(1)} MW
-                      <span style={{ marginLeft: 6, color: (selectedCurrent?.itOutput || 0) >= historyStats.avgItOutput ? '#52c41a' : '#ff4d4f' }}>
+                      <span style={{ marginLeft: 6, color: (selectedCurrent?.itOutput || 0) >= historyStats.avgItOutput ? '#16a34a' : '#dc2626' }}>
                         ({diffPercent(selectedCurrent?.itOutput || 0, historyStats.avgItOutput)})
                       </span>
                     </div>
@@ -312,17 +312,17 @@ function ComparisonReportModal({ open, currentProjects, historyProjects, onClose
                 </Col>
                 {/* 2. 工期 */}
                 <Col span={6}>
-                  <Card size="small" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10 }} bodyStyle={{ padding: '16px 12px' }}>
+                  <Card size="small" style={{ background: '#f6f5fc', border: '1px solid #e9e7f4', borderRadius: 10 }} bodyStyle={{ padding: '16px 12px' }}>
                     <Statistic
-                      title={<span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}><ClockCircleOutlined style={{ marginRight: 4 }} />工期(天)</span>}
+                      title={<span style={{ color: '#6b6892', fontSize: 12 }}><ClockCircleOutlined style={{ marginRight: 4 }} />工期(天)</span>}
                       value={selectedCurrent ? calcDays(selectedCurrent.startDate, selectedCurrent.endDate || '') : 0}
                       suffix="天"
-                      valueStyle={{ color: '#faad14', fontSize: 22, fontWeight: 700 }}
+                      valueStyle={{ color: '#d97706', fontSize: 22, fontWeight: 700 }}
                       prefix={<DiffArrow value={(selectedCurrent ? calcDays(selectedCurrent.startDate, selectedCurrent.endDate || '') : 0) - historyStats.avgDays} />}
                     />
-                    <div style={{ marginTop: 4, fontSize: 11, color: 'rgba(255,255,255,0.35)' }}>
+                    <div style={{ marginTop: 4, fontSize: 11, color: '#9d9ab8' }}>
                       历史均值: {historyStats.avgDays.toFixed(0)}天
-                      <span style={{ marginLeft: 6, color: (selectedCurrent ? calcDays(selectedCurrent.startDate, selectedCurrent.endDate || '') : 0) >= historyStats.avgDays ? '#ff4d4f' : '#52c41a' }}>
+                      <span style={{ marginLeft: 6, color: (selectedCurrent ? calcDays(selectedCurrent.startDate, selectedCurrent.endDate || '') : 0) >= historyStats.avgDays ? '#dc2626' : '#16a34a' }}>
                         ({diffPercent((selectedCurrent ? calcDays(selectedCurrent.startDate, selectedCurrent.endDate || '') : 0), historyStats.avgDays)})
                       </span>
                     </div>
@@ -330,24 +330,24 @@ function ComparisonReportModal({ open, currentProjects, historyProjects, onClose
                 </Col>
                 {/* 3. 交付周期 */}
                 <Col span={6}>
-                  <Card size="small" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10 }} bodyStyle={{ padding: '16px 12px' }}>
+                  <Card size="small" style={{ background: '#f6f5fc', border: '1px solid #e9e7f4', borderRadius: 10 }} bodyStyle={{ padding: '16px 12px' }}>
                     <div style={{ marginBottom: 4 }}>
-                      <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}><CalendarOutlined style={{ marginRight: 4 }} />交付周期</span>
+                      <span style={{ color: '#6b6892', fontSize: 12 }}><CalendarOutlined style={{ marginRight: 4 }} />交付周期</span>
                     </div>
-                    <div style={{ fontSize: 22, fontWeight: 700, color: '#b37feb' }}>
+                    <div style={{ fontSize: 22, fontWeight: 700, color: '#a855f7' }}>
                       {(() => {
                         const currentDays = selectedCurrent ? calcDays(selectedCurrent.startDate, selectedCurrent.plannedDeliveryDate || selectedCurrent.endDate || '') : 0;
                         const avgDel = historyStats.avgDays;
                         return (
                           <span>
-                            {currentDays} <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)' }}>天</span>
+                            {currentDays} <span style={{ fontSize: 12, color: '#6b6892' }}>天</span>
                           </span>
                         );
                       })()}
                     </div>
-                    <div style={{ marginTop: 4, fontSize: 11, color: 'rgba(255,255,255,0.35)' }}>
+                    <div style={{ marginTop: 4, fontSize: 11, color: '#9d9ab8' }}>
                       历史平均: {historyStats.avgDays.toFixed(0)}天
-                      <span style={{ marginLeft: 6, color: (selectedCurrent ? calcDays(selectedCurrent.startDate, selectedCurrent.plannedDeliveryDate || selectedCurrent.endDate || '') : 0) >= historyStats.avgDays ? '#ff4d4f' : '#52c41a' }}>
+                      <span style={{ marginLeft: 6, color: (selectedCurrent ? calcDays(selectedCurrent.startDate, selectedCurrent.plannedDeliveryDate || selectedCurrent.endDate || '') : 0) >= historyStats.avgDays ? '#dc2626' : '#16a34a' }}>
                         ({diffPercent((selectedCurrent ? calcDays(selectedCurrent.startDate, selectedCurrent.plannedDeliveryDate || selectedCurrent.endDate || '') : 0), historyStats.avgDays)})
                       </span>
                     </div>
@@ -355,17 +355,17 @@ function ComparisonReportModal({ open, currentProjects, historyProjects, onClose
                 </Col>
                 {/* 4. 人员数量 */}
                 <Col span={6}>
-                  <Card size="small" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10 }} bodyStyle={{ padding: '16px 12px' }}>
+                  <Card size="small" style={{ background: '#f6f5fc', border: '1px solid #e9e7f4', borderRadius: 10 }} bodyStyle={{ padding: '16px 12px' }}>
                     <Statistic
-                      title={<span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}><TeamOutlined style={{ marginRight: 4 }} />人员数量(人)</span>}
+                      title={<span style={{ color: '#6b6892', fontSize: 12 }}><TeamOutlined style={{ marginRight: 4 }} />人员数量(人)</span>}
                       value={selectedCurrent?.plannedManpower || 0}
                       suffix="人"
-                      valueStyle={{ color: '#00d4aa', fontSize: 22, fontWeight: 700 }}
+                      valueStyle={{ color: '#0d9488', fontSize: 22, fontWeight: 700 }}
                       prefix={<DiffArrow value={(selectedCurrent?.plannedManpower || 0) - historyStats.avgManpower} />}
                     />
-                    <div style={{ marginTop: 4, fontSize: 11, color: 'rgba(255,255,255,0.35)' }}>
+                    <div style={{ marginTop: 4, fontSize: 11, color: '#9d9ab8' }}>
                       历史均值: {historyStats.avgManpower.toFixed(0)}人
-                      <span style={{ marginLeft: 6, color: (selectedCurrent?.plannedManpower || 0) >= historyStats.avgManpower ? '#52c41a' : '#ff4d4f' }}>
+                      <span style={{ marginLeft: 6, color: (selectedCurrent?.plannedManpower || 0) >= historyStats.avgManpower ? '#16a34a' : '#dc2626' }}>
                         ({diffPercent(selectedCurrent?.plannedManpower || 0, historyStats.avgManpower)})
                       </span>
                     </div>
@@ -374,8 +374,8 @@ function ComparisonReportModal({ open, currentProjects, historyProjects, onClose
               </Row>
 
               {/* 详细对比表格 */}
-              <Divider style={{ borderColor: 'rgba(255,255,255,0.08)', margin: '18px 0 12px' }}>
-                <span style={{ color: 'rgba(255,255,255,0.45)', fontSize: 13 }}>逐项对比明细</span>
+              <Divider style={{ borderColor: '#e9e7f4', margin: '18px 0 12px' }}>
+                <span style={{ color: '#6b6892', fontSize: 13 }}>逐项对比明细</span>
               </Divider>
 
               <Table
@@ -397,7 +397,7 @@ function ComparisonReportModal({ open, currentProjects, historyProjects, onClose
                     key: 'name',
                     fixed: 'left',
                     width: 200,
-                    render: (t: string) => <span style={{ color: '#fff', fontWeight: 500 }}>{t}</span>,
+                    render: (t: string) => <span style={{ color: '#1e1b2e', fontWeight: 500 }}>{t}</span>,
                   },
                   {
                     title: '兆瓦数(MW)',
@@ -408,11 +408,11 @@ function ComparisonReportModal({ open, currentProjects, historyProjects, onClose
                     sorter: (a, b) => a.itOutput - b.itOutput,
                     render: (val: number, r: HistoricalProject) => (
                       <Space direction="vertical" size={0} style={{ textAlign: 'center' }}>
-                        <span style={{ color: '#7cb8ff', fontWeight: 500 }}>{val} MW</span>
+                        <span style={{ color: '#818cf8', fontWeight: 500 }}>{val} MW</span>
                         {selectedCurrent?.itOutput && (
                           <span style={{
                             fontSize: 11,
-                            color: val > selectedCurrent.itOutput ? '#52c41a' : val < selectedCurrent.itOutput ? '#ff4d4f' : 'rgba(255,255,255,0.3)',
+                            color: val > selectedCurrent.itOutput ? '#16a34a' : val < selectedCurrent.itOutput ? '#dc2626' : '#9d9ab8',
                           }}>
                             {diffPercent(selectedCurrent.itOutput, val)}
                           </span>
@@ -431,9 +431,9 @@ function ComparisonReportModal({ open, currentProjects, historyProjects, onClose
                       const currentDays = selectedCurrent ? calcDays(selectedCurrent.startDate, selectedCurrent.endDate || '') : 0;
                       return (
                         <Space direction="vertical" size={0} style={{ textAlign: 'center' }}>
-                          <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12 }}>{days}天</span>
+                          <span style={{ color: '#46436a', fontSize: 12 }}>{days}天</span>
                           {currentDays > 0 && (
-                            <span style={{ fontSize: 11, color: currentDays > days ? '#ff4d4f' : currentDays < days ? '#52c41a' : 'rgba(255,255,255,0.3)' }}>
+                            <span style={{ fontSize: 11, color: currentDays > days ? '#dc2626' : currentDays < days ? '#16a34a' : '#9d9ab8' }}>
                               {diffPercent(currentDays, days)}
                             </span>
                           )}
@@ -451,9 +451,9 @@ function ComparisonReportModal({ open, currentProjects, historyProjects, onClose
                       const currentCycle = selectedCurrent ? calcDays(selectedCurrent.startDate, selectedCurrent.plannedDeliveryDate || selectedCurrent.endDate || '') : 0;
                       return (
                         <Space direction="vertical" size={0} style={{ textAlign: 'center' }}>
-                          <span style={{ color: '#b37feb', fontSize: 12 }}>{cycle}天</span>
+                          <span style={{ color: '#a855f7', fontSize: 12 }}>{cycle}天</span>
                           {currentCycle > 0 && (
-                            <span style={{ fontSize: 11, color: currentCycle > cycle ? '#ff4d4f' : currentCycle < cycle ? '#52c41a' : 'rgba(255,255,255,0.3)' }}>
+                            <span style={{ fontSize: 11, color: currentCycle > cycle ? '#dc2626' : currentCycle < cycle ? '#16a34a' : '#9d9ab8' }}>
                               {diffPercent(currentCycle, cycle)}
                             </span>
                           )}
@@ -472,9 +472,9 @@ function ComparisonReportModal({ open, currentProjects, historyProjects, onClose
                       const currentMp = selectedCurrent?.plannedManpower || 0;
                       return (
                         <Space direction="vertical" size={0} style={{ textAlign: 'center' }}>
-                          <span style={{ color: '#00d4aa', fontSize: 12 }}>{mp}人</span>
+                          <span style={{ color: '#0d9488', fontSize: 12 }}>{mp}人</span>
                           {currentMp > 0 && mp > 0 && (
-                            <span style={{ fontSize: 11, color: currentMp > mp ? '#52c41a' : currentMp < mp ? '#ff4d4f' : 'rgba(255,255,255,0.3)' }}>
+                            <span style={{ fontSize: 11, color: currentMp > mp ? '#16a34a' : currentMp < mp ? '#dc2626' : '#9d9ab8' }}>
                               {diffPercent(currentMp, mp)}
                             </span>
                           )}
@@ -490,11 +490,11 @@ function ComparisonReportModal({ open, currentProjects, historyProjects, onClose
                     render: (_: unknown, r: HistoricalProject) => {
                       const rate = calcOnTimeRate(r.plannedDeliveryDate, r.actualDeliveryDate);
                       if (rate === '提前或准时') {
-                        return <Tag icon={<CheckCircleOutlined />} color="#52c41a" style={{ border: 'none' }}>准时</Tag>;
+                        return <Tag icon={<CheckCircleOutlined />} color="#16a34a" style={{ border: 'none' }}>准时</Tag>;
                       }
                       if (rate === '延期') {
                         const delay = calcDeliveryDays(r.plannedDeliveryDate, r.actualDeliveryDate);
-                        return <Tag icon={<WarningOutlined />} color="#ff4d4f" style={{ border: 'none' }}>延期{delay ? ` ${delay}天` : ''}</Tag>;
+                        return <Tag icon={<WarningOutlined />} color="#dc2626" style={{ border: 'none' }}>延期{delay ? ` ${delay}天` : ''}</Tag>;
                       }
                       return '-';
                     },
@@ -503,37 +503,37 @@ function ComparisonReportModal({ open, currentProjects, historyProjects, onClose
               />
 
               {/* 报告结论 */}
-              <Divider style={{ borderColor: 'rgba(255,255,255,0.08)', margin: '18px 0 12px' }}>
-                <span style={{ color: 'rgba(255,255,255,0.45)', fontSize: 13 }}><AreaChartOutlined style={{ marginRight: 6 }} />多维对比分析报告</span>
+              <Divider style={{ borderColor: '#e9e7f4', margin: '18px 0 12px' }}>
+                <span style={{ color: '#6b6892', fontSize: 13 }}><AreaChartOutlined style={{ marginRight: 6 }} />多维对比分析报告</span>
               </Divider>
 
               <Card
                 size="small"
                 style={{
-                  background: 'linear-gradient(135deg, rgba(77,159,255,0.06), rgba(179,126,235,0.04))',
-                  border: '1px solid rgba(77,159,255,0.15)',
+                  background: 'linear-gradient(135deg, rgba(99,102,241,0.06), rgba(168,85,247,0.04))',
+                  border: '1px solid rgba(99,102,241,0.15)',
                   borderRadius: 10,
                 }}
                 bodyStyle={{ padding: '18px 20px' }}
               >
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-                  <FileTextOutlined style={{ color: '#7cb8ff', fontSize: 18, marginTop: 2 }} />
+                  <FileTextOutlined style={{ color: '#818cf8', fontSize: 18, marginTop: 2 }} />
                   <div style={{ flex: 1 }}>
-                    <div style={{ color: '#fff', fontWeight: 600, marginBottom: 12, fontSize: 15 }}>
+                    <div style={{ color: '#1e1b2e', fontWeight: 600, marginBottom: 12, fontSize: 15 }}>
                       「{selectedCurrent?.name}」与{selectedHistoryItems.length}个历史项目的深度对比分析
                     </div>
-                    <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12, marginBottom: 12, paddingBottom: 8, borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                    <div style={{ color: '#6b6892', fontSize: 12, marginBottom: 12, paddingBottom: 8, borderBottom: '1px solid #e9e7f4' }}>
                       基于兆瓦数、工期、交付周期、人员数量四大核心维度进行量化对比
                     </div>
-                    <ul style={{ margin: 0, paddingLeft: 18, color: 'rgba(255,255,255,0.65)', fontSize: 13, lineHeight: 2.2 }}>
+                    <ul style={{ margin: 0, paddingLeft: 18, color: '#46436a', fontSize: 13, lineHeight: 2.2 }}>
                       {/* 1. 兆瓦数分析 */}
                       <li>
-                        <strong style={{ color: '#7cb8ff' }}>【兆瓦数对比】</strong>
-                        当前项目 IT产出为 <strong style={{ color: '#7cb8ff' }}>{selectedCurrent?.itOutput} MW</strong>，
+                        <strong style={{ color: '#818cf8' }}>【兆瓦数对比】</strong>
+                        当前项目 IT产出为 <strong style={{ color: '#818cf8' }}>{selectedCurrent?.itOutput} MW</strong>，
                         {historyStats && ((selectedCurrent?.itOutput || 0) >= historyStats.avgItOutput ? (
-                          <span>相比历史均值 <strong style={{ color: '#52c41a' }}>高出 {diffPercent(selectedCurrent?.itOutput || 0, historyStats.avgItOutput)}</strong></span>
+                          <span>相比历史均值 <strong style={{ color: '#16a34a' }}>高出 {diffPercent(selectedCurrent?.itOutput || 0, historyStats.avgItOutput)}</strong></span>
                         ) : (
-                          <span>相比历史均值 <strong style={{ color: '#ff4d4f' }}>低 {diffPercent(selectedCurrent?.itOutput || 0, historyStats.avgItOutput).replace('+', '')}</strong></span>
+                          <span>相比历史均值 <strong style={{ color: '#dc2626' }}>低 {diffPercent(selectedCurrent?.itOutput || 0, historyStats.avgItOutput).replace('+', '')}</strong></span>
                         ))}。
                         历史项目平均 IT产出为 {historyStats?.avgItOutput.toFixed(1)} MW，
                         {selectedHistoryItems.length > 1 && (() => {
@@ -546,12 +546,12 @@ function ComparisonReportModal({ open, currentProjects, historyProjects, onClose
 
                       {/* 2. 工期分析 */}
                       <li>
-                        <strong style={{ color: '#faad14' }}>【工期对比】</strong>
-                        当前项目工期为 <strong style={{ color: '#faad14' }}>{selectedCurrent ? calcDays(selectedCurrent.startDate, selectedCurrent.endDate || '') : '-'} 天</strong>（{selectedCurrent?.startDate} 至 {selectedCurrent?.endDate || '未定'}），
+                        <strong style={{ color: '#d97706' }}>【工期对比】</strong>
+                        当前项目工期为 <strong style={{ color: '#d97706' }}>{selectedCurrent ? calcDays(selectedCurrent.startDate, selectedCurrent.endDate || '') : '-'} 天</strong>（{selectedCurrent?.startDate} 至 {selectedCurrent?.endDate || '未定'}），
                         {historyStats && ((selectedCurrent ? calcDays(selectedCurrent.startDate, selectedCurrent.endDate || '') : 0) >= historyStats.avgDays ? (
-                          <span>相比历史均值 <strong style={{ color: '#ff4d4f' }}>偏长 {diffPercent((selectedCurrent ? calcDays(selectedCurrent.startDate, selectedCurrent.endDate || '') : 0), historyStats.avgDays)}</strong></span>
+                          <span>相比历史均值 <strong style={{ color: '#dc2626' }}>偏长 {diffPercent((selectedCurrent ? calcDays(selectedCurrent.startDate, selectedCurrent.endDate || '') : 0), historyStats.avgDays)}</strong></span>
                         ) : (
-                          <span>相比历史均值 <strong style={{ color: '#52c41a' }}>更短 {diffPercent((selectedCurrent ? calcDays(selectedCurrent.startDate, selectedCurrent.endDate || '') : 0), historyStats.avgDays).replace('+', '')}</strong></span>
+                          <span>相比历史均值 <strong style={{ color: '#16a34a' }}>更短 {diffPercent((selectedCurrent ? calcDays(selectedCurrent.startDate, selectedCurrent.endDate || '') : 0), historyStats.avgDays).replace('+', '')}</strong></span>
                         ))}。
                         历史项目平均工期 {historyStats?.avgDays.toFixed(0)} 天。
                         {(selectedCurrent ? calcDays(selectedCurrent.startDate, selectedCurrent.endDate || '') : 0) > (historyStats?.avgDays || 0) * 1.2
@@ -563,14 +563,14 @@ function ComparisonReportModal({ open, currentProjects, historyProjects, onClose
 
                       {/* 3. 交付周期分析 */}
                       <li>
-                        <strong style={{ color: '#b37feb' }}>【交付周期对比】</strong>
-                        当前项目计划交付周期 <strong style={{ color: '#b37feb' }}>{selectedCurrent ? calcDays(selectedCurrent.startDate, selectedCurrent.plannedDeliveryDate || selectedCurrent.endDate || '') : '-'} 天</strong>。
-                        参比历史项目中 <strong style={{ color: '#52c41a' }}>{historyStats?.onTimeCount}/{selectedHistoryItems.length}</strong> 个按时交付，准时率 <strong>{Math.round(((historyStats?.onTimeCount || 0) / selectedHistoryItems.length) * 100)}%</strong>。
+                        <strong style={{ color: '#a855f7' }}>【交付周期对比】</strong>
+                        当前项目计划交付周期 <strong style={{ color: '#a855f7' }}>{selectedCurrent ? calcDays(selectedCurrent.startDate, selectedCurrent.plannedDeliveryDate || selectedCurrent.endDate || '') : '-'} 天</strong>。
+                        参比历史项目中 <strong style={{ color: '#16a34a' }}>{historyStats?.onTimeCount}/{selectedHistoryItems.length}</strong> 个按时交付，准时率 <strong>{Math.round(((historyStats?.onTimeCount || 0) / selectedHistoryItems.length) * 100)}%</strong>。
                         {historyStats && historyStats.delayCount > 0 && (
-                          <span>其中 <strong style={{ color: '#ff4d4f' }}>{historyStats.delayCount} 个</strong> 项目出现延期，平均延期 {historyStats.avgDeliveryDelay.toFixed(0)} 天。</span>
+                          <span>其中 <strong style={{ color: '#dc2626' }}>{historyStats.delayCount} 个</strong> 项目出现延期，平均延期 {historyStats.avgDeliveryDelay.toFixed(0)} 天。</span>
                         )}
                         {historyStats && historyStats.earlyCount > 0 && (
-                          <span> <strong style={{ color: '#52c41a' }}>{historyStats.earlyCount} 个</strong> 项目提前交付。</span>
+                          <span> <strong style={{ color: '#16a34a' }}>{historyStats.earlyCount} 个</strong> 项目提前交付。</span>
                         )}
                         {' '}根据历史准时率数据，
                         {Math.round(((historyStats?.onTimeCount || 0) / selectedHistoryItems.length) * 100) >= 80
@@ -582,12 +582,12 @@ function ComparisonReportModal({ open, currentProjects, historyProjects, onClose
 
                       {/* 4. 人员数量分析 */}
                       <li>
-                        <strong style={{ color: '#00d4aa' }}>【人员数量对比】</strong>
-                        当前项目计划投入 <strong style={{ color: '#00d4aa' }}>{selectedCurrent?.plannedManpower || 0} 人</strong>，
+                        <strong style={{ color: '#0d9488' }}>【人员数量对比】</strong>
+                        当前项目计划投入 <strong style={{ color: '#0d9488' }}>{selectedCurrent?.plannedManpower || 0} 人</strong>，
                         {historyStats && ((selectedCurrent?.plannedManpower || 0) >= historyStats.avgManpower ? (
-                          <span>相比历史均值 <strong style={{ color: '#52c41a' }}>多出 {diffPercent(selectedCurrent?.plannedManpower || 0, historyStats.avgManpower)}</strong></span>
+                          <span>相比历史均值 <strong style={{ color: '#16a34a' }}>多出 {diffPercent(selectedCurrent?.plannedManpower || 0, historyStats.avgManpower)}</strong></span>
                         ) : (
-                          <span>相比历史均值 <strong style={{ color: '#ff4d4f' }}>少 {diffPercent(selectedCurrent?.plannedManpower || 0, historyStats.avgManpower).replace('+', '')}</strong></span>
+                          <span>相比历史均值 <strong style={{ color: '#dc2626' }}>少 {diffPercent(selectedCurrent?.plannedManpower || 0, historyStats.avgManpower).replace('+', '')}</strong></span>
                         ))}。
                         历史项目平均投入人力 {historyStats?.avgManpower.toFixed(0)} 人。
                         {(() => {
@@ -598,7 +598,7 @@ function ComparisonReportModal({ open, currentProjects, historyProjects, onClose
                           const currentMwPerPerson = currentIt / (currentMp || 1);
                           const avgMwPerPerson = avgIt / (avgMp || 1);
                           return (
-                            <span>人均产出比：当前 <strong style={{ color: '#00d4aa' }}>{currentMwPerPerson.toFixed(1)} MW/人</strong> vs 历史均值 <strong>{avgMwPerPerson.toFixed(1)} MW/人</strong>，
+                            <span>人均产出比：当前 <strong style={{ color: '#0d9488' }}>{currentMwPerPerson.toFixed(1)} MW/人</strong> vs 历史均值 <strong>{avgMwPerPerson.toFixed(1)} MW/人</strong>，
                             {currentMwPerPerson >= avgMwPerPerson
                               ? '✓ 人均产出效率高于历史均值，资源配置合理。'
                               : '⚠️ 人均产出效率低于历史均值，建议评估人员配置是否充足或任务分配是否均衡。'}</span>
@@ -624,10 +624,10 @@ function ComparisonReportModal({ open, currentProjects, historyProjects, onClose
                         if (onTimeRate < 60) risks.push('历史准时率偏低');
                         if (onTimeRate >= 80) strengths.push('历史准时率良好');
                         return (
-                          <li style={{ marginTop: 8, paddingTop: 8, borderTop: '1px dashed rgba(255,255,255,0.08)' }}>
-                            <strong style={{ color: '#fff' }}>【综合评估】</strong>
-                            {strengths.length > 0 && <span><strong style={{ color: '#52c41a' }}>优势：</strong>{strengths.join('、')}。</span>}
-                            {risks.length > 0 && <span><strong style={{ color: '#ff4d4f' }}>风险：</strong>{risks.join('、')}。</span>}
+                          <li style={{ marginTop: 8, paddingTop: 8, borderTop: '1px dashed #e9e7f4' }}>
+                            <strong style={{ color: '#1e1b2e' }}>【综合评估】</strong>
+                            {strengths.length > 0 && <span><strong style={{ color: '#16a34a' }}>优势：</strong>{strengths.join('、')}。</span>}
+                            {risks.length > 0 && <span><strong style={{ color: '#dc2626' }}>风险：</strong>{risks.join('、')}。</span>}
                             {risks.length === 0 && strengths.length === 0 && '各项指标与历史均值基本持平，建议按常规流程推进。'}
                           </li>
                         );
