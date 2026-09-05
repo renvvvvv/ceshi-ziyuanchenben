@@ -9,6 +9,7 @@ import {
   SearchOutlined, ThunderboltOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../../store/AuthContext';
+import { useIsMobile } from '../../hooks/useIsMobile';
 import { request } from '../../api';
 import type { UserRole, AppModule, ModulePermission, User } from '../../types';
 
@@ -67,6 +68,7 @@ interface AccountView {
 // ============================================================
 function PermissionConfig() {
   const { permissionConfigs, updatePermissionConfig, resetPermissions, user } = useAuth();
+  const isMobile = useIsMobile();
 
   // 账号管理区 state
   const [accounts, setAccounts] = useState<AccountView[]>([]);
@@ -650,7 +652,7 @@ function PermissionConfig() {
           <SafetyOutlined style={{ marginRight: 8, color: '#dc2626' }} />
           权限配置
         </h3>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', flexWrap: isMobile ? 'wrap' : 'nowrap', gap: 8 }}>
           <Button
             icon={<ReloadOutlined />}
             onClick={handleReset}
@@ -698,7 +700,7 @@ function PermissionConfig() {
         }
         extra={
           isAdmin && (
-            <Space>
+            <Space wrap={isMobile}>
               <Button
                 icon={<ReloadOutlined />}
                 onClick={loadAccounts}
@@ -817,7 +819,7 @@ function PermissionConfig() {
       {isAdmin && (
         <Card
           title={
-            <Space>
+            <Space wrap={isMobile}>
               <ThunderboltOutlined style={{ color: '#16a34a' }} />
               <span style={{ color: '#1e1b2e' }}>AI 用量统计（近30天）</span>
               <span style={{ color: '#9d9ab8', fontSize: 12 }}>
@@ -898,6 +900,7 @@ function PermissionConfig() {
         confirmLoading={addingUser}
         okText="新增"
         cancelText="取消"
+        width={isMobile ? 'calc(100vw - 24px)' : 520}
         destroyOnClose
       >
         <Form form={addForm} layout="vertical" style={{ marginTop: 16 }}>
@@ -955,7 +958,7 @@ function PermissionConfig() {
         open={feishuSearchOpen}
         onCancel={() => { setFeishuSearchOpen(false); setFeishuQuery(''); setFeishuCandidates([]); }}
         footer={null}
-        width={640}
+        width={isMobile ? 'calc(100vw - 24px)' : 640}
         title={
           <Space>
             <SearchOutlined style={{ color: '#16a34a' }} />
@@ -994,7 +997,7 @@ function PermissionConfig() {
                     padding: '12px 16px', marginBottom: 8, borderRadius: 8,
                     background: '#f6f5fc',
                     border: '1px solid #e9e7f4',
-                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    display: 'flex', flexDirection: isMobile ? 'column' : 'row', justifyContent: 'space-between', alignItems: isMobile ? 'stretch' : 'center', gap: isMobile ? 8 : undefined,
                   }}>
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
@@ -1002,7 +1005,7 @@ function PermissionConfig() {
                       <strong style={{ color: '#1e1b2e' }}>{c.name}</strong>
                       {alreadyExists && <Tag color="orange" style={{ margin: 0 }}>已预授权</Tag>}
                     </div>
-                    <div style={{ color: '#6b6892', fontSize: 12, display: 'flex', gap: 16 }}>
+                    <div style={{ color: '#6b6892', fontSize: 12, display: 'flex', flexWrap: isMobile ? 'wrap' : 'nowrap', gap: 16 }}>
                       {c.email && <span>邮箱: {c.email}</span>}
                       {c.mobile && <span>手机: {c.mobile}</span>}
                       {c.userId && <span>工号: {c.userId}</span>}
@@ -1040,7 +1043,7 @@ function PermissionConfig() {
         confirmLoading={!!permModal && savingId === permModal.account.id}
         okText="保存覆盖"
         cancelText="取消"
-        width={720}
+        width={isMobile ? 'calc(100vw - 24px)' : 720}
         destroyOnClose
         footer={(_, { OkBtn, CancelBtn }) => (
           <Space>
@@ -1065,7 +1068,7 @@ function PermissionConfig() {
               全部清空（全 false）等价于清除覆盖。
             </div>
             <div style={{ marginBottom: 12 }}>
-              <Space>
+              <Space wrap={isMobile}>
                 <span style={{ color: '#46436a', fontSize: 12 }}>快速填充：</span>
                 {ALL_ROLES.map(r => (
                   <Button key={r} size="small" onClick={() => fillFromRole(r)}>

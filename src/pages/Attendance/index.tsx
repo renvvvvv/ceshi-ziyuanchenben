@@ -5,6 +5,7 @@ import { DownloadOutlined, EyeOutlined, CalendarOutlined, PrinterOutlined, Folde
 import dayjs from 'dayjs';
 import * as XLSX from 'xlsx';
 import { useData } from '../../store/DataContext';
+import { useIsMobile } from '../../hooks/useIsMobile';
 import type { TeamMember, Project, HistoricalProject } from '../../types';
 
 // ============================================================
@@ -50,6 +51,7 @@ function dutyRange(pStart: string, pEnd: string, cStart: string, cEnd: string, t
 
 function Attendance() {
   const { teamMembers, projects, historyProjects, attendanceAdjustments, setAttendanceAdjustments, updateTeamMember } = useData();
+  const isMobile = useIsMobile();
   const [monthFilter, setMonthFilter] = useState(() => {
     // 反推今天属于哪个"19日~次月18日"的考勤周期
     // 周期定义：[上月19日, 本月18日]，monthFilter 应为"本月"（cycleEnd 所在月）
@@ -604,8 +606,8 @@ function Attendance() {
               options={manualMemberProjects.map((p) => ({ value: p, label: p }))}
             />
           </Form.Item>
-          <div style={{ display: 'flex', gap: 12 }}>
-            <div style={{ display: 'flex', gap: 12 }}>
+          <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 12 }}>
+            <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 12 }}>
               <Form.Item name="projectStart" label="项目开始时间" rules={[{ required: true, message: '请选择开始时间' }]} style={{ flex: 1 }}>
                 <DatePicker style={{ width: '100%' }} placeholder="选择开始时间" />
               </Form.Item>
@@ -791,10 +793,11 @@ function StatisticsView(props: {
   const { cycleType, setCycleType, monthFilter, setMonthFilter, projectFilter, setProjectFilter,
     memberFilter, setMemberFilter, cycleStart, projectOptions, memberOptions,
     kpiCards, columns, treeData, filteredRows, kpi } = props;
+  const isMobile = useIsMobile();
 
   return (
     <>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 20, marginTop: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: 16, marginBottom: 20, marginTop: 16 }}>
         {kpiCards.map((c) => (
           <div key={c.label} style={{ background: '#f8f7fd', border: '1px solid #e9e7f4', borderRadius: 12, padding: '16px 20px' }}>
             <div style={{ color: '#6b6892', fontSize: 12, marginBottom: 6 }}>{c.label}</div>
@@ -859,6 +862,7 @@ function ProjectEntryView(props: {
   projectOptions: string[];
 }) {
   const { teamMembers, projects, historyProjects, attendanceAdjustments, setAttendanceAdjustments, cycleStart, cycleEnd, cycleLabel, projectOptions } = props;
+  const isMobile = useIsMobile();
   const [selectedProject, setSelectedProject] = useState<string>('');
   const [editing, setEditing] = useState<Record<string, { projectStart?: string; projectEnd?: string; leaveDays?: number; position?: string; attendDays?: number }>>({});
   const [saving, setSaving] = useState(false);
@@ -995,7 +999,7 @@ function ProjectEntryView(props: {
           placeholder="🔍 搜索或选择项目进行考勤录入"
           value={selectedProject || undefined}
           onChange={(v) => setSelectedProject(v || '')}
-          style={{ width: 360 }}
+          style={{ width: isMobile ? '100%' : 360 }}
           showSearch
           optionFilterProp="label"
           filterSort={(a, b) => (a.label as string).localeCompare(b.label as string, 'zh-CN')}
@@ -1027,8 +1031,8 @@ function ProjectEntryView(props: {
         </div>
       ) : (
         <>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <div style={{ background: 'rgba(99,102,241,0.06)', border: '1px solid rgba(99,102,241,0.15)', borderRadius: 8, padding: '8px 14px', fontSize: 12, color: '#46436a', flex: 1, marginRight: 12 }}>
+          <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', justifyContent: 'space-between', alignItems: isMobile ? 'stretch' : 'center', marginBottom: 12 }}>
+            <div style={{ background: 'rgba(99,102,241,0.06)', border: '1px solid rgba(99,102,241,0.15)', borderRadius: 8, padding: '8px 14px', fontSize: 12, color: '#46436a', flex: 1, marginRight: isMobile ? 0 : 12, marginBottom: isMobile ? 8 : undefined }}>
               💡 应出勤 = 项目周期 ∩ 考勤周期（自动推算，含周末）· 实际出勤和岗位可直接编辑 · 修改后点击「一键保存」
             </div>
             <Button icon={<PlusOutlined />} onClick={() => { setSelectedNewMembers([]); setAddMemberOpen(true); }}

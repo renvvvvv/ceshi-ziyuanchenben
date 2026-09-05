@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Tag, Tooltip } from 'antd';
 import dayjs from 'dayjs';
 import type { Project } from '../types';
+import { useIsMobile } from '../hooks/useIsMobile';
 
 export type GanttUnit = 'day' | 'week' | 'month' | 'quarter' | 'year';
 
@@ -111,7 +112,10 @@ function isMajorTick(date: dayjs.Dayjs, unit: GanttUnit): boolean {
 
 function GanttChart({ projects, unit = 'day' }: GanttChartProps) {
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
   const tickInterval = UNIT_TICK[unit].interval;
+  // 移动端适配：左侧项目名列收窄（150），给时间轴留出可视宽度；桌面分支保持 LABEL_WIDTH 原值不变
+  const labelWidth = isMobile ? 150 : LABEL_WIDTH;
 
   // 过滤无效日期项目（缺开始日期的会渲染出 Invalid Date 且条形像素为 NaN）
   const validProjects = useMemo(
@@ -159,13 +163,17 @@ function GanttChart({ projects, unit = 'day' }: GanttChartProps) {
   const dayWidth = useMemo(() => {
     const base = UNIT_DAY_WIDTH[unit];
     if (containerWidth > 0 && range && range.daysTotal > 0) {
-      const usable = containerWidth - LABEL_WIDTH - 56;
+      // 移动端：按 >=900px 的虚拟宽度计算刻度密度，时间轴实际宽度超出屏幕时由
+      // .gantt-body（overflow-x: auto）横向滚动承接，避免小屏下刻度/任务条被压扁重叠；
+      // 桌面分支仍用真实 containerWidth 与 LABEL_WIDTH，渲染结果与原来完全一致
+      const virtualWidth = isMobile ? Math.max(containerWidth, 900) : containerWidth;
+      const usable = virtualWidth - labelWidth - 56;
       const fit = usable / range.daysTotal;
       const floor = Math.min(3, base);
       return Math.max(floor, Math.min(base, fit));
     }
     return base;
-  }, [containerWidth, range, unit]);
+  }, [containerWidth, range, unit, isMobile, labelWidth]);
 
   const {
     ticks,
@@ -356,13 +364,13 @@ function GanttChart({ projects, unit = 'day' }: GanttChartProps) {
 
       {/* 甘特图主体（横向滚动容器） */}
       <div className="gantt-body">
-        <div style={{ minWidth: LABEL_WIDTH + totalWidth }}>
+        <div style={{ minWidth: labelWidth + totalWidth }}>
           {/* 双层表头 */}
           <div className="gantt-header-row" style={{ height: HEADER_MAJOR_HEIGHT + HEADER_MINOR_HEIGHT }}>
             {/* 左上：项目名 */}
             <div
               className="gantt-label-col gantt-sticky-label"
-              style={{ width: LABEL_WIDTH, minWidth: LABEL_WIDTH, flexDirection: 'column', justifyContent: 'center', height: '100%' }}
+              style={{ width: labelWidth, minWidth: labelWidth, flexDirection: 'column', justifyContent: 'center', height: '100%' }}
             >
               <span style={{ color: '#6b6892', fontSize: 12 }}>项目名称</span>
             </div>
@@ -463,7 +471,15 @@ function GanttChart({ projects, unit = 'day' }: GanttChartProps) {
                   {/* 项目标签（横向滚动时固定） */}
                   <div
                     className="gantt-label-col gantt-sticky-label"
-                    style={{ width: LABEL_WIDTH, minWidth: LABEL_WIDTH, height: '100%' }}
+                    style={{
+                      width: labelWidth,
+                      minWidth: labelWidth,
+                      height: '100%',
+                      flexDirection: isMobile ? 'column' : 'row',
+                      alignItems: isMobile ? 'flex-start' : 'center',
+                      justifyContent: isMobile ? 'center' : 'space-between',
+                      gap: isMobile ? 4 : undefined,
+                    }}
                   >
                     <Tooltip
                       title={
@@ -476,7 +492,7 @@ function GanttChart({ projects, unit = 'day' }: GanttChartProps) {
                         </div>
                       }
                     >
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 2, overflow: 'hidden', minWidth: 0, flex: 1 }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 2, overflow: 'hidden', minWidth: 0, flex: isMobile ? '0 0 auto' : 1 }}>
                         <span style={{ color: '#1e1b2e', fontSize: 13, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block', minWidth: 0 }}>
                           {project.name}
                         </span>
@@ -494,7 +510,7 @@ function GanttChart({ projects, unit = 'day' }: GanttChartProps) {
                         borderRadius: 4,
                         fontSize: 11,
                         flexShrink: 0,
-                        marginLeft: 8,
+                        marginLeft: isMobile ? 0 : 8,
                       }}
                     >
                       {project.status}

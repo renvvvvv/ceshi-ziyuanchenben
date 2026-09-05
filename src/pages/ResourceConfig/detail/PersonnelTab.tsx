@@ -14,6 +14,7 @@ import {
   type ResourceConfigProject, type AssetLibItem,
   type PersonnelRow, type StaffRow, type StaffLevel,
 } from '../../../types/resourceConfig';
+import { useIsMobile } from '../../../hooks/useIsMobile';
 
 const { TextArea } = Input;
 
@@ -124,6 +125,7 @@ interface MergedGroup {
 export default function PersonnelTab({ data, canEdit, patch }: TabProps) {
   /** 投入明细展示模式：false=逐人明细；true=按「等级+岗位+投入天数」合并（原 staffMerged 开关） */
   const [staffMerged, setStaffMerged] = useState(false);
+  const isMobile = useIsMobile();
 
   /* ---------- a) 人员岗位配置（原 renderPersonnel L2465） ---------- */
   /**
@@ -430,7 +432,7 @@ export default function PersonnelTab({ data, canEdit, patch }: TabProps) {
     <div>
       {/* a) 人员岗位配置 */}
       <div style={CARD}>
-        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 12, flexWrap: isMobile ? 'wrap' : 'nowrap', rowGap: isMobile ? 6 : undefined }}>
           <span style={CARD_TITLE}>👥 人员岗位配置</span>
           <Tag style={{ margin: '0 0 0 8px' }}>{personnel.length} 个岗位</Tag>
           <span style={CARD_SUB}>岗位合计人数自动统计</span>
@@ -446,7 +448,7 @@ export default function PersonnelTab({ data, canEdit, patch }: TabProps) {
 
       {/* b) 岗位配置 vs 实际投入 比对 */}
       <div style={CARD}>
-        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 12, flexWrap: isMobile ? 'wrap' : 'nowrap', rowGap: isMobile ? 6 : undefined }}>
           <span style={CARD_TITLE}>📊 岗位配置 vs 实际投入 比对</span>
           <span style={CARD_SUB}>按岗位对比「计划主测/组员」与「投入明细实际主测/组员」，差异绿=超 / 橙=缺</span>
         </div>
@@ -457,12 +459,12 @@ export default function PersonnelTab({ data, canEdit, patch }: TabProps) {
 
       {/* c) 人力成本明细 */}
       <div style={CARD}>
-        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 12, flexWrap: isMobile ? 'wrap' : 'nowrap', rowGap: isMobile ? 6 : undefined }}>
           <span style={CARD_TITLE}>🧾 人力成本明细</span>
           <Tag style={{ margin: '0 0 0 8px' }}>{staff.length} 人</Tag>
           <span style={CARD_SUB}>支持按岗位逐人填写职级与天数</span>
           <div style={{ flex: 1 }} />
-          <span style={{ fontSize: 11, color: '#9d9ab8', marginRight: 10 }}>
+          <span style={{ fontSize: 11, color: '#9d9ab8', marginRight: 10, display: isMobile ? 'none' : 'inline' }}>
             将同等级、同岗位、同投入天数的人合并为一行
           </span>
           <Segmented size="small" value={staffMerged ? 'merged' : 'detail'}

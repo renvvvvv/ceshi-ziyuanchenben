@@ -3,6 +3,7 @@ import { Modal, Form, Input, Select, DatePicker, InputNumber, Transfer, message 
 import type { TransferProps } from 'antd';
 import dayjs from 'dayjs';
 import type { Project, TeamMember } from '../types';
+import { useIsMobile } from '../hooks/useIsMobile';
 
 interface ProjectModalProps {
   open: boolean;
@@ -16,6 +17,7 @@ function ProjectModal({ open, project, teamMembers, onCancel, onSubmit }: Projec
   const [form] = Form.useForm();
   const [targetKeys, setTargetKeys] = useState<string[]>([]);
   const isEdit = !!project;
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     if (open) {
@@ -126,7 +128,7 @@ function ProjectModal({ open, project, teamMembers, onCancel, onSubmit }: Projec
         <Form.Item name="name" label="项目名称" rules={[{ required: true, message: '请输入项目名称' }]}>
           <Input placeholder="请输入项目名称" />
         </Form.Item>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: 16 }}>
           <Form.Item name="customer" label="客户" rules={[{ required: true, message: '请输入客户名称' }]}>
             <Input placeholder="请输入客户名称" />
           </Form.Item>
@@ -137,7 +139,7 @@ function ProjectModal({ open, project, teamMembers, onCancel, onSubmit }: Projec
             <Input placeholder="请输入项目经理姓名" />
           </Form.Item>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16 }}>
           <Form.Item name="status" label="状态" rules={[{ required: true, message: '请选择状态' }]}>
             <Select placeholder="请选择状态">
               <Select.Option value="未开始">未开始</Select.Option>
@@ -147,7 +149,7 @@ function ProjectModal({ open, project, teamMembers, onCancel, onSubmit }: Projec
             </Select>
           </Form.Item>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16 }}>
           <Form.Item name="startDate" label="开始日期" rules={[{ required: true, message: '请选择开始日期' }]}>
             <DatePicker style={{ width: '100%' }} placeholder="请选择开始日期" />
           </Form.Item>
@@ -155,7 +157,7 @@ function ProjectModal({ open, project, teamMembers, onCancel, onSubmit }: Projec
             <DatePicker style={{ width: '100%' }} placeholder="请选择结束日期" />
           </Form.Item>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16 }}>
           <Form.Item name="plannedDeliveryDate" label="计划交付日期">
             <DatePicker style={{ width: '100%' }} placeholder="请选择计划交付日期" />
           </Form.Item>
@@ -200,8 +202,8 @@ function ProjectModal({ open, project, teamMembers, onCancel, onSubmit }: Projec
               (item.skills || []).some((s: string) => s.toLowerCase().includes(inputValue.toLowerCase()))
             }
             listStyle={{
-              width: 280,
-              height: 280,
+              width: isMobile ? 'calc(50% - 26px)' : 280,
+              height: isMobile ? 220 : 280,
               background: '#f6f5fc',
               border: '1px solid #e9e7f4',
               borderRadius: 8,

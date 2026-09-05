@@ -8,6 +8,7 @@ import {
   ToolOutlined, BarChartOutlined, AlertOutlined, ProjectOutlined, ReadOutlined,
 } from '@ant-design/icons';
 import { request } from '../../api';
+import { useIsMobile } from '../../hooks/useIsMobile';
 
 const { TextArea } = Input;
 
@@ -52,6 +53,21 @@ const QUICK_QUESTIONS = [
   { icon: '🔧', text: '字节、阿里、腾讯的测试规范有什么区别？' },
 ];
 
+// ============== 内置知识库清单（与 server/knowledge/references 实际文件一一对应，配色按类别区分） ==============
+const KB_ITEMS = [
+  { icon: <BankOutlined />, title: '阿里巴巴 IDC 测试验证指引 V3.0', grad: 'linear-gradient(135deg,#FF9A3D,#FF6A00)' },
+  { icon: <BankOutlined />, title: '腾讯 IDC 验证测试规范 V1.8', grad: 'linear-gradient(135deg,#6366f1,#818cf8)' },
+  { icon: <BankOutlined />, title: '字节跳动测试管理规范 V5.0', grad: 'linear-gradient(135deg,#0d9488,#06b6c4)' },
+  { icon: <SwapOutlined />, title: '三大厂标准 vs 国标对照表', grad: 'linear-gradient(135deg,#a855f7,#7c3aed)' },
+  { icon: <FileProtectOutlined />, title: '国标条款速查 GB50174/50462', grad: 'linear-gradient(135deg,#f87171,#CF1322)' },
+  { icon: <ReadOutlined />, title: '国标规范全文库 · 26 本', grad: 'linear-gradient(135deg,#FF85C0,#9E1068)' },
+  { icon: <DatabaseOutlined />, title: '现场设备速查手册', grad: 'linear-gradient(135deg,#06b6d4,#6366f1)' },
+  { icon: <ToolOutlined />, title: '现场排障方法论', grad: 'linear-gradient(135deg,#16a34a,#0d9488)' },
+  { icon: <BarChartOutlined />, title: '测试数据分析框架', grad: 'linear-gradient(135deg,#FFD666,#D48806)' },
+  { icon: <AlertOutlined />, title: '故障案例库 · 16 个案例', grad: 'linear-gradient(135deg,#FF9C6E,#D4380D)' },
+  { icon: <ProjectOutlined />, title: '测试策略与项目管理', grad: 'linear-gradient(135deg,#6366f1,#a855f7)' },
+];
+
 // ============== 用量配额进度条 ==============
 function fmtTokensShort(n: number): string {
   if (n >= 1e8) return (n / 1e8).toFixed(2) + '亿';
@@ -64,6 +80,7 @@ function quotaColor(pct: number): string {
 }
 
 function QuotaBar({ quota }: { quota: any }) {
+  const isMobile = useIsMobile();
   const todayUsed = quota.todayTokens || 0;
   const todayLimit = quota.todayLimitTokens || 1;
   const weekPoints = quota.weekPoints || 0;
@@ -72,18 +89,19 @@ function QuotaBar({ quota }: { quota: any }) {
   const weekPct = Math.min(100, (weekPoints / weekLimit) * 100);
   return (
     <div style={{
-      display: 'flex', gap: 24, alignItems: 'center', padding: '6px 12px', marginBottom: 8,
+      display: 'flex', flexDirection: isMobile ? 'column' : 'row',
+      gap: isMobile ? 8 : 24, alignItems: 'center', padding: '6px 12px', marginBottom: 8,
       background: '#f6f5fc', border: '1px solid #e9e7f4', borderRadius: 8,
     }}>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#6b6892', marginBottom: 2 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: isMobile ? 10 : 11, color: '#6b6892', marginBottom: 2 }}>
           <span>今日 Token（{quota.todayCount ?? 0} 次提问）</span>
           <span>剩余 <b style={{ color: quotaColor(todayPct) }}>{fmtTokensShort(Math.max(0, todayLimit - todayUsed))}</b> / {fmtTokensShort(todayLimit)}</span>
         </div>
         <Progress percent={todayPct} showInfo={false} size="small" strokeColor={quotaColor(todayPct)} trailColor="#f6f5fc" />
       </div>
-      <div style={{ width: 200 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#6b6892', marginBottom: 2 }}>
+      <div style={{ width: isMobile ? '100%' : 200, minWidth: isMobile ? 0 : undefined }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: isMobile ? 10 : 11, color: '#6b6892', marginBottom: 2 }}>
           <span>本周积分</span>
           <span>剩余 <b style={{ color: quotaColor(weekPct) }}>{Math.max(0, Math.round(weekLimit - weekPoints)).toLocaleString()}</b> / {weekLimit.toLocaleString()}</span>
         </div>
@@ -95,27 +113,31 @@ function QuotaBar({ quota }: { quota: any }) {
 
 // ============== 主组件 ==============
 export default function AiTestExpert() {
+  const isMobile = useIsMobile();
   return (
     <div style={{ height: 'calc(100vh - 120px)', display: 'flex', flexDirection: 'column' }}>
       {/* 顶栏 */}
       <div style={{
-        display: 'flex', alignItems: 'center', gap: 12, padding: '12px 18px',
+        display: 'flex', alignItems: 'center', gap: 12, padding: isMobile ? '10px 12px' : '12px 18px',
         borderBottom: '1px solid #e9e7f4',
         background: '#f6f5fc',
       }}>
         <RobotOutlined style={{ color: '#16a34a', fontSize: 20 }} />
-        <div style={{ flex: 1 }}>
+        <div style={{ flex: 1, minWidth: isMobile ? 0 : undefined }}>
           <div style={{ color: '#1e1b2e', fontSize: 15, fontWeight: 600 }}>
             AI 测试专家
           </div>
-          <div style={{ color: '#9d9ab8', fontSize: 11, marginTop: 2 }}>
+          <div style={{ color: '#9d9ab8', fontSize: isMobile ? 10 : 11, marginTop: 2 }}>
             数据中心测试领域智能助手 · GLM-5.2 深度思考 + 联网搜索
           </div>
         </div>
       </div>
 
+      {/* 移动端：内置知识库横滑徽章条（桌面不渲染，右侧栏完整保留） */}
+      {isMobile ? <MobileKbStrip /> : null}
+
       {/* 主体：左对话 + 右侧栏 */}
-      <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: isMobile ? 'column' : 'row', minHeight: 0 }}>
         <ChatArea />
         <SidePanel />
       </div>
@@ -123,8 +145,36 @@ export default function AiTestExpert() {
   );
 }
 
+// ============== 移动端知识库横滑徽章条 ==============
+function MobileKbStrip() {
+  return (
+    <div style={{
+      display: 'flex', gap: 8, alignItems: 'center',
+      overflowX: 'auto', padding: '8px 12px',
+      borderBottom: '1px solid #e9e7f4', background: '#f6f5fc',
+    }}>
+      {KB_ITEMS.map((kb, i) => (
+        <div key={i} style={{
+          display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0,
+          background: '#ffffff', border: '1px solid #e9e7f4', borderRadius: 999,
+          padding: '3px 10px 3px 4px',
+        }}>
+          <div style={{
+            width: 20, height: 20, borderRadius: 6, flexShrink: 0,
+            background: kb.grad, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <span style={{ color: '#fff', fontSize: 10, lineHeight: 1 }}>{kb.icon}</span>
+          </div>
+          <span style={{ color: '#46436a', fontSize: 11, whiteSpace: 'nowrap' }}>{kb.title}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ============== 左侧对话区 ==============
 function ChatArea() {
+  const isMobile = useIsMobile();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   // 问答模式：fast=GLM-5.3-Flash 秒级（默认），deep=GLM-5.2 深度思考
@@ -255,7 +305,7 @@ function ChatArea() {
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
       {/* 对话列表（居中 max-width 900）*/}
-      <div ref={listRef} style={{ flex: 1, overflowY: 'auto', padding: '20px 24px' }}>
+      <div ref={listRef} style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '12px 12px' : '20px 24px' }}>
         <div style={{ maxWidth: 900, margin: '0 auto' }}>
           {messages.length === 0 ? (
             <WelcomeScreen onQuick={handleAsk} />
@@ -283,7 +333,7 @@ function ChatArea() {
 
       {/* 输入区（居中）*/}
       <div style={{
-        borderTop: '1px solid #e9e7f4', padding: '16px 24px',
+        borderTop: '1px solid #e9e7f4', padding: isMobile ? '12px 12px' : '16px 24px',
         background: '#f1f0fe',
       }}>
         <div style={{ maxWidth: 900, margin: '0 auto' }}>
@@ -294,17 +344,17 @@ function ChatArea() {
               onChange={(v) => setQaMode(v as 'fast' | 'deep')}
               disabled={asking}
               options={[
-                { value: 'fast', label: <span style={{ fontSize: 12 }}>⚡ 快速回答 <span style={{ color: '#9d9ab8' }}>· 5.3-Flash 秒级</span></span> },
-                { value: 'deep', label: <span style={{ fontSize: 12 }}>🧠 深度思考 <span style={{ color: '#9d9ab8' }}>· GLM-5.2 30-90秒</span></span> },
+                { value: 'fast', label: <span style={{ fontSize: 12 }}>⚡ 快速回答 <span style={{ color: '#9d9ab8', display: isMobile ? 'none' : undefined }}>· 5.3-Flash 秒级</span></span> },
+                { value: 'deep', label: <span style={{ fontSize: 12 }}>🧠 深度思考 <span style={{ color: '#9d9ab8', display: isMobile ? 'none' : undefined }}>· GLM-5.2 30-90秒</span></span> },
               ]}
             />
             <Tooltip title={qaMode === 'fast' ? '适合标准查询、简单排障，通常几秒内回答' : '适合复杂分析、跨标准对比、深度排障，思考更充分但耗时较长'}>
-              <span style={{ color: '#9d9ab8', fontSize: 11, cursor: 'help' }}>
+              <span style={{ color: '#9d9ab8', fontSize: 11, cursor: 'help', display: isMobile ? 'none' : undefined }}>
                 {qaMode === 'fast' ? '常规问题用这档' : '复杂问题用这档'}
               </span>
             </Tooltip>
           </div>
-          <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end' }}>
+          <div style={{ display: 'flex', gap: isMobile ? 8 : 10, alignItems: 'flex-end' }}>
             <TextArea
               value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={handleKeyDown}
               placeholder="向 AI 测试专家提问...（Enter 发送，Shift+Enter 换行）"
@@ -312,13 +362,14 @@ function ChatArea() {
               style={{
                 background: '#f6f5fc', border: '1px solid #d9d5f0',
                 borderRadius: 10, color: '#1e1b2e', resize: 'none', fontSize: 14,
+                flex: isMobile ? 1 : undefined, minWidth: isMobile ? 0 : undefined,
               }}
             />
             <Button type="primary" icon={<SendOutlined />} onClick={() => handleAsk()}
-              loading={asking} disabled={!input.trim()} style={{ borderRadius: 10, height: 42, width: 42 }} />
+              loading={asking} disabled={!input.trim()} style={{ borderRadius: 10, height: 42, width: 42, flexShrink: isMobile ? 0 : undefined }} />
             {messages.length > 0 && (
               <Button icon={<ReloadOutlined />} onClick={() => setMessages([])}
-                title="新对话" style={{ borderRadius: 10, height: 42, width: 42 }} />
+                title="新对话" style={{ borderRadius: 10, height: 42, width: 42, flexShrink: isMobile ? 0 : undefined }} />
             )}
           </div>
         </div>
@@ -329,12 +380,13 @@ function ChatArea() {
 
 // ============== 欢迎屏 ==============
 function WelcomeScreen({ onQuick }: { onQuick: (q: string) => void }) {
+  const isMobile = useIsMobile();
   return (
     <div style={{
       display: 'flex', flexDirection: 'column', alignItems: 'center',
-      padding: '40px 20px', textAlign: 'center',
+      padding: isMobile ? '24px 12px' : '40px 20px', textAlign: 'center',
     }}>
-      <RobotOutlined style={{ fontSize: 56, color: 'rgba(22,163,74,0.4)', marginBottom: 20 }} />
+      <RobotOutlined style={{ fontSize: isMobile ? 40 : 56, color: 'rgba(22,163,74,0.4)', marginBottom: 20 }} />
       <h2 style={{ color: '#1e1b2e', fontSize: 22, margin: '0 0 8px' }}>
         数据中心测试专家
       </h2>
@@ -343,7 +395,7 @@ function WelcomeScreen({ onQuick }: { onQuick: (q: string) => void }) {
         可以问答设备参数、排障方法、验收标准，回答会标注厂商标准与国标的对应关系。
       </p>
       <div style={{
-        display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10,
+        display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)', gap: isMobile ? 8 : 10,
         maxWidth: 640, width: '100%',
       }}>
         {QUICK_QUESTIONS.map((q, i) => (
@@ -367,6 +419,7 @@ function WelcomeScreen({ onQuick }: { onQuick: (q: string) => void }) {
 
 // ============== 消息气泡 ==============
 function MessageBubble({ msg }: { msg: ChatMessage }) {
+  const isMobile = useIsMobile();
   const isUser = msg.role === 'user';
   const [showReasoning, setShowReasoning] = useState(false);
   const [learnOpen, setLearnOpen] = useState(false);
@@ -413,7 +466,7 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
 
       {/* 思考过程 */}
       {!isUser && msg.reasoning && msg.reasoning.trim() && (
-        <div style={{ width: '100%', maxWidth: 800, marginBottom: 8 }}>
+        <div style={{ width: '100%', maxWidth: isMobile ? '100%' : 800, marginBottom: 8 }}>
           <Button size="small" type="text" icon={<BulbOutlined style={{ color: '#d97706' }} />}
             onClick={() => setShowReasoning(!showReasoning)}
             style={{ color: '#6b6892', fontSize: 12 }}>
@@ -437,12 +490,12 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
         border: isUser ? 'none' : '1px solid #e9e7f4',
         color: isUser ? '#fff' : '#1e1b2e',
         borderRadius: isUser ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
-        padding: '14px 18px', maxWidth: 800, fontSize: 14, lineHeight: 1.8, wordBreak: 'break-word',
+        padding: isMobile ? '10px 12px' : '14px 18px', maxWidth: isMobile ? '90%' : 800, fontSize: 14, lineHeight: 1.8, wordBreak: 'break-word',
       }} dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content) }} />
 
       {/* 联网搜索来源 */}
       {!isUser && msg.webSearch && msg.webSearch.length > 0 && (
-        <div style={{ marginTop: 10, maxWidth: 800, fontSize: 12 }}>
+        <div style={{ marginTop: 10, maxWidth: isMobile ? '100%' : 800, fontSize: 12 }}>
           <div style={{ color: '#9d9ab8', marginBottom: 6 }}>
             <SearchOutlined style={{ marginRight: 4 }} />联网搜索来源：
           </div>
@@ -459,7 +512,7 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
       {!isUser && msg.sources && msg.sources.length > 0 && (
         <div style={{
           marginTop: 10, fontSize: 12, color: '#9d9ab8',
-          display: 'flex', flexWrap: 'wrap', gap: 6, maxWidth: 800,
+          display: 'flex', flexWrap: 'wrap', gap: 6, maxWidth: isMobile ? '100%' : 800,
         }}>
           <span>📎 知识库来源：</span>
           {msg.sources.map((s, i) => (
@@ -499,10 +552,11 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
 
 // ============== 右侧栏 ==============
 function SidePanel() {
+  const isMobile = useIsMobile();
   return (
     <div style={{
-      width: 290, borderLeft: '1px solid #e9e7f4',
-      display: 'flex', flexDirection: 'column', background: '#f1f0fe',
+      width: isMobile ? '100%' : 290, borderLeft: '1px solid #e9e7f4',
+      display: isMobile ? 'none' : 'flex', flexDirection: 'column', background: '#f1f0fe',
       overflowY: 'auto',
     }}>
       {/* 能力说明 */}
@@ -533,25 +587,13 @@ function SidePanel() {
         </div>
       </div>
 
-      {/* 内置知识库（与 server/knowledge/references 实际文件一一对应，配色按类别区分） */}
+      {/* 内置知识库（清单见模块级 KB_ITEMS，移动端由顶部横滑徽章条承接） */}
       <div style={{ padding: '0 16px 16px' }}>
         <div style={{ color: '#1e1b2e', fontSize: 13, fontWeight: 600, marginBottom: 12 }}>
           📚 内置知识库
         </div>
         <div style={{ display: 'flex', flexDirection: 'column' }}>
-          {[
-            { icon: <BankOutlined />, title: '阿里巴巴 IDC 测试验证指引 V3.0', grad: 'linear-gradient(135deg,#FF9A3D,#FF6A00)' },
-            { icon: <BankOutlined />, title: '腾讯 IDC 验证测试规范 V1.8', grad: 'linear-gradient(135deg,#6366f1,#818cf8)' },
-            { icon: <BankOutlined />, title: '字节跳动测试管理规范 V5.0', grad: 'linear-gradient(135deg,#0d9488,#06b6d4)' },
-            { icon: <SwapOutlined />, title: '三大厂标准 vs 国标对照表', grad: 'linear-gradient(135deg,#a855f7,#7c3aed)' },
-            { icon: <FileProtectOutlined />, title: '国标条款速查 GB50174/50462', grad: 'linear-gradient(135deg,#f87171,#CF1322)' },
-            { icon: <ReadOutlined />, title: '国标规范全文库 · 26 本', grad: 'linear-gradient(135deg,#FF85C0,#9E1068)' },
-            { icon: <DatabaseOutlined />, title: '现场设备速查手册', grad: 'linear-gradient(135deg,#06b6d4,#6366f1)' },
-            { icon: <ToolOutlined />, title: '现场排障方法论', grad: 'linear-gradient(135deg,#16a34a,#0d9488)' },
-            { icon: <BarChartOutlined />, title: '测试数据分析框架', grad: 'linear-gradient(135deg,#FFD666,#D48806)' },
-            { icon: <AlertOutlined />, title: '故障案例库 · 16 个案例', grad: 'linear-gradient(135deg,#FF9C6E,#D4380D)' },
-            { icon: <ProjectOutlined />, title: '测试策略与项目管理', grad: 'linear-gradient(135deg,#6366f1,#a855f7)' },
-          ].map((kb, i, arr) => (
+          {KB_ITEMS.map((kb, i, arr) => (
             <div key={i} style={{
               display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0',
               borderBottom: i < arr.length - 1 ? '1px solid #eeedf8' : 'none',

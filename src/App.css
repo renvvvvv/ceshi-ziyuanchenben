@@ -1408,9 +1408,10 @@ body {
     font-size: 14px !important;
   }
 
-  /* 手机端隐藏角色文字，只保留头像，节省 header 空间 */
+  /* 手机端隐藏角色文字，只保留头像，节省 header 空间
+     （该列带内联 display:flex，必须 !important 才能覆盖） */
   .header-right .ant-dropdown-trigger > div:last-child {
-    display: none;
+    display: none !important;
   }
 
   /* page-header 标题缩小 */
@@ -1506,4 +1507,68 @@ body {
   color: #6366f1 !important;
   background: #f1f0fe !important;
   border: 1px solid #d9d5f0 !important;
+}
+
+/* ============================================================
+   移动端内容层适配（MOBILE-V1）—— 仅 ≤767px 生效，桌面零影响
+   页面级布局由 useIsMobile() 条件样式处理，此处只做全局通用项
+   ============================================================ */
+@media (max-width: 767px) {
+  /* 所有 antd 表格：按内容自然撑宽 + 容器横向滚动，不再挤压换行 */
+  .ant-table-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .ant-table-wrapper .ant-table {
+    width: max-content;
+    min-width: 100%;
+    max-width: none;
+  }
+  .ant-table-wrapper .ant-table-cell {
+    white-space: nowrap;
+  }
+
+  /* 分页器换行友好 + 简化尺寸 */
+  .ant-pagination {
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+  .ant-pagination .ant-pagination-options {
+    display: none;
+  }
+
+  /* Tabs 标签页超宽时可横向滑动（资源配置详情等 6 个 Tab） */
+  .ant-tabs-nav > .ant-tabs-nav-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .ant-tabs-nav .ant-tabs-tab {
+    padding: 10px 8px !important;
+    margin: 0 4px !important;
+  }
+
+  /* Descriptions 手风琴式纵向排列（配合页面 column={1}） */
+  .ant-descriptions .ant-descriptions-item-label,
+  .ant-descriptions .ant-descriptions-item-content {
+    padding-block: 6px !important;
+  }
+
+  /* 表单弹窗内边距收紧 */
+  .ant-modal .ant-modal-body {
+    padding: 16px 14px !important;
+  }
+  .ant-form-item-label > label {
+    font-size: 13px;
+  }
+
+  /* Statistic 数值不再撑爆卡片 */
+  .ant-statistic-content-value {
+    font-size: 20px !important;
+  }
+
+  /* 页面级通用工具行：工具栏/筛选行允许换行 */
+  .page-header {
+    flex-wrap: wrap;
+    gap: 10px !important;
+  }
 }

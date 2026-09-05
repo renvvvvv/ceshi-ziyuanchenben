@@ -16,6 +16,7 @@ import {
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { useData } from '../../store/DataContext';
+import { useIsMobile } from '../../hooks/useIsMobile';
 import type { TeamMember, MemberStatus, MemberProject, Project } from '../../types';
 
 const statusConfig: Record<MemberStatus, { bg: string; color: string; dot: string }> = {
@@ -74,6 +75,7 @@ function detectTimeConflicts(member: TeamMember): TimeConflict[] {
 
 function TeamPool() {
   const { teamMembers: members, setTeamMembers: setMembers, projects, setProjects, autoProcessProjects, autoProcessMembers, syncMembersFromProjects, addTeamMember, updateTeamMember, deleteTeamMember, updateProject } = useData();
+  const isMobile = useIsMobile();
 
   // ===== 自动化流程：进入人员池时自动处理项目/人员状态 + 同步人员项目数据 =====
   useEffect(() => {
@@ -867,7 +869,7 @@ function TeamPool() {
           <Form.Item noStyle shouldUpdate={(prev, curr) => prev.status !== curr.status}>
             {({ getFieldValue }) =>
               getFieldValue('status') === '休假' ? (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16, marginBottom: 16 }}>
                   <Form.Item name="leaveStartDate" label="休假开始日期" rules={[{ required: true, message: '请选择休假开始日期' }]}>
                     <DatePicker style={{ width: '100%' }} placeholder="选择开始日期" />
                   </Form.Item>
@@ -986,7 +988,8 @@ function TeamPool() {
             当前没有时间冲突的人员
           </div>
         ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+          <div style={{ overflowX: isMobile ? 'auto' : undefined, WebkitOverflowScrolling: isMobile ? 'touch' : undefined }}>
+          <table style={{ width: '100%', minWidth: isMobile ? 640 : undefined, borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
               <tr style={{ background: 'rgba(99,102,241,0.06)', borderBottom: '2px solid rgba(99,102,241,0.2)' }}>
                 <th style={{ padding: '10px 8px', textAlign: 'left', color: '#46436a', fontWeight: 500 }}>人员</th>
@@ -1014,6 +1017,7 @@ function TeamPool() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </Modal>
 
@@ -1080,7 +1084,7 @@ function TeamPool() {
                     <ClockCircleOutlined style={{ color: '#6366f1' }} />
                     <span style={{ color: '#6b6892' }}>项目时间（自动同步）</span>
                   </div>
-                  <div style={{ display: 'flex', gap: 24, paddingLeft: 22 }}>
+                  <div style={{ display: 'flex', flexWrap: isMobile ? 'wrap' : 'nowrap', gap: isMobile ? 8 : 24, paddingLeft: 22 }}>
                     <span>
                       <span style={{ color: '#6b6892' }}>开始：</span>
                       <span style={{ color: '#1e1b2e' }}>{selectedProject.startDate}</span>
@@ -1126,6 +1130,7 @@ function TeamPool() {
         >
           从左侧选择人员，添加到右侧后点击「确认指派」
         </div>
+        <div style={{ overflowX: isMobile ? 'auto' : undefined, WebkitOverflowScrolling: isMobile ? 'touch' : undefined }}>
         <Transfer
           dataSource={transferData}
           titles={['可选人员', '已选人员']}
@@ -1139,7 +1144,7 @@ function TeamPool() {
             (item.skills || []).some((s: string) => s.toLowerCase().includes(inputValue.toLowerCase()))
           }
           listStyle={{
-            width: 280,
+            width: isMobile ? 240 : 280,
             height: 320,
             background: '#f8f7fd',
             border: '1px solid #e9e7f4',
@@ -1147,6 +1152,7 @@ function TeamPool() {
           }}
           selectAllLabels={['全选', '全选']}
         />
+        </div>
       </Modal>
 
       {/* Transfer 深色主题选中项样式覆盖 */}

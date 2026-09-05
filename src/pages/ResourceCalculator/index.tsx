@@ -16,6 +16,7 @@ import {
   type ParsedInput, type BatchReportRow,
 } from '../../utils/excelUtils';
 import { apiCalcResource, apiGetHistory, apiDeleteHistory, apiGetBatchDetail, type HistoryItem, type HistoryGroupItem, resourceCalcApi, type PaginatedResponse } from '../../api';
+import { useIsMobile } from '../../hooks/useIsMobile';
 import BatchResultsView from '../../components/BatchResultsView';
 
 const { Title, Text, Paragraph } = Typography;
@@ -32,6 +33,7 @@ type PageMode = 'home' | 'single' | 'batch';
 
 function ResourceCalculator() {
   const [form] = Form.useForm();
+  const isMobile = useIsMobile();
   const [mode, setMode] = useState<PageMode>('home');
 
   // 单算
@@ -343,7 +345,7 @@ function ResourceCalculator() {
       {/* 历史记录 */}
       <Card title={<><HistoryOutlined /> 历史记录</>}
         extra={
-          <Space>
+          <Space wrap={isMobile}>
             <Select value={filterType} onChange={setFilterType} size="small" style={{ width: 90 }}
               options={[{ value: 'all', label: '全部' }, { value: 'single', label: '单算' }, { value: 'batch', label: '群算' }]} />
             <input
@@ -431,19 +433,19 @@ function ResourceCalculator() {
           <Button key="import" icon={<ImportOutlined />} onClick={() => { setSingleModalOpen(false); setImportMode('single'); setImportFile(null); setImportedData([]); setImportError(''); setImportModalOpen(true); }}>从Excel导入</Button>,
           <Button key="calc" type="primary" icon={<CalculatorOutlined />} loading={calcLoading} onClick={handleSingleCalc}>开始计算</Button>,
         ]}
-        width={560}
+        width={isMobile ? 'calc(100vw - 24px)' : 560}
       >
         <Form form={form} layout="vertical" initialValues={{
           total_mw: 30.0, total_duration: 25,
           it_transSpecs: [2.0], it_transCount: 6,
         }}>
           <Row gutter={16}>
-            <Col span={12}>
+            <Col span={12} xs={24}>
               <Form.Item name="total_mw" label="总兆瓦数 (MW)" rules={[{ required: true }]}>
                 <InputNumber style={{ width: '100%' }} min={1} max={66} step={0.1} />
               </Form.Item>
             </Col>
-            <Col span={12}>
+            <Col span={12} xs={24}>
               <Form.Item name="total_duration" label="总工期 (天)" rules={[{ required: true }]}>
                 <InputNumber style={{ width: '100%' }} min={1} max={365} />
               </Form.Item>
@@ -486,14 +488,14 @@ function ResourceCalculator() {
             </Text>
           </Form.Item>
           <Row gutter={16}>
-            <Col span={12}>
+            <Col span={12} xs={24}>
               <Form.Item label="IT变压器规格" required>
                 <Form.Item name="it_transSpecs" noStyle rules={[{ required: true }]}>
                   <Select mode="multiple" placeholder="规格" options={TRANSFORMER_SPECS.map(s => ({ label: `${s} MW`, value: s }))} />
                 </Form.Item>
               </Form.Item>
             </Col>
-            <Col span={12}>
+            <Col span={12} xs={24}>
               <Form.Item label="IT变压器台数">
                 <Form.Item name="it_transCount" noStyle>
                   <InputNumber style={{ width: '100%' }} min={1} placeholder="台数" />
@@ -502,14 +504,14 @@ function ResourceCalculator() {
             </Col>
           </Row>
           <Row gutter={16}>
-            <Col span={12}>
+            <Col span={12} xs={24}>
               <Form.Item label="动力变压器规格（可选）">
                 <Form.Item name="pw_transSpecs" noStyle>
                   <Select mode="multiple" placeholder="不填则无" allowClear options={TRANSFORMER_SPECS.filter(s => s !== 3.15).map(s => ({ label: `${s} MW`, value: s }))} />
                 </Form.Item>
               </Form.Item>
             </Col>
-            <Col span={12}>
+            <Col span={12} xs={24}>
               <Form.Item label="动力变压器台数">
                 <Form.Item name="pw_transCount" noStyle>
                   <InputNumber style={{ width: '100%' }} min={0} placeholder="台数" />
@@ -547,7 +549,7 @@ function ResourceCalculator() {
 
       {/* 导入弹窗 */}
       <Modal title="导入 Excel" open={importModalOpen} onCancel={() => setImportModalOpen(false)} onOk={handleConfirmImport}
-        okText={importMode === 'single' ? '导入选中行' : '开始群算'} cancelText="取消" width={750}
+        okText={importMode === 'single' ? '导入选中行' : '开始群算'} cancelText="取消" width={isMobile ? 'calc(100vw - 24px)' : 750}
         okButtonProps={{ loading: importLoading, disabled: importedData.length === 0 }}>
         <div style={{ marginBottom: 12 }}><Text strong>模式：{importMode === 'single' ? '单算导入（选择一行填入表单）' : '群算（批量计算存库）'}</Text></div>
         <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center' }}>
@@ -673,11 +675,11 @@ function SingleResultView({ report, input, onExport, onBack, embedded }: {
             </div>
           )}
           <Row gutter={24} style={{ marginBottom: 16 }}>
-            <Col span={4}><Statistic title="总容量" value={input.total_mw} suffix="MW" /></Col>
-            <Col span={4}><Statistic title="总工期" value={input.total_duration} suffix="天" /></Col>
-            <Col span={4}><Statistic title="平均人数" value={Math.round(report.汇总.总人天 / input.total_duration * 10) / 10} suffix="人" valueStyle={{ color: '#d97706' }} /></Col>
-            <Col span={6}><Statistic title="峰值同时在场" value={report.汇总.峰值同时在场} suffix="人" valueStyle={{ color: '#6366f1' }} /></Col>
-            <Col span={6}><Statistic title="总人天" value={report.汇总.总人天} suffix="人·天" valueStyle={{ color: '#16a34a' }} /></Col>
+            <Col span={4} xs={24}><Statistic title="总容量" value={input.total_mw} suffix="MW" /></Col>
+            <Col span={4} xs={24}><Statistic title="总工期" value={input.total_duration} suffix="天" /></Col>
+            <Col span={4} xs={24}><Statistic title="平均人数" value={Math.round(report.汇总.总人天 / input.total_duration * 10) / 10} suffix="人" valueStyle={{ color: '#d97706' }} /></Col>
+            <Col span={6} xs={24}><Statistic title="峰值同时在场" value={report.汇总.峰值同时在场} suffix="人" valueStyle={{ color: '#6366f1' }} /></Col>
+            <Col span={6} xs={24}><Statistic title="总人天" value={report.汇总.总人天} suffix="人·天" valueStyle={{ color: '#16a34a' }} /></Col>
           </Row>
           <Table columns={summaryColumns} dataSource={summaryData} pagination={false} size="small" bordered scroll={{ x: 1800 }} />
         </div>
@@ -746,10 +748,10 @@ function SingleResultView({ report, input, onExport, onBack, embedded }: {
       children: report.PDU配置 ? (
         <div>
           <Row gutter={24} style={{ marginBottom: 16 }}>
-            <Col span={6}><Statistic title="机柜数量" value={report.PDU配置.机柜数量} suffix="柜" /></Col>
-            <Col span={6}><Statistic title="PDU数量" value={report.PDU配置.PDU数量} suffix="条" /></Col>
-            <Col span={4}><Statistic title="PDU类型" value={report.PDU配置.PDU类型} /></Col>
-            <Col span={4}><Statistic title="额定电流" value={report.PDU配置.额定电流} /></Col>
+            <Col span={6} xs={24}><Statistic title="机柜数量" value={report.PDU配置.机柜数量} suffix="柜" /></Col>
+            <Col span={6} xs={24}><Statistic title="PDU数量" value={report.PDU配置.PDU数量} suffix="条" /></Col>
+            <Col span={4} xs={24}><Statistic title="PDU类型" value={report.PDU配置.PDU类型} /></Col>
+            <Col span={4} xs={24}><Statistic title="额定电流" value={report.PDU配置.额定电流} /></Col>
           </Row>
           <Descriptions size="small" bordered column={2}>
             <Descriptions.Item label="线缆规格">{report.PDU配置.线缆规格}</Descriptions.Item>

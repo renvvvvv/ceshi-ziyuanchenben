@@ -13,6 +13,7 @@ import {
   type ResourceConfigProject, type AssetLibItem,
   type SubsidyRow, type ExternalRow, type StaffRow,
 } from '../../../types/resourceConfig';
+import { useIsMobile } from '../../../hooks/useIsMobile';
 
 const { TextArea } = Input;
 
@@ -85,6 +86,7 @@ export default function SubsidyTab({ data, canEdit, patch }: TabProps) {
   const staff = data.staff || [];
   const subsidy = data.subsidy || [];
   const external = data.external || [];
+  const isMobile = useIsMobile();
 
   /* 页头统计（原 st_man_days / st_subsidy_count / st_ext_count） */
   const manDays = staff.reduce((s, r) => s + staffTotal(r), 0);
@@ -279,7 +281,7 @@ export default function SubsidyTab({ data, canEdit, patch }: TabProps) {
   return (
     <div>
       {/* 页头统计卡（原 stat-row：投入总人天 / 补贴总人数 / 外部租赁人员） */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 14 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: 10, marginBottom: 14 }}>
         {[
           { label: '👥 投入总人天', value: manDays, sub: 'Σ(投入天数 × 人数)' },
           { label: '💵 补贴总人数', value: subsidyCount, sub: 'Σ 各岗位补贴人数' },
@@ -299,7 +301,7 @@ export default function SubsidyTab({ data, canEdit, patch }: TabProps) {
 
       {/* a) 岗位补贴 */}
       <div style={CARD}>
-        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 12, flexWrap: isMobile ? 'wrap' : 'nowrap', rowGap: isMobile ? 6 : undefined }}>
           <span style={CARD_TITLE}>💰 岗位补贴</span>
           <Tag style={{ margin: '0 0 0 8px' }}>{subsidy.length} 项</Tag>
           <span style={CARD_SUB}>按岗位设置补贴人数（用于人力成本预估）</span>
@@ -320,7 +322,7 @@ export default function SubsidyTab({ data, canEdit, patch }: TabProps) {
 
       {/* b) 外部租赁人员 */}
       <div style={CARD}>
-        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 12, flexWrap: isMobile ? 'wrap' : 'nowrap', rowGap: isMobile ? 6 : undefined }}>
           <span style={CARD_TITLE}>🧑‍💼 外部租赁人员</span>
           <Tag style={{ margin: '0 0 0 8px' }}>{external.length} 项</Tag>
           <span style={CARD_SUB}>外包/外部测试人员需求</span>

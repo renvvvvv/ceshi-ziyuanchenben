@@ -8,6 +8,7 @@ import StatusTag from '../../components/StatusTag';
 import ProjectModal from '../../components/ProjectModal';
 import ComparisonReportModal from '../../components/ComparisonReportModal';
 import { useData } from '../../store/DataContext';
+import { useIsMobile } from '../../hooks/useIsMobile';
 import type { Project, HistoricalProject, TeamMember } from '../../types';
 
 function Projects() {
@@ -24,6 +25,7 @@ function Projects() {
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [reportOpen, setReportOpen] = useState(false);
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
 
   // 过滤：默认不显示"已完成"项目（隐藏），可手动通过状态筛选查看
   // 设计变更（2026-07-19）：已完成项目不再自动归档，保留在 projects 数组里
@@ -332,7 +334,7 @@ function Projects() {
         <Select
           value={statusFilter}
           onChange={setStatusFilter}
-          style={{ width: 130, fontFamily: 'var(--font-primary)' }}
+          style={{ width: isMobile ? '100%' : 130, fontFamily: 'var(--font-primary)' }}
           popupMatchSelectWidth={false}
         >
           <Select.Option value="全部">全部状态</Select.Option>
@@ -346,7 +348,7 @@ function Projects() {
           prefix={<SearchOutlined style={{ color: '#9d9ab8' }} />}
           value={searchText}
           onChange={(e) => setSearchText(e.target.value)}
-          style={{ width: 250, fontFamily: 'var(--font-primary)', background: '#f6f5fc', border: '1px solid #e9e7f4', color: '#1e1b2e' }}
+          style={{ width: isMobile ? '100%' : 250, fontFamily: 'var(--font-primary)', background: '#f6f5fc', border: '1px solid #e9e7f4', color: '#1e1b2e' }}
           allowClear
           variant="borderless"
         />

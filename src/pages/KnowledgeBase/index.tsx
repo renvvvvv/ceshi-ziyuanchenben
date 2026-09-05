@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import { Button, Spin, Empty } from 'antd';
 import { GlobalOutlined } from '@ant-design/icons';
+import { useIsMobile } from '../../hooks/useIsMobile';
 
 // ============== 主组件：飞书知识库（iframe 嵌入）==============
 export default function KnowledgeBase() {
+  const isMobile = useIsMobile();
   const [kbData, setKbData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const defaultUrl = kbData?.tree?.[0]?.feishuLink || '';
@@ -21,12 +23,14 @@ export default function KnowledgeBase() {
     <div style={{ height: 'calc(100vh - 120px)', display: 'flex', flexDirection: 'column' }}>
       {/* 顶栏 */}
       <div style={{
-        display: 'flex', alignItems: 'center', gap: 12, padding: '12px 18px',
+        display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 12,
+        flexWrap: isMobile ? 'wrap' : 'nowrap',
+        padding: isMobile ? '10px 12px' : '12px 18px',
         borderBottom: '1px solid #e9e7f4',
         background: '#f6f5fc',
       }}>
         <GlobalOutlined style={{ color: '#6366f1', fontSize: 18 }} />
-        <div style={{ flex: 1 }}>
+        <div style={{ flex: 1, minWidth: isMobile ? 0 : undefined }}>
           <div style={{ color: '#1e1b2e', fontSize: 15, fontWeight: 600 }}>
             飞书知识库
           </div>
@@ -41,6 +45,7 @@ export default function KnowledgeBase() {
             href={defaultUrl}
             target="_blank"
             rel="noopener noreferrer"
+            style={{ flexShrink: isMobile ? 0 : undefined }}
           >
             在飞书中打开 ↗
           </Button>

@@ -5,6 +5,7 @@ import { ArrowLeftOutlined, HomeOutlined, ProjectOutlined, FileOutlined, History
 import type { UploadFile } from 'antd/es/upload/interface';
 import StatusTag from '../../components/StatusTag';
 import { useData } from '../../store/DataContext';
+import { useIsMobile } from '../../hooks/useIsMobile';
 import type { ProjectPhase, ProjectPhaseFile } from '../../types';
 
 const PHASE_STATUS_CONFIG: Record<string, { color: string; label: string }> = {
@@ -48,6 +49,7 @@ function HistoryDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { historyProjects, historyPhases, setHistoryPhases } = useData();
+  const isMobile = useIsMobile();
 
   const project = useMemo(() => historyProjects.find((p) => String(p.id) === String(id)), [historyProjects, id]);
 
@@ -328,7 +330,7 @@ function HistoryDetail() {
           background: 'linear-gradient(135deg, rgba(22,163,74,0.08), rgba(22,163,74,0.03))',
           border: '1px solid rgba(22,163,74,0.2)',
           borderRadius: 10,
-          display: 'flex', alignItems: 'center', gap: 10,
+          display: 'flex', alignItems: 'center', gap: 10, flexWrap: isMobile ? 'wrap' : 'nowrap',
         }}>
           <span style={{ fontSize: 16 }}>📦</span>
           <span style={{ color: '#16a34a', fontSize: 13, fontWeight: 500 }}>该项目已交付归档</span>

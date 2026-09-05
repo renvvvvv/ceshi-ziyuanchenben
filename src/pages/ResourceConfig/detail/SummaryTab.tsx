@@ -16,6 +16,7 @@ import {
   type ResourceConfigProject, type AssetLibItem, type LoadRow, type InstrumentRow,
   type PersonnelRow, type LaborRow,
 } from '../../../types/resourceConfig';
+import { useIsMobile } from '../../../hooks/useIsMobile';
 
 export interface TabProps {
   data: ResourceConfigProject;
@@ -59,8 +60,9 @@ const WARN = '#d97706';
 
 /** 区块卡片容器（CONVENTIONS 统一样式） */
 function Section({ title, tag, extra, children }: { title: string; tag?: string; extra?: ReactNode; children: ReactNode }) {
+  const isMobile = useIsMobile();
   return (
-    <div style={{ background: '#f6f5fc', border: '1px solid #e9e7f4', borderRadius: 12, padding: 16, marginBottom: 16 }}>
+    <div style={{ background: '#f6f5fc', border: '1px solid #e9e7f4', borderRadius: 12, padding: isMobile ? 12 : 16, marginBottom: isMobile ? 12 : 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 4 }}>
         <span style={{ fontSize: 14, fontWeight: 600, color: '#1e1b2e' }}>{title}</span>
         {tag && <Tag style={{ margin: 0 }}>{tag}</Tag>}

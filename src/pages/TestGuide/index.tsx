@@ -28,6 +28,7 @@ import {
   CloudUploadOutlined,
 } from '@ant-design/icons';
 import { useData } from '../../store/DataContext';
+import { useIsMobile } from '../../hooks/useIsMobile';
 import type { TestDoc } from '../../types';
 
 const { Option } = Select;
@@ -53,6 +54,7 @@ const formatFileSize = (bytes: number) => {
 };
 
 function TestGuide() {
+  const isMobile = useIsMobile();
   const { testDocs: docs, setTestDocs: setDocs, docCategoriesList: docCategories } = useData();
   const [selectedCategory, setSelectedCategory] = useState('全部');
   const [searchText, setSearchText] = useState('');
@@ -256,7 +258,7 @@ function TestGuide() {
           value={searchText}
           onChange={(e) => setSearchText(e.target.value)}
           style={{
-            width: 260,
+            width: isMobile ? '100%' : 260,
             background: '#f8f7fd',
             border: '1px solid #e9e7f4',
             borderRadius: 8,
@@ -278,8 +280,8 @@ function TestGuide() {
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
-            gap: 16,
+            gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(320px, 1fr))',
+            gap: isMobile ? 12 : 16,
           }}
         >
           {filteredDocs.map((doc) => (
@@ -395,6 +397,8 @@ function TestGuide() {
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center',
+                  flexWrap: isMobile ? 'wrap' : 'nowrap',
+                  gap: isMobile ? 8 : undefined,
                 }}
               >
                 <span

@@ -14,6 +14,7 @@ import {
   calcLoadAllocation, calcLoadDays, parseDayRef,
   type AssetLibItem, type LoadRow, type ResourceConfigProject,
 } from '../../../types/resourceConfig';
+import { useIsMobile } from '../../../hooks/useIsMobile';
 
 const { TextArea } = Input;
 
@@ -111,6 +112,7 @@ interface StepperProps {
 }
 
 function Stepper({ value, onChange, min = 0, disabled }: StepperProps) {
+  const isMobile = useIsMobile();
   const latestRef = useRef(value);
   useEffect(() => { latestRef.current = value; }, [value]);
   const holdTimer = useRef<number | null>(null);
@@ -150,7 +152,7 @@ function Stepper({ value, onChange, min = 0, disabled }: StepperProps) {
     <div
       className="rc-stepper"
       title="点击单次加减，按住不放可连续不停地加减"
-      style={{ display: 'inline-flex', alignItems: 'center', border: '1px solid #d9d5f0', borderRadius: 6, overflow: 'hidden', background: '#f6f5fc' }}
+      style={{ display: 'inline-flex', flexWrap: isMobile ? 'wrap' : 'nowrap', alignItems: 'center', border: '1px solid #d9d5f0', borderRadius: 6, overflow: 'hidden', background: '#f6f5fc' }}
     >
       <button type="button" aria-label="减少" tabIndex={-1} disabled={disabled}
         onMouseDown={() => begin(-1)} onMouseUp={stop} onMouseLeave={stop}
@@ -171,6 +173,7 @@ function Stepper({ value, onChange, min = 0, disabled }: StepperProps) {
 export default function LoadsTab({ data, assets, canEdit, patch }: TabProps) {
   const loads = data.loads || [];
   const libToast = useLibToast();
+  const isMobile = useIsMobile();
 
   // 行数据 ref：长按连发时避免闭包拿到旧行数组
   const loadsRef = useRef(loads);
@@ -306,7 +309,7 @@ export default function LoadsTab({ data, assets, canEdit, patch }: TabProps) {
     return (
       <div>
         {items.map(([label, f, bg, tc]) => (
-          <div key={f} style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 3 }}>
+          <div key={f} style={{ display: 'flex', flexWrap: isMobile ? 'wrap' : 'nowrap', alignItems: 'center', gap: 5, marginBottom: 3 }}>
             <span style={{ background: bg, color: tc, minWidth: 48, textAlign: 'center', flex: 'none', fontSize: 11, borderRadius: 3, padding: '1px 0' }}>{label}</span>
             <InputNumber
               size="small" min={1} max={70} precision={0} disabled={!canEdit}
@@ -413,7 +416,7 @@ export default function LoadsTab({ data, assets, canEdit, patch }: TabProps) {
       `}</style>
 
       {/* 页头 5 统计卡 */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10, marginBottom: 14 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(5, 1fr)', gap: 10, marginBottom: 14 }}>
         {[
           { label: '负载类型数', value: loads.length, color: '#6366f1' },
           { label: '需求总量(台)', value: stats.needTotal.toFixed(0), color: '#6366f1' },
@@ -439,7 +442,7 @@ export default function LoadsTab({ data, assets, canEdit, patch }: TabProps) {
 
       {/* 表格卡片 */}
       <div style={{ background: '#f6f5fc', border: '1px solid #e9e7f4', borderRadius: 12, padding: 16, marginBottom: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 12, flexWrap: isMobile ? 'wrap' : 'nowrap', rowGap: isMobile ? 8 : undefined }}>
           <span style={{ fontSize: 14, fontWeight: 600, color: '#1e1b2e' }}>🗄️ 假负载到场计划表</span>
           <span style={{ margin: '0 0 0 8px', fontSize: 12, color: '#6b6892' }}>总需求 = 数量 + 备用台数，资源库优先覆盖为自有，超出部分自动转为需租赁</span>
           <div style={{ flex: 1 }} />

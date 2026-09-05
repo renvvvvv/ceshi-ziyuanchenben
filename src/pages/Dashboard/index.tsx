@@ -12,6 +12,7 @@ import KpiCard from '../../components/KpiCard';
 import GanttChart from '../../components/GanttChart';
 import type { GanttUnit } from '../../components/GanttChart';
 import { useData } from '../../store/DataContext';
+import { useIsMobile } from '../../hooks/useIsMobile';
 
 echarts.use([PieChart, BarChart, TitleComponent, TooltipComponent, LegendComponent, GridComponent, CanvasRenderer]);
 
@@ -40,6 +41,7 @@ function Dashboard() {
   const [ganttUnit, setGanttUnit] = useState<GanttUnit>('day');
   const { projects, historyProjects, regionMwOutput, autoProcessProjects, autoProcessMembers, dataSource, reload } = useData();
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
 
   // ===== 自动化流程：根据日期自动转换项目状态 =====
   // 仅在后端数据加载完成后执行，避免 autoProcess 基于旧缓存覆盖后端返回的正确数据
@@ -344,7 +346,7 @@ function Dashboard() {
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: '1fr 1fr',
+          gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',
           gap: 20,
           marginBottom: 24,
         }}
@@ -695,7 +697,7 @@ function Dashboard() {
 
       <div className="chart-container" style={{ marginBottom: 20 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: isMobile ? 'wrap' : 'nowrap' }}>
             <h4 style={{ margin: 0 }}>项目进度甘特图</h4>
             {/* 时间单位选择器 */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: '#f8f7fd', borderRadius: 8, padding: 2 }}>
@@ -733,14 +735,14 @@ function Dashboard() {
             </div>
           </div>
           {/* 状态筛选器 */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: isMobile ? '1 1 100%' : undefined }}>
             <FilterOutlined style={{ color: '#6b6892', fontSize: 14 }} />
             <Select
               mode="multiple"
               value={selectedStatuses}
               onChange={setSelectedStatuses}
               placeholder="筛选项目状态"
-              style={{ minWidth: 200, maxWidth: 300 }}
+              style={{ minWidth: isMobile ? 120 : 200, maxWidth: 300, flex: isMobile ? '1 1 auto' : undefined }}
               options={STATUS_OPTIONS.map((o) => ({ label: o.label, value: o.value }))}
               tagRender={tagRender}
               maxTagCount={3}

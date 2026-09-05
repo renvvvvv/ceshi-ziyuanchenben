@@ -2,6 +2,7 @@ import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { Upload, Button, Spin, message, Tooltip, Modal, List, Empty, Popconfirm, Input, Progress, ConfigProvider, Tag } from 'antd';
 import type { UploadProps } from 'antd';
 import { useAuth } from '../../store/AuthContext';
+import { useIsMobile } from '../../hooks/useIsMobile';
 import {
   InboxOutlined, DownloadOutlined, EditOutlined, CheckCircleOutlined,
   FileTextOutlined, ReloadOutlined, BookOutlined, BulbOutlined, DeleteOutlined,
@@ -31,6 +32,7 @@ const DARK_MODAL_THEME = {
 
 function ReportReview() {
   const { logout } = useAuth();
+  const isMobile = useIsMobile();
   const [fileName, setFileName] = useState('');
   const [fileSize, setFileSize] = useState('');
   const [rawText, setRawText] = useState('');
@@ -397,7 +399,7 @@ function ReportReview() {
 
       {/* ===== 双栏主体（解析/审核中也进入，保证流程可视化全程可见）===== */}
       {hasFile || reviewing || reviewPhase === 'parsing' ? (
-        <div style={{ flex: 1, display: 'flex', gap: 12, minHeight: 0, marginTop: 12 }}>
+        <div style={{ flex: 1, display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 12, minHeight: 0, marginTop: 12 }}>
           {/* 左侧：错别字列表 */}
           <ErrorList
             errors={errors} reviewing={reviewing} reviewed={reviewed} hasFile={hasFile}
@@ -451,7 +453,7 @@ function ReportReview() {
         <Modal
           title={<span><BookOutlined style={{ color: '#16a34a', marginRight: 8 }} />自我学习库管理<span style={{ fontSize: 12, color: '#6b6892', marginLeft: 12, fontWeight: 'normal' }}>共 {learnedItems.length} 条</span></span>}
           open={manageLibOpen} onCancel={() => setManageLibOpen(false)}
-          footer={<Button onClick={() => setManageLibOpen(false)}>关闭</Button>} width={720}
+          footer={<Button onClick={() => setManageLibOpen(false)}>关闭</Button>} width={isMobile ? 'calc(100vw - 24px)' : 720}
         >
           <div style={{ marginBottom: 12, padding: '10px 14px', background: 'rgba(99,102,241,0.06)', border: '1px solid rgba(99,102,241,0.15)', borderRadius: 8, fontSize: 12, color: '#46436a', lineHeight: 1.7 }}>
             <BulbOutlined style={{ color: '#6366f1', marginRight: 6 }} />
@@ -485,6 +487,7 @@ function ReviewFlow(props: {
   fileName: string; fileSize: string; textLen: number; elapsed: number;
 }) {
   const { phase, fileName, fileSize, textLen, elapsed } = props;
+  const isMobile = useIsMobile();
   if (phase === 'idle') return null;
 
   const steps = [
@@ -533,7 +536,7 @@ function ReviewFlow(props: {
           return (
             <div key={s.key} style={{ flex: i === steps.length - 1 ? '0 0 auto' : 1, display: 'flex', alignItems: 'flex-start' }}>
               {/* 步骤节点 */}
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 64 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: isMobile ? 48 : 64 }}>
                 <div style={{
                   width: 40, height: 40, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
                   fontSize: 17, transition: 'all 0.4s',
@@ -620,6 +623,7 @@ function TopBar(props: {
   onExport: () => void; onReset: () => void; onFixAll: () => void; onManageLib: () => void;
 }) {
   const { hasFile, reviewing, reviewed, fileName, fileSize, rawTextLen, errors, fixedCount, unfixedCount, fixProgress, reviewStats, learnedSize, exporting, phase, elapsed, onExport, onReset, onFixAll, onManageLib } = props;
+  const isMobile = useIsMobile();
 
   return (
     <div style={{
@@ -674,21 +678,21 @@ function TopBar(props: {
           )}
 
           {/* 操作按钮组：整体不可压缩、不换行，空间不足时随外层换行到下一行，绝不与数据重叠 */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginLeft: 'auto', flexShrink: 0, flexWrap: 'nowrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginLeft: isMobile ? 0 : 'auto', flexShrink: 0, flexWrap: isMobile ? 'wrap' : 'nowrap', width: isMobile ? '100%' : undefined }}>
             <Tooltip title="点击管理已学习的纠错">
-              <Button size="middle" icon={<BookOutlined />} onClick={onManageLib} style={{ borderRadius: 8, color: '#46436a', borderColor: '#d9d5f0', background: 'rgba(22,163,74,0.06)', flexShrink: 0 }}>
+              <Button size="middle" icon={<BookOutlined />} onClick={onManageLib} style={{ borderRadius: 8, color: '#46436a', borderColor: '#d9d5f0', background: 'rgba(22,163,74,0.06)', flexShrink: 0, flex: isMobile ? '1 1 calc(50% - 5px)' : undefined }}>
                 学习库 {learnedSize}
               </Button>
             </Tooltip>
             {unfixedCount > 0 && (
               <Popconfirm title="一键修改全部错别字？" description={`将修改 ${unfixedCount} 处错别字并加入学习库，此操作不可撤销。`} onConfirm={onFixAll} okText="确认修改" cancelText="取消" okButtonProps={{ style: { background: '#d97706', borderColor: '#d97706' } }}>
-                <Button icon={<WarningOutlined />} style={{ borderRadius: 8, borderColor: 'rgba(217,119,6,0.4)', color: '#d97706', background: 'rgba(217,119,6,0.08)', flexShrink: 0 }}>
+                <Button icon={<WarningOutlined />} style={{ borderRadius: 8, borderColor: 'rgba(217,119,6,0.4)', color: '#d97706', background: 'rgba(217,119,6,0.08)', flexShrink: 0, flex: isMobile ? '1 1 calc(50% - 5px)' : undefined }}>
                   一键修改（{unfixedCount}）
                 </Button>
               </Popconfirm>
             )}
-            <Button type="primary" icon={<DownloadOutlined />} loading={exporting} onClick={onExport} style={{ borderRadius: 8, fontWeight: 500, flexShrink: 0 }}>导出文档</Button>
-            <Button icon={<ReloadOutlined />} onClick={onReset} style={{ borderRadius: 8, color: '#6b6892', borderColor: '#d9d5f0', flexShrink: 0 }}>重新上传</Button>
+            <Button type="primary" icon={<DownloadOutlined />} loading={exporting} onClick={onExport} style={{ borderRadius: 8, fontWeight: 500, flexShrink: 0, flex: isMobile ? '1 1 calc(50% - 5px)' : undefined }}>导出文档</Button>
+            <Button icon={<ReloadOutlined />} onClick={onReset} style={{ borderRadius: 8, color: '#6b6892', borderColor: '#d9d5f0', flexShrink: 0, flex: isMobile ? '1 1 calc(50% - 5px)' : undefined }}>重新上传</Button>
           </div>
         </>
       ) : hasFile ? null : (
@@ -711,13 +715,14 @@ function ErrorList(props: {
   onJump: (id: number) => void; onFix: (id: number) => void; onAdopt: (id: number) => void;
 }) {
   const { errors, reviewing, reviewed, hasFile, activeErrorId, phase, elapsed, onJump, onFix, onAdopt } = props;
+  const isMobile = useIsMobile();
   const phaseText = phase === 'parsing' ? '解析文档中...'
     : phase === 'dict' ? '词典扫描中...'
     : phase === 'ai' ? `AI 深度审核中... ${elapsed != null ? `(${elapsed}s)` : ''}`
     : 'AI 审核中...';
 
   return (
-    <div style={{ width: 340, flexShrink: 0, background: '#f6f5fc', border: '1px solid #e9e7f4', borderRadius: 12, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+    <div style={{ width: isMobile ? '100%' : 340, maxHeight: isMobile ? '44vh' : undefined, flexShrink: 0, background: '#f6f5fc', border: '1px solid #e9e7f4', borderRadius: 12, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       {/* header */}
       <div style={{ padding: '12px 16px', borderBottom: '1px solid #e9e7f4', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <span style={{ color: '#1e1b2e', fontSize: 14, fontWeight: 600 }}>错别字列表</span>

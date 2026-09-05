@@ -7,6 +7,7 @@ import dayjs from 'dayjs';
 import StatusTag from '../../components/StatusTag';
 import ProjectModal from '../../components/ProjectModal';
 import { useData } from '../../store/DataContext';
+import { useIsMobile } from '../../hooks/useIsMobile';
 import type { Project, ProjectPhase, ProjectPhaseFile } from '../../types';
 
 const PHASE_STATUS_CONFIG: Record<string, { color: string; dotColor: string; label: string }> = {
@@ -52,6 +53,7 @@ function ProjectDetail() {
   const { projects, setProjects, projectPhases, setProjectPhases, teamMembers, updateProject } = useData();
   const [modalOpen, setModalOpen] = useState(false);
   const [docLinkInput, setDocLinkInput] = useState('');
+  const isMobile = useIsMobile();
 
   const project = projects.find((p) => String(p.id) === String(id));
 
@@ -366,7 +368,7 @@ function ProjectDetail() {
                   color: '#1e1b2e',
                 }}
               />
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: isMobile ? 'wrap' : 'nowrap', gap: isMobile ? 8 : 0 }}>
                 {project.docLink ? (
                   <a
                     href={project.docLink}

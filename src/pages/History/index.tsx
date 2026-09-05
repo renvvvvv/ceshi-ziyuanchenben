@@ -8,10 +8,12 @@ import { PlusOutlined, LinkOutlined, SearchOutlined, EditOutlined, DeleteOutline
 import dayjs from 'dayjs';
 import StatusTag from '../../components/StatusTag';
 import { useData } from '../../store/DataContext';
+import { useIsMobile } from '../../hooks/useIsMobile';
 import type { HistoricalProject } from '../../types';
 
 function History() {
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
   const { historyProjects, setHistoryProjects, addHistoryProject, updateHistoryProject, deleteHistoryProject } = useData();
   const [yearFilter, setYearFilter] = useState<string>('全部');
   const [cityFilter, setCityFilter] = useState<string>('全部');
@@ -341,7 +343,7 @@ function History() {
 
   return (
     <div>
-      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: isMobile ? 'wrap' : 'nowrap', gap: isMobile ? 12 : 0 }}>
         <div>
           <h3>历史测试项目看板</h3>
           <p style={{ color: '#6b6892', marginTop: 4, fontSize: 13 }}>历史项目复盘分析</p>
@@ -368,7 +370,7 @@ function History() {
         <Select
           value={yearFilter}
           onChange={setYearFilter}
-          style={{ width: 130, fontFamily: 'var(--font-primary)' }}
+          style={{ width: isMobile ? '100%' : 130, fontFamily: 'var(--font-primary)' }}
           popupMatchSelectWidth={false}
         >
           <Select.Option value="全部">全部年份</Select.Option>
@@ -381,7 +383,7 @@ function History() {
         <Select
           value={cityFilter}
           onChange={setCityFilter}
-          style={{ width: 130, fontFamily: 'var(--font-primary)' }}
+          style={{ width: isMobile ? '100%' : 130, fontFamily: 'var(--font-primary)' }}
           popupMatchSelectWidth={false}
           placeholder="选择城市"
         >
@@ -395,7 +397,7 @@ function History() {
         <Select
           value={customerFilter}
           onChange={setCustomerFilter}
-          style={{ width: 160, fontFamily: 'var(--font-primary)' }}
+          style={{ width: isMobile ? '100%' : 160, fontFamily: 'var(--font-primary)' }}
           popupMatchSelectWidth={false}
           placeholder="选择客户"
         >
@@ -411,7 +413,7 @@ function History() {
           prefix={<SearchOutlined style={{ color: '#9d9ab8' }} />}
           value={searchText}
           onChange={(e) => setSearchText(e.target.value)}
-          style={{ width: 250, fontFamily: 'var(--font-primary)', background: '#f6f5fc', border: '1px solid #e9e7f4', color: '#1e1b2e' }}
+          style={{ width: isMobile ? '100%' : 250, fontFamily: 'var(--font-primary)', background: '#f6f5fc', border: '1px solid #e9e7f4', color: '#1e1b2e' }}
           allowClear
           variant="borderless"
         />
@@ -465,7 +467,7 @@ function History() {
           <Form.Item name="name" label="项目名称" rules={[{ required: true, message: '请输入项目名称' }]}>
             <Input placeholder="请输入项目名称" />
           </Form.Item>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: 16 }}>
             <Form.Item name="customer" label="客户" rules={[{ required: true, message: '请输入客户名称' }]}>
               <Input placeholder="请输入客户名称" />
             </Form.Item>
@@ -476,7 +478,7 @@ function History() {
               <Input placeholder="请输入项目经理姓名" />
             </Form.Item>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16 }}>
             <Form.Item name="status" label="状态" rules={[{ required: true, message: '请选择状态' }]}>
               <Select placeholder="请选择状态">
                 <Select.Option value="未开始">未开始</Select.Option>
@@ -486,7 +488,7 @@ function History() {
               </Select>
             </Form.Item>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16 }}>
             <Form.Item name="startDate" label="开始日期" rules={[{ required: true, message: '请选择开始日期' }]}>
               <DatePicker style={{ width: '100%' }} placeholder="请选择开始日期" />
             </Form.Item>
@@ -494,7 +496,7 @@ function History() {
               <DatePicker style={{ width: '100%' }} placeholder="请选择结束日期" />
             </Form.Item>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16 }}>
             <Form.Item name="plannedDeliveryDate" label="计划交付日期">
               <DatePicker style={{ width: '100%' }} placeholder="请选择计划交付日期" />
             </Form.Item>

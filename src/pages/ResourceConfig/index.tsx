@@ -11,6 +11,7 @@ import {
 import dayjs from 'dayjs';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../store/AuthContext';
+import { useIsMobile } from '../../hooks/useIsMobile';
 import type { ResourceConfigProject, AssetLibItem } from '../../types/resourceConfig';
 import { calcLabor, calcLoadAllocation, calcInstrumentAllocation, ASSET_CATEGORIES } from '../../types/resourceConfig';
 import { DeptMembersTab, AssetsTab, DeliveredTab } from './tabs';
@@ -50,6 +51,7 @@ const CAT_COLOR: Record<string, string> = { load: 'orange', ins: 'blue', pdu: 'g
 function ResourceConfig() {
   const navigate = useNavigate();
   const { canEdit, canDelete } = useAuth();
+  const isMobile = useIsMobile();
   const editAllowed = canEdit('resourceConfig');
   const deleteAllowed = canDelete('resourceConfig');
 
@@ -374,18 +376,18 @@ function ResourceConfig() {
         onCancel={() => setModalOpen(false)}
         okText="保存"
         cancelText="取消"
-        width={560}
+        width={isMobile ? 'calc(100vw - 24px)' : 560}
       >
         <Form form={form} layout="vertical" style={{ marginTop: 12 }}>
           <Row gutter={12}>
-            <Col span={12}><Form.Item name="name" label="项目名称" rules={[{ required: true, message: '请输入项目名称' }]}><Input placeholder="如：乌兰大三期B1" /></Form.Item></Col>
-            <Col span={6}><Form.Item name="mw" label="规模(MW)"><Input placeholder="如 19" /></Form.Item></Col>
-            <Col span={6}><Form.Item name="site" label="地点"><Input placeholder="乌兰察布" /></Form.Item></Col>
+            <Col span={12} xs={24}><Form.Item name="name" label="项目名称" rules={[{ required: true, message: '请输入项目名称' }]}><Input placeholder="如：乌兰大三期B1" /></Form.Item></Col>
+            <Col span={6} xs={12}><Form.Item name="mw" label="规模(MW)"><Input placeholder="如 19" /></Form.Item></Col>
+            <Col span={6} xs={12}><Form.Item name="site" label="地点"><Input placeholder="乌兰察布" /></Form.Item></Col>
           </Row>
           <Row gutter={12}>
-            <Col span={12}><Form.Item name="manager" label="测试经理"><Input /></Form.Item></Col>
-            <Col span={6}><Form.Item name="testDays" label="测试天数" initialValue={40}><InputNumber min={1} max={365} style={{ width: '100%' }} /></Form.Item></Col>
-            <Col span={6}><Form.Item name="dateRange" label="测试周期"><DatePicker.RangePicker style={{ width: '100%' }} /></Form.Item></Col>
+            <Col span={12} xs={24}><Form.Item name="manager" label="测试经理"><Input /></Form.Item></Col>
+            <Col span={6} xs={12}><Form.Item name="testDays" label="测试天数" initialValue={40}><InputNumber min={1} max={365} style={{ width: '100%' }} /></Form.Item></Col>
+            <Col span={6} xs={24}><Form.Item name="dateRange" label="测试周期"><DatePicker.RangePicker style={{ width: '100%' }} /></Form.Item></Col>
           </Row>
           <Form.Item name="remark" label="备注"><Input.TextArea rows={2} placeholder="可选" /></Form.Item>
           <div style={{ color: '#6b6892', fontSize: 12 }}>
@@ -400,21 +402,21 @@ function ResourceConfig() {
         open={!!detail}
         onCancel={() => setDetail(null)}
         footer={<Button onClick={() => setDetail(null)}>关闭</Button>}
-        width={640}
+        width={isMobile ? 'calc(100vw - 24px)' : 640}
       >
         {detailLoading ? (
           <div style={{ textAlign: 'center', padding: 40 }}><Spin /></div>
         ) : overview ? (
           <div>
             <Row gutter={[12, 12]}>
-              <Col span={6}><Statistic title="人员岗位" value={overview.personnel} suffix="个" /></Col>
-              <Col span={6}><Statistic title="投入明细" value={overview.staff} suffix="人" /></Col>
-              <Col span={6}><Statistic title="假负载类型" value={overview.loads} suffix="种" /></Col>
-              <Col span={6}><Statistic title="仪表种类" value={overview.instruments} suffix="种" /></Col>
-              <Col span={6}><Statistic title="劳务人天合计" value={overview.laborManDays} suffix="人天" valueStyle={{ color: '#6366f1' }} /></Col>
-              <Col span={6}><Statistic title="劳务人数合计" value={overview.laborWorkers} suffix="人" valueStyle={{ color: '#6366f1' }} /></Col>
-              <Col span={6}><Statistic title="假负载需租赁" value={overview.loadRent} suffix="台" valueStyle={{ color: '#d97706' }} /></Col>
-              <Col span={6}><Statistic title="仪表需租赁" value={overview.insRent} suffix="台" valueStyle={{ color: '#d97706' }} /></Col>
+              <Col span={6} xs={12}><Statistic title="人员岗位" value={overview.personnel} suffix="个" /></Col>
+              <Col span={6} xs={12}><Statistic title="投入明细" value={overview.staff} suffix="人" /></Col>
+              <Col span={6} xs={12}><Statistic title="假负载类型" value={overview.loads} suffix="种" /></Col>
+              <Col span={6} xs={12}><Statistic title="仪表种类" value={overview.instruments} suffix="种" /></Col>
+              <Col span={6} xs={12}><Statistic title="劳务人天合计" value={overview.laborManDays} suffix="人天" valueStyle={{ color: '#6366f1' }} /></Col>
+              <Col span={6} xs={12}><Statistic title="劳务人数合计" value={overview.laborWorkers} suffix="人" valueStyle={{ color: '#6366f1' }} /></Col>
+              <Col span={6} xs={12}><Statistic title="假负载需租赁" value={overview.loadRent} suffix="台" valueStyle={{ color: '#d97706' }} /></Col>
+              <Col span={6} xs={12}><Statistic title="仪表需租赁" value={overview.insRent} suffix="台" valueStyle={{ color: '#d97706' }} /></Col>
             </Row>
             <div style={{ marginTop: 16, color: '#6b6892', fontSize: 12 }}>
               租赁数为按自有资源库（部门级）自动分配后的缺口。明细编辑界面将在下一版本提供。
@@ -428,7 +430,7 @@ function ResourceConfig() {
         title="自有资源库（部门级）"
         open={assetsOpen}
         onClose={() => { setAssetsOpen(false); setAssetEditing(null); }}
-        width={560}
+        width={isMobile ? '100%' : 560}
       >
         {editAllowed && (assetEditing || !assetEditing) && (
           <div style={{ marginBottom: 16, padding: 12, background: '#f6f5fc', borderRadius: 8 }}>

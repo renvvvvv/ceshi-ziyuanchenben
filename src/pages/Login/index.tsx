@@ -3,8 +3,10 @@ import { Navigate, useSearchParams } from 'react-router-dom';
 import { Button, Input, Form, Card, message, Divider, Collapse } from 'antd';
 import { UserOutlined, LockOutlined, SafetyOutlined } from '@ant-design/icons';
 import { useAuth } from '../../store/AuthContext';
+import { useIsMobile } from '../../hooks/useIsMobile';
 
 function Login() {
+  const isMobile = useIsMobile();
   const [loading, setLoading] = useState(false);
   const [feishuEnabled, setFeishuEnabled] = useState<boolean | null>(null);
   const [searchParams] = useSearchParams();
@@ -78,21 +80,21 @@ function Login() {
     >
       <Card
         style={{
-          width: 400,
+          width: isMobile ? 'min(400px, calc(100vw - 32px))' : 400,
           background: 'rgba(255, 255, 255, 0.92)',
           border: '1px solid rgba(99,102,241, 0.2)',
           borderRadius: 16,
           backdropFilter: 'blur(20px)',
           boxShadow: '0 8px 24px rgba(99, 102, 241, 0.10)',
         }}
-        bodyStyle={{ padding: '40px 32px' }}
+        bodyStyle={{ padding: isMobile ? '32px 20px' : '40px 32px' }}
       >
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
-          <SafetyOutlined style={{ fontSize: 48, color: '#6366f1', marginBottom: 16 }} />
+          <SafetyOutlined style={{ fontSize: isMobile ? 40 : 48, color: '#6366f1', marginBottom: 16 }} />
           <h2
             style={{
               color: '#1e1b2e',
-              fontSize: 22,
+              fontSize: isMobile ? 19 : 22,
               fontWeight: 600,
               margin: 0,
               marginBottom: 8,

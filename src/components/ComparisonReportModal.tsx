@@ -17,6 +17,7 @@ import {
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import type { Project, HistoricalProject } from '../types';
+import { useIsMobile } from '../hooks/useIsMobile';
 
 interface ComparisonReportModalProps {
   open: boolean;
@@ -71,6 +72,7 @@ function ComparisonReportModal({ open, currentProjects, historyProjects, onClose
   const [selectedCurrentId, setSelectedCurrentId] = useState<string>('');
   const [selectedHistoryIds, setSelectedHistoryIds] = useState<string[]>([]);
   const [reportGenerated, setReportGenerated] = useState(false);
+  const isMobile = useIsMobile();
 
   // 已交付的历史项目（排除非已完成的）
   const deliveredHistory = useMemo(
@@ -165,7 +167,7 @@ function ComparisonReportModal({ open, currentProjects, historyProjects, onClose
       {!reportGenerated ? (
         <div>
           <Row gutter={24}>
-            <Col span={12}>
+            <Col span={12} xs={24}>
               <Card
                 size="small"
                 title={<span style={{ color: '#1e1b2e', fontSize: 14 }}>① 选择待对比项目</span>}
@@ -195,7 +197,7 @@ function ComparisonReportModal({ open, currentProjects, historyProjects, onClose
 
                 {selectedCurrent && (
                   <div style={{ marginTop: 16, padding: 14, background: '#f6f5fc', borderRadius: 8, border: '1px solid rgba(99,102,241,0.15)' }}>
-                    <Descriptions column={2} size="small" labelStyle={{ color: '#6b6892', fontSize: 12 }} contentStyle={{ color: '#1e1b2e', fontSize: 12 }}>
+                    <Descriptions column={isMobile ? 1 : 2} size="small" labelStyle={{ color: '#6b6892', fontSize: 12 }} contentStyle={{ color: '#1e1b2e', fontSize: 12 }}>
                       <Descriptions.Item label="项目名称"><strong>{selectedCurrent.name}</strong></Descriptions.Item>
                       <Descriptions.Item label="客户">{selectedCurrent.customer}</Descriptions.Item>
                       <Descriptions.Item label="城市">{selectedCurrent.city || '-'}</Descriptions.Item>
@@ -212,7 +214,7 @@ function ComparisonReportModal({ open, currentProjects, historyProjects, onClose
               </Card>
             </Col>
 
-            <Col span={12}>
+            <Col span={12} xs={24}>
               <Card
                 size="small"
                 title={<span style={{ color: '#1e1b2e', fontSize: 14 }}>② 选择历史交付项目（可多选）</span>}
@@ -276,8 +278,8 @@ function ComparisonReportModal({ open, currentProjects, historyProjects, onClose
         /* ===== 对比报告 ===== */
         <div>
           {/* 报告头部：返回按钮 + 项目信息 */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18, flexWrap: isMobile ? 'wrap' : 'nowrap', gap: isMobile ? 10 : 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: isMobile ? 'wrap' : 'nowrap' }}>
               <Button onClick={handleReset} style={{ borderColor: '#9d9ab8', color: '#46436a', fontFamily: 'var(--font-primary)' }}>
                 ← 重新选择
               </Button>
@@ -293,7 +295,7 @@ function ComparisonReportModal({ open, currentProjects, historyProjects, onClose
             <>
               <Row gutter={[16, 16]} style={{ marginBottom: 22 }}>
                 {/* 1. 兆瓦数 */}
-                <Col span={6}>
+                <Col span={6} xs={12}>
                   <Card size="small" style={{ background: '#f6f5fc', border: '1px solid #e9e7f4', borderRadius: 10 }} bodyStyle={{ padding: '16px 12px' }}>
                     <Statistic
                       title={<span style={{ color: '#6b6892', fontSize: 12 }}><ThunderboltOutlined style={{ marginRight: 4 }} />兆瓦数(MW)</span>}
@@ -311,7 +313,7 @@ function ComparisonReportModal({ open, currentProjects, historyProjects, onClose
                   </Card>
                 </Col>
                 {/* 2. 工期 */}
-                <Col span={6}>
+                <Col span={6} xs={12}>
                   <Card size="small" style={{ background: '#f6f5fc', border: '1px solid #e9e7f4', borderRadius: 10 }} bodyStyle={{ padding: '16px 12px' }}>
                     <Statistic
                       title={<span style={{ color: '#6b6892', fontSize: 12 }}><ClockCircleOutlined style={{ marginRight: 4 }} />工期(天)</span>}
@@ -329,7 +331,7 @@ function ComparisonReportModal({ open, currentProjects, historyProjects, onClose
                   </Card>
                 </Col>
                 {/* 3. 交付周期 */}
-                <Col span={6}>
+                <Col span={6} xs={12}>
                   <Card size="small" style={{ background: '#f6f5fc', border: '1px solid #e9e7f4', borderRadius: 10 }} bodyStyle={{ padding: '16px 12px' }}>
                     <div style={{ marginBottom: 4 }}>
                       <span style={{ color: '#6b6892', fontSize: 12 }}><CalendarOutlined style={{ marginRight: 4 }} />交付周期</span>
@@ -354,7 +356,7 @@ function ComparisonReportModal({ open, currentProjects, historyProjects, onClose
                   </Card>
                 </Col>
                 {/* 4. 人员数量 */}
-                <Col span={6}>
+                <Col span={6} xs={12}>
                   <Card size="small" style={{ background: '#f6f5fc', border: '1px solid #e9e7f4', borderRadius: 10 }} bodyStyle={{ padding: '16px 12px' }}>
                     <Statistic
                       title={<span style={{ color: '#6b6892', fontSize: 12 }}><TeamOutlined style={{ marginRight: 4 }} />人员数量(人)</span>}

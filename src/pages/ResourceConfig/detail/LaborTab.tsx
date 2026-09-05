@@ -14,6 +14,7 @@ import {
   calcLabor,
   type ResourceConfigProject, type AssetLibItem, type LaborRow, type LaborLoadType, type LaborMode,
 } from '../../../types/resourceConfig';
+import { useIsMobile } from '../../../hooks/useIsMobile';
 
 export interface TabProps {
   data: ResourceConfigProject;
@@ -58,6 +59,7 @@ function withDerived(r: LaborRow): LaborRow {
 
 export default function LaborTab({ data, canEdit, patch }: TabProps) {
   const rows: LaborRow[] = data.labor || [];
+  const isMobile = useIsMobile();
 
   /** 每行核算结果（依赖 rows 引用变化重算） */
   const calcs = useMemo(() => rows.map((r) => calcLabor(r)), [rows]);
@@ -222,7 +224,7 @@ export default function LaborTab({ data, canEdit, patch }: TabProps) {
         // auto：未自定义时显示派生值（绿），手填后标记自定义并可还原（原 L4156-4160）
         const derived = !r.workersCustom;
         return (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, flexWrap: isMobile ? 'wrap' : 'nowrap' }}>
             <Tooltip title="强度驱动下可直接覆盖需要人数（自动值作参考），点 ↺ 还原">
               <InputNumber size="small" className={derived ? 'rc-labor-wk-auto' : undefined}
                 min={0} value={c.workers} disabled={!canEdit} style={{ width: 64 }}
@@ -274,7 +276,7 @@ export default function LaborTab({ data, canEdit, patch }: TabProps) {
       `}</style>
 
       {/* 页头统计卡：劳务人天合计 / 劳务人数合计 / 工作项数 / 强度驱动项数 */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 14 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: 10, marginBottom: 14 }}>
         {([
           { label: '👷 劳务人天合计（Σ 各作业使用人天）', value: fmtDays(sumManDays), color: '#6366f1' },
           { label: '🧑‍🤝‍🧑 每日用工合计（Σ各作业需要人数）', value: sumWorkers, color: '#16a34a' },
@@ -305,7 +307,7 @@ export default function LaborTab({ data, canEdit, patch }: TabProps) {
 
       {/* 明细表 */}
       <div style={{ background: '#f6f5fc', border: '1px solid #e9e7f4', borderRadius: 12, padding: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 12, flexWrap: isMobile ? 'wrap' : 'nowrap', rowGap: isMobile ? 6 : undefined }}>
           <span style={{ fontSize: 14, fontWeight: 600, color: '#1e1b2e' }}>👷 劳务作业用工明细</span>
           <Tag style={{ margin: '0 0 0 8px' }}>{rows.length} 项</Tag>
           <div style={{ flex: 1 }} />

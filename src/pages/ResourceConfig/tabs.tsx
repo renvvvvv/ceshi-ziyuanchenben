@@ -9,6 +9,7 @@ import {
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { useAuth } from '../../store/AuthContext';
+import { useIsMobile } from '../../hooks/useIsMobile';
 import { ASSET_CATEGORIES, calcLabor, calcLoadAllocation, calcInstrumentAllocation, type ResourceConfigProject } from '../../types/resourceConfig';
 
 // ============== 部门人员库 Tab ==============
@@ -33,6 +34,7 @@ function splitCerts(v: unknown): string[] {
 
 export function DeptMembersTab() {
   const { canEdit, canDelete } = useAuth();
+  const isMobile = useIsMobile();
   const editAllowed = canEdit('resourceConfig');
   const deleteAllowed = canDelete('resourceConfig');
   const [rows, setRows] = useState<DeptRow[]>([]);
@@ -128,7 +130,7 @@ export function DeptMembersTab() {
   return (
     <div>
       {/* 统计卡 */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10, marginBottom: 14 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(5, 1fr)', gap: 10, marginBottom: 14 }}>
         {[
           { label: '总人数', value: rows.length, color: '#6366f1' },
           { label: 'P7', value: byLevel('P7'), color: '#dc2626' },
@@ -143,7 +145,7 @@ export function DeptMembersTab() {
         ))}
       </div>
       {/* 操作条 */}
-      <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
+      <div style={{ display: 'flex', gap: 10, marginBottom: 12, flexWrap: isMobile ? 'wrap' : 'nowrap' }}>
         <Button size="small" icon={<ReloadOutlined />} onClick={() => void load()} loading={loading}>刷新</Button>
         {editAllowed && (
           <>
@@ -163,7 +165,7 @@ export function DeptMembersTab() {
 
       <Modal title="添加部门人员" open={addOpen} onOk={handleAdd} onCancel={() => setAddOpen(false)} okText="添加" cancelText="取消">
         <Space direction="vertical" style={{ width: '100%', marginTop: 12 }} size={8}>
-          <Space>
+          <Space wrap={isMobile ? true : false}>
             <Input placeholder="姓名 *" value={addForm.name} onChange={(e) => setAddForm({ ...addForm, name: e.target.value })} style={{ width: 140 }} />
             <Select value={addForm.level} onChange={(v) => setAddForm({ ...addForm, level: v })} options={['P7', 'P6', 'P5', 'P4', 'P3'].map((v) => ({ value: v }))} style={{ width: 80 }} />
           </Space>
@@ -225,6 +227,7 @@ const CAT_COLOR: Record<string, string> = { load: 'orange', ins: 'blue', pdu: 'g
 
 export function AssetsTab() {
   const { canEdit, canDelete } = useAuth();
+  const isMobile = useIsMobile();
   const editAllowed = canEdit('resourceConfig');
   const deleteAllowed = canDelete('resourceConfig');
   const [rows, setRows] = useState<AssetRow[]>([]);
@@ -298,7 +301,7 @@ export function AssetsTab() {
   return (
     <div>
       {/* 统计卡 */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10, marginBottom: 14 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(5, 1fr)', gap: 10, marginBottom: 14 }}>
         {[
           { label: '设备种类', value: rows.length, color: '#6366f1' },
           { label: '设备总量', value: totalCount, color: '#6366f1' },
@@ -310,7 +313,7 @@ export function AssetsTab() {
           </div>
         ))}
       </div>
-      <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
+      <div style={{ display: 'flex', gap: 10, marginBottom: 12, flexWrap: isMobile ? 'wrap' : 'nowrap' }}>
         <Button size="small" icon={<ReloadOutlined />} onClick={() => void load()} loading={loading}>刷新</Button>
         {editAllowed && <Button size="small" type="primary" icon={<PlusOutlined />} onClick={() => setAddOpen(true)}>添加设备</Button>}
         <span style={{ color: '#9d9ab8', fontSize: 12, alignSelf: 'center' }}>
@@ -365,6 +368,7 @@ function safeParse(v: unknown): unknown {
 export function DeliveredTab() {
   const [rows, setRows] = useState<DeliveredRow[]>([]);
   const [loading, setLoading] = useState(false);
+  const isMobile = useIsMobile();
   const [snapshot, setSnapshot] = useState<{ name: string; data: ResourceConfigProject } | null>(null);
   const [snapLoading, setSnapLoading] = useState(false);
 
@@ -410,7 +414,7 @@ export function DeliveredTab() {
 
   return (
     <div>
-      <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
+      <div style={{ display: 'flex', gap: 10, marginBottom: 12, flexWrap: isMobile ? 'wrap' : 'nowrap' }}>
         <Button size="small" icon={<ReloadOutlined />} onClick={() => void load()} loading={loading}>刷新</Button>
         <span style={{ color: '#9d9ab8', fontSize: 12, alignSelf: 'center' }}>
           交付时点的完整配置快照（只读），对应原工具「已完成项目」
@@ -421,17 +425,17 @@ export function DeliveredTab() {
         locale={{ emptyText: <Empty description="暂无交付记录，在配置项目列表点「交付归档」生成快照" /> }} />
 
       <Modal title={snapshot ? `交付快照 · ${snapshot.name}` : ''} open={!!snapshot}
-        onCancel={() => setSnapshot(null)} footer={<Button onClick={() => setSnapshot(null)}>关闭</Button>} width={640}>
+        onCancel={() => setSnapshot(null)} footer={<Button onClick={() => setSnapshot(null)}>关闭</Button>} width={isMobile ? 'calc(100vw - 24px)' : 640}>
         {snapLoading ? <div style={{ textAlign: 'center', padding: 40 }}><Spin /></div> : snapshot ? (
           <div>
             <Row gutter={[12, 12]}>
-              <Col span={6}><Statistic title="人员岗位" value={(snapshot.data.personnel || []).length} suffix="个" /></Col>
-              <Col span={6}><Statistic title="投入人员" value={(snapshot.data.staff || []).length} suffix="人" /></Col>
-              <Col span={6}><Statistic title="假负载类型" value={(snapshot.data.loads || []).length} suffix="种" /></Col>
-              <Col span={6}><Statistic title="仪表种类" value={(snapshot.data.instruments || []).length} suffix="种" /></Col>
-              <Col span={8}><Statistic title="劳务人天" value={Math.round((snapshot.data.labor || []).reduce((s, r) => s + calcLabor(r).manDays, 0) * 10) / 10} valueStyle={{ color: '#6366f1' }} /></Col>
-              <Col span={8}><Statistic title="总人天" value={(snapshot.data.staff || []).reduce((s, r) => s + (Number((r as any).survey) || 0) + (Number((r as any).retest) || 0) + (Number((r as any).test) || 0), 0)} valueStyle={{ color: '#6366f1' }} /></Col>
-              <Col span={8}><Statistic title="耗材类目" value={(snapshot.data.consumables || []).length} /></Col>
+              <Col span={6} xs={12}><Statistic title="人员岗位" value={(snapshot.data.personnel || []).length} suffix="个" /></Col>
+              <Col span={6} xs={12}><Statistic title="投入人员" value={(snapshot.data.staff || []).length} suffix="人" /></Col>
+              <Col span={6} xs={12}><Statistic title="假负载类型" value={(snapshot.data.loads || []).length} suffix="种" /></Col>
+              <Col span={6} xs={12}><Statistic title="仪表种类" value={(snapshot.data.instruments || []).length} suffix="种" /></Col>
+              <Col span={8} xs={12}><Statistic title="劳务人天" value={Math.round((snapshot.data.labor || []).reduce((s, r) => s + calcLabor(r).manDays, 0) * 10) / 10} valueStyle={{ color: '#6366f1' }} /></Col>
+              <Col span={8} xs={12}><Statistic title="总人天" value={(snapshot.data.staff || []).reduce((s, r) => s + (Number((r as any).survey) || 0) + (Number((r as any).retest) || 0) + (Number((r as any).test) || 0), 0)} valueStyle={{ color: '#6366f1' }} /></Col>
+              <Col span={8} xs={12}><Statistic title="耗材类目" value={(snapshot.data.consumables || []).length} /></Col>
             </Row>
             <div style={{ marginTop: 16, color: '#6b6892', fontSize: 12 }}>
               快照为交付时点的只读数据；如需修改请回到对应配置项目（重新交付会生成新快照）。

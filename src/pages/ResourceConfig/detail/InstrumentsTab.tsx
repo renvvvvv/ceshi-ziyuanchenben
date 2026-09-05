@@ -15,6 +15,7 @@ import {
   calcInstrumentAllocation,
   type AssetLibItem, type InstrumentRow, type ResourceConfigProject,
 } from '../../../types/resourceConfig';
+import { useIsMobile } from '../../../hooks/useIsMobile';
 
 const { TextArea } = Input;
 
@@ -72,6 +73,7 @@ function useLibToast() {
 export default function InstrumentsTab({ data, assets, canEdit, patch }: TabProps) {
   const instruments = data.instruments || [];
   const libToast = useLibToast();
+  const isMobile = useIsMobile();
 
   // 行数据 ref：避免事件闭包拿到旧行数组
   const rowsRef = useRef(instruments);
@@ -273,7 +275,7 @@ export default function InstrumentsTab({ data, assets, canEdit, patch }: TabProp
   return (
     <div>
       {/* 页头 4 统计卡 */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 14 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: 10, marginBottom: 14 }}>
         {[
           { label: '仪表种类', value: visible.length, color: '#6366f1' },
           { label: '需求总数', value: stats.req, color: '#6366f1' },
