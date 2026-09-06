@@ -374,6 +374,48 @@ async function callGLMChat(
 /** 问答模式：fast=5.3-Flash 秒级响应（常规查询），deep=GLM-5.2 深度思考（复杂分析） */
 type QaMode = 'fast' | 'deep';
 
+/**
+ * GLM 智能体工具叙述过滤器（2026-09：glm-5.2 经 Anthropic 兼容端点会把联网搜索的
+ * 工具调用过程以 markdown 叙述文本混入正文通道，形如：
+ *   **🌐 Z.ai Built-in Tool: web_search_prime** / **Input:** ```json {...}```
+ *   *Executing on server...* / **Output:** **web_search_prime_result_summary:** [{...}]
+ * 该过滤器在流式层把叙述段整体剔除，仅把真正的回答正文透传给前端。
+ * 规则：命中叙述标记 → 进入抑制态；抑制态内丢弃叙述家具行/代码围栏/JSON 续块；
+ * 首个非叙述开头（正文/列表/标题/数字等）到达 → 退出抑制并透传；思考事件 → 复位。
+ */
+class ToolNarrationFilter {
+  private suppressed = false;
+  private inFence = false; // 处于叙述内的 ```json 代码围栏
+  feed(text: string): string {
+    if (!this.suppressed) {
+      if (/Z\.ai (Built-in Tool|内置工具)|内置工具:|\*Executing on server/.test(text)) {
+        this.suppressed = true;
+        this.inFence = /```json\s*$/.test(text.replace(/\n+$/, '\n'));
+        return '';
+      }
+      return text;
+    }
+    if (this.inFence) {
+      if (text.includes('```')) this.inFence = false;
+      return '';
+    }
+    const t = text.replace(/^[\s\n]+/, '');
+    if (!t) return '';
+    // 叙述家具 / JSON 续块（花括号方括号引号开头）继续丢弃
+    if (t.startsWith('**🌐') || t.startsWith('**Input:**') || t.startsWith('**Output:**') ||
+        t.startsWith('*Executing') || t.startsWith('**web_search') || t.startsWith('```') ||
+        /^[[\"{}]/.test(t)) {
+      if (/```json\s*$/.test(text.replace(/\n+$/, '\n'))) this.inFence = true;
+      return '';
+    }
+    // 非叙述开头 → 叙述结束，透传
+    this.suppressed = false;
+    return text;
+  }
+  /** 思考事件：工具调用间隙的 thinking，叙述已结束，复位等待正文（如再有工具会重新进入抑制） */
+  onThinking() { this.suppressed = false; this.inFence = false; }
+}
+
 async function callGLMChatStream(
   apiKey: string,
   systemPrompt: string,
@@ -427,6 +469,7 @@ async function callGLMChatStream(
     // 用量统计：message_start 带输入 token，message_delta 末次带累计输出 token
     let usageIn = 0;
     let usageOut = 0;
+    const narration = new ToolNarrationFilter();
 
     while (true) {
       const { done, value } = await reader.read();
@@ -450,12 +493,14 @@ async function callGLMChatStream(
             const delta = evt.delta || {};
             // 思考过程增量
             if (delta.type === 'thinking_delta' && delta.thinking) {
+              narration.onThinking();
               fullReasoning += delta.thinking;
               onChunk({ reasoning: delta.thinking });
             }
-            // 正文增量
+            // 正文增量（滤除 GLM 智能体的工具调用叙述）
             else if (delta.type === 'text_delta' && delta.text) {
-              onChunk({ content: delta.text });
+              const clean = narration.feed(delta.text);
+              if (clean) onChunk({ content: clean });
             }
           }
           // 联网搜索：服务端工具调用（web_search_prime / web_search 等）
