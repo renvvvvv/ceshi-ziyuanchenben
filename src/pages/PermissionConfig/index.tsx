@@ -11,6 +11,7 @@ import {
 import { useAuth } from '../../store/AuthContext';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import { request } from '../../api';
+import AiQuotaCard from '../../components/AiQuotaCard';
 import type { UserRole, AppModule, ModulePermission, User } from '../../types';
 
 // ============================================================
@@ -688,6 +689,9 @@ function PermissionConfig() {
           </p>
         </Card>
       )}
+
+      {/* AI 用量展示（原 AI 测试专家页的 Token 余量条迁移至此） */}
+      <AiQuotaCard />
 
       {/* ============== 账号权限配置卡片 ============== */}
       <Card

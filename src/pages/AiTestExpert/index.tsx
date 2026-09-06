@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Button, Spin, Input, message, Modal, Empty, Segmented, Tooltip, Progress } from 'antd';
+import { createPortal } from 'react-dom';
+import { Button, Spin, Input, message, Modal, Empty, Segmented, Tooltip } from 'antd';
 import {
   RobotOutlined, UserOutlined, SendOutlined, ReloadOutlined,
   BulbOutlined, SearchOutlined, CheckOutlined, LinkOutlined,
@@ -9,6 +10,7 @@ import {
 } from '@ant-design/icons';
 import { request } from '../../api';
 import { useIsMobile } from '../../hooks/useIsMobile';
+import ParticleSphere, { type ParticleSphereHandle, type KBSphereLabel } from '../../components/ParticleSphere';
 
 const { TextArea } = Input;
 
@@ -68,106 +70,18 @@ const KB_ITEMS = [
   { icon: <ProjectOutlined />, title: '测试策略与项目管理', grad: 'linear-gradient(135deg,#6366f1,#a855f7)' },
 ];
 
-// ============== 用量配额进度条 ==============
-function fmtTokensShort(n: number): string {
-  if (n >= 1e8) return (n / 1e8).toFixed(2) + '亿';
-  if (n >= 1e4) return (n / 1e4).toFixed(1) + '万';
-  return String(Math.round(n));
-}
-
-function quotaColor(pct: number): string {
-  return pct >= 90 ? '#dc2626' : pct >= 70 ? '#d97706' : '#16a34a';
-}
-
-function QuotaBar({ quota }: { quota: any }) {
-  const isMobile = useIsMobile();
-  const todayUsed = quota.todayTokens || 0;
-  const todayLimit = quota.todayLimitTokens || 1;
-  const weekPoints = quota.weekPoints || 0;
-  const weekLimit = quota.weekLimitPoints || 1;
-  const todayPct = Math.min(100, (todayUsed / todayLimit) * 100);
-  const weekPct = Math.min(100, (weekPoints / weekLimit) * 100);
-  return (
-    <div style={{
-      display: 'flex', flexDirection: isMobile ? 'column' : 'row',
-      gap: isMobile ? 8 : 24, alignItems: 'center', padding: '6px 12px', marginBottom: 8,
-      background: '#f6f5fc', border: '1px solid #e9e7f4', borderRadius: 8,
-    }}>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: isMobile ? 10 : 11, color: '#6b6892', marginBottom: 2 }}>
-          <span>今日 Token（{quota.todayCount ?? 0} 次提问）</span>
-          <span>剩余 <b style={{ color: quotaColor(todayPct) }}>{fmtTokensShort(Math.max(0, todayLimit - todayUsed))}</b> / {fmtTokensShort(todayLimit)}</span>
-        </div>
-        <Progress percent={todayPct} showInfo={false} size="small" strokeColor={quotaColor(todayPct)} trailColor="#f6f5fc" />
-      </div>
-      <div style={{ width: isMobile ? '100%' : 200, minWidth: isMobile ? 0 : undefined }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: isMobile ? 10 : 11, color: '#6b6892', marginBottom: 2 }}>
-          <span>本周积分</span>
-          <span>剩余 <b style={{ color: quotaColor(weekPct) }}>{Math.max(0, Math.round(weekLimit - weekPoints)).toLocaleString()}</b> / {weekLimit.toLocaleString()}</span>
-        </div>
-        <Progress percent={weekPct} showInfo={false} size="small" strokeColor={quotaColor(weekPct)} trailColor="#f6f5fc" />
-      </div>
-    </div>
-  );
-}
+// 知识球标注线轮播标签（icon 用 emoji，画布内渲染；title 来自上方 KB_ITEMS）
+const KB_SPHERE_EMOJI = ['🏢', '🏢', '🏢', '🔄', '📑', '📚', '🔧', '🛠️', '📊', '⚠️', '📋'];
+const KB_SPHERE_LABELS = KB_ITEMS.map((kb, i) => ({ icon: KB_SPHERE_EMOJI[i % KB_SPHERE_EMOJI.length], text: kb.title }));
 
 // ============== 主组件 ==============
+// 顶栏已删（与全局页头/对话态头卡重复），球区铺满整页
 export default function AiTestExpert() {
-  const isMobile = useIsMobile();
   return (
     <div style={{ height: 'calc(100vh - 120px)', display: 'flex', flexDirection: 'column' }}>
-      {/* 顶栏 */}
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 12, padding: isMobile ? '10px 12px' : '12px 18px',
-        borderBottom: '1px solid #e9e7f4',
-        background: '#f6f5fc',
-      }}>
-        <RobotOutlined style={{ color: '#16a34a', fontSize: 20 }} />
-        <div style={{ flex: 1, minWidth: isMobile ? 0 : undefined }}>
-          <div style={{ color: '#1e1b2e', fontSize: 15, fontWeight: 600 }}>
-            AI 测试专家
-          </div>
-          <div style={{ color: '#9d9ab8', fontSize: isMobile ? 10 : 11, marginTop: 2 }}>
-            数据中心测试领域智能助手 · GLM-5.2 深度思考 + 联网搜索
-          </div>
-        </div>
-      </div>
-
-      {/* 移动端：内置知识库横滑徽章条（桌面不渲染，右侧栏完整保留） */}
-      {isMobile ? <MobileKbStrip /> : null}
-
-      {/* 主体：左对话 + 右侧栏 */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: isMobile ? 'column' : 'row', minHeight: 0 }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
         <ChatArea />
-        <SidePanel />
       </div>
-    </div>
-  );
-}
-
-// ============== 移动端知识库横滑徽章条 ==============
-function MobileKbStrip() {
-  return (
-    <div style={{
-      display: 'flex', gap: 8, alignItems: 'center',
-      overflowX: 'auto', padding: '8px 12px',
-      borderBottom: '1px solid #e9e7f4', background: '#f6f5fc',
-    }}>
-      {KB_ITEMS.map((kb, i) => (
-        <div key={i} style={{
-          display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0,
-          background: '#ffffff', border: '1px solid #e9e7f4', borderRadius: 999,
-          padding: '3px 10px 3px 4px',
-        }}>
-          <div style={{
-            width: 20, height: 20, borderRadius: 6, flexShrink: 0,
-            background: kb.grad, display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>
-            <span style={{ color: '#fff', fontSize: 10, lineHeight: 1 }}>{kb.icon}</span>
-          </div>
-          <span style={{ color: '#46436a', fontSize: 11, whiteSpace: 'nowrap' }}>{kb.title}</span>
-        </div>
-      ))}
     </div>
   );
 }
@@ -180,40 +94,44 @@ function ChatArea() {
   // 问答模式：fast=GLM-5.3-Flash 秒级（默认），deep=GLM-5.2 深度思考
   const [qaMode, setQaMode] = useState<'fast' | 'deep'>('fast');
   const [asking, setAsking] = useState(false);
+  // 粒子球：唯一实例常驻。orbCorner=false 居中大球；首个答案 token 到达后 morph 到左上角常驻
+  const [burstTick, setBurstTick] = useState(0);
+  const [orbCorner, setOrbCorner] = useState(false);
+  const [currentQuestion, setCurrentQuestion] = useState('');
+  // 大球 ref（文字粒子吸收）+ 首次挂载标记（入场汇聚动画只在第一次播）
+  const heroRef = useRef<ParticleSphereHandle>(null);
+  const heroMountedOnce = useRef(false);
   const listRef = useRef<HTMLDivElement>(null);
-  // AI 用量配额（今日 token / 本周积分，进度条展示）
-  const [quota, setQuota] = useState<any>(null);
+  // 全屏入场：聚拢期间画布经 orb-intro 铺满全屏，球心/半径用 viewBox 钉在最终英雄位
+  const [introPlaying, setIntroPlaying] = useState(true);
+  const [introVB, setIntroVB] = useState<{ cx: number; cy: number; r: number } | null>(null);
+  const pageRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight;
   }, [messages, asking]);
 
-  useEffect(() => {
-    request<{ success: boolean; quota: any }>('/kb/qa/quota')
-      .then(r => { if (r?.quota) setQuota(r.quota); })
-      .catch(() => { /* 配额查询失败不阻断对话 */ });
-  }, []);
-
   const handleAsk = useCallback(async (questionText?: string) => {
     const question = (questionText ?? input).trim();
     if (!question || asking) return;
+    heroRef.current?.absorbText(question); // 问题化成粒子飞进球
     setInput('');
     setAsking(true);
 
     const userMsg: ChatMessage = { role: 'user', content: question };
     const history = messages.map(m => ({ role: m.role, content: m.content }));
-    setMessages(prev => [...prev, userMsg]);
+    setCurrentQuestion(question);
+    // 流式输出；首个 token 到达时球体裂变并平滑 morph 到左上角常驻
+    const assistantIdx = messages.length + 1;
+    setMessages(prev => [...prev, userMsg, {
+      role: 'assistant', content: '', reasoning: '', sources: [],
+      webSearch: null, _question: question,
+    } as ChatMessage]);
+    let firstToken = true;
 
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 175000);
-
-      // 先创建一个空的 assistant 消息，流式更新
-      const assistantIdx = messages.length + 1; // userMsg 占 messages.length
-      setMessages(prev => [...prev, {
-        role: 'assistant', content: '', reasoning: '', sources: [],
-        webSearch: null, _question: question,
-      } as any]);
 
       const res = await fetch('/api/kb/qa', {
         method: 'POST',
@@ -252,28 +170,27 @@ function ChatArea() {
                 sources = data.sources || [];
                 setMessages(prev => prev.map((m, i) => i === assistantIdx ? { ...m, sources } : m));
               } else if (data.type === 'content') {
+                if (firstToken) {
+                  firstToken = false;
+                  setBurstTick(t => t + 1); // 💥 先在全尺寸裂变（此时流式输出已开始）
+                  // 裂变峰值过后再启程：粒子先炸开→弹性重组回完整球→整球缩小飞向左上角，全程连续
+                  setTimeout(() => setOrbCorner(true), 620);
+                }
                 fullContent += data.text;
                 setMessages(prev => prev.map((m, i) => i === assistantIdx ? { ...m, content: fullContent } : m));
               } else if (data.type === 'reasoning') {
                 fullReasoning += data.text;
-                setMessages(prev => prev.map((m, i) => i === assistantIdx ? { ...m, reasoning: fullReasoning } : m));
               } else if (data.type === 'done') {
                 fullReasoning = data.reasoning || fullReasoning;
                 webSearch = data.webSearch || null;
                 setMessages(prev => prev.map((m, i) => i === assistantIdx ? {
                   ...m, content: fullContent, reasoning: fullReasoning, webSearch,
                 } : m));
-              } else if (data.type === 'quota' && data.quota) {
-                // 本次回答完成后的最新用量，刷新进度条
-                setQuota(data.quota);
               } else if (data.type === 'error') {
-                // 后端在流式过程中出错，已通过 SSE 通知（而非 HTTP 500）
                 if (data.partial) fullContent = data.partial;
                 const errMsg = data.message || 'AI 回答过程中出现异常';
                 setMessages(prev => prev.map((m, i) => i === assistantIdx ? {
-                  ...m,
-                  content: fullContent || `⚠️ ${errMsg}`,
-                  reasoning: fullReasoning,
+                  ...m, content: fullContent || `⚠️ ${errMsg}`, reasoning: fullReasoning,
                 } : m));
                 message.error(errMsg);
               }
@@ -286,8 +203,7 @@ function ChatArea() {
       // 兜底：流已关闭但 content 仍为空（GLM 返回了空响应）
       if (!fullContent.trim()) {
         setMessages(prev => prev.map((m, i) => i === assistantIdx ? {
-          ...m,
-          content: '⚠️ AI 未返回有效内容，请稍后重试或换一种问法。',
+          ...m, content: '⚠️ AI 未返回有效内容，请稍后重试或换一种问法。',
         } : m));
       }
     } catch (err: any) {
@@ -302,42 +218,117 @@ function ChatArea() {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAsk(); }
   };
 
-  return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-      {/* 对话列表（居中 max-width 900）*/}
-      <div ref={listRef} style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '12px 12px' : '20px 24px' }}>
-        <div style={{ maxWidth: 900, margin: '0 auto' }}>
-          {messages.length === 0 ? (
-            <WelcomeScreen onQuick={handleAsk} />
-          ) : (
-            <>
-              {messages.map((msg, i) => <MessageBubble key={i} msg={msg} />)}
-              {/* 流式模式下：asking 但最后一条消息还没有 content 时显示 loading */}
-              {asking && messages.length > 0 && !messages[messages.length - 1]?.content && (
-                <div style={{ display: 'flex', marginBottom: 16 }}>
-                  <div style={{
-                    background: '#ffffff', border: '1px solid #e9e7f4', borderRadius: '12px 12px 12px 2px',
-                    padding: '12px 16px',
-                  }}>
-                    <Spin size="small" />
-                    <span style={{ color: '#6b6892', fontSize: 13, marginLeft: 10 }}>
-                      {qaMode === 'fast' ? '⚡ 快速回答中...' : '🧠 正在深度思考 + 联网搜索...'}
-                    </span>
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      </div>
+  // 全屏入场收尾：换回英雄位 class（CSS morph），随后解除 viewBox 让球用画布自身几何
+  const handleIntroDone = useCallback(() => {
+    setIntroPlaying(false);
+    setIntroVB(null); // Portal 换回页面内会重建引擎，必须立即清钉位（旧坐标对新画布越界 → 球消失）
+  }, []);
 
-      {/* 输入区（居中）*/}
+  // 入场期间：orb-intro 画布铺满全屏，viewBox 把球心/半径钉在最终英雄位（按 .orb-hero 几何计算）
+  useEffect(() => {
+    if (!introPlaying) return;
+    const raf = requestAnimationFrame(() => {
+      const page = pageRef.current;
+      if (!page) return;
+      const rect = page.getBoundingClientRect();
+      const mob = window.matchMedia('(max-width: 767px)').matches;
+      const hw = Math.min(640, rect.width - 24);
+      const hh = Math.min(mob ? 300 : 420, window.innerHeight * (mob ? 0.42 : 0.52));
+      setIntroVB({
+        cx: rect.left + rect.width / 2,
+        cy: rect.top + rect.height * (mob ? 0.34 : 0.42),
+        r: Math.min(hw, hh) * 0.33, // 引擎 kbLine 模式半径系数
+      });
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [introPlaying]);
+
+  return (
+    <div ref={pageRef} className="ai-page" style={{ flex: 1, minHeight: 0, position: 'relative', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+      {/* 唯一粒子球：入场 orb-intro 全屏聚拢（Portal 到 body，绕开 .app-content 动画 transform 对 fixed 的劫持）
+          → orb-hero 居中 ↔ orb-corner 左上角，CSS morph + 引擎实时自适应 */}
+      {(() => {
+        const orbNode = (
+          <div className={`orb-layer ${introPlaying ? 'orb-intro' : orbCorner ? 'orb-corner' : 'orb-hero'}`}>
+            <ParticleSphere
+              ref={heroRef}
+              width="100%" height="100%"
+              kbLine
+              kbItems={KB_SPHERE_LABELS}
+              thinking={asking}
+              burstSignal={burstTick}
+              intro={!heroMountedOnce.current}
+              onIntroDone={handleIntroDone}
+              viewBox={introPlaying ? introVB : null}
+              onLabelClick={(item: KBSphereLabel) => handleAsk(`请基于「${item.text}」的知识，介绍核心要点与实际应用场景`)}
+            />
+          </div>
+        );
+        return introPlaying ? createPortal(orbNode, document.body) : orbNode;
+      })()}
+      {/* 挂载即标记：后续不重播入场汇聚 */}
+      <div style={{ display: 'none' }}>{(() => { heroMountedOnce.current = true; return null; })()}</div>
+
+      {!orbCorner ? (
+        /* 欢迎层（球居中）：提问时显示思考回显。
+           外层 flex:1 占位把输入区压到底部，欢迎文案锚在占位区底部（即输入区上方） */
+        <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
+          <div style={{
+            position: 'absolute', left: 0, right: 0, bottom: isMobile ? 10 : 18,
+            textAlign: 'center', pointerEvents: 'none', zIndex: 3, padding: '0 16px',
+          }}>
+            {asking && (
+              <div style={{ color: '#6b6892', fontSize: 13, maxWidth: 640, margin: '0 auto', lineHeight: 1.7 }}>
+                {qaMode === 'fast' ? '⚡ 快速回答中' : '🧠 正在深度思考 + 联网搜索'}
+                <span style={{ color: '#46436a' }}>：{currentQuestion}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : (
+        /* 答案层：左上角球伴飞（球在绝对层），毛玻璃头卡给球留位 */
+        <>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 12,
+            minHeight: isMobile ? 60 : 76,
+            padding: isMobile ? '8px 12px 8px 68px' : '10px 20px 10px 88px',
+            background: 'rgba(255,255,255,0.62)',
+            backdropFilter: 'blur(16px) saturate(1.4)',
+            WebkitBackdropFilter: 'blur(16px) saturate(1.4)',
+            borderBottom: '1px solid rgba(233,231,244,0.8)',
+            zIndex: 2,
+          }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ color: '#1e1b2e', fontSize: 13, fontWeight: 600 }}>
+                AI 测试专家 {asking && <span style={{ color: '#6366f1', fontWeight: 400 }}>· 思考中…</span>}
+              </div>
+              <div style={{ color: '#9d9ab8', fontSize: 11, marginTop: 1 }}>
+                {asking ? currentQuestion.slice(0, 40) : '继续提问，球在此思考并回答'}
+              </div>
+            </div>
+            <Button size="small" icon={<ReloadOutlined />} onClick={() => { setMessages([]); setOrbCorner(false); }}
+              style={{ borderRadius: 8, borderColor: '#d9d5f0', color: '#6366f1' }}>新对话</Button>
+          </div>
+          <div ref={listRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: isMobile ? '12px 12px' : '20px 24px' }}>
+            <div style={{ maxWidth: 1150, margin: '0 auto' }}>
+              {messages.map((msg, i) => <MessageBubble key={i} msg={msg} />)}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* 输入区（毛玻璃悬浮）—— marginTop:auto 钉在底部：
+          欢迎模式下球/标题层均为绝对定位不占文档流，没有它会浮到顶部 */}
       <div style={{
-        borderTop: '1px solid #e9e7f4', padding: isMobile ? '12px 12px' : '16px 24px',
-        background: '#f1f0fe',
+        marginTop: 'auto',
+        position: 'relative', zIndex: 5,
+        borderTop: '1px solid rgba(233,231,244,0.8)', padding: isMobile ? '12px 12px' : '14px 24px',
+        // 入场期间（全屏粒子画布在下方滚动）不做 backdrop 模糊：逐帧重模糊在弱 GPU 上是大开销
+        background: introPlaying ? 'rgba(241,240,254,0.97)' : 'rgba(241,240,254,0.78)',
+        backdropFilter: introPlaying ? 'none' : 'blur(16px) saturate(1.4)',
+        WebkitBackdropFilter: introPlaying ? 'none' : 'blur(16px) saturate(1.4)',
       }}>
-        <div style={{ maxWidth: 900, margin: '0 auto' }}>
-          {quota && <QuotaBar quota={quota} />}
+        <div style={{ maxWidth: 1150, margin: '0 auto' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
             <Segmented
               value={qaMode}
@@ -368,50 +359,11 @@ function ChatArea() {
             <Button type="primary" icon={<SendOutlined />} onClick={() => handleAsk()}
               loading={asking} disabled={!input.trim()} style={{ borderRadius: 10, height: 42, width: 42, flexShrink: isMobile ? 0 : undefined }} />
             {messages.length > 0 && (
-              <Button icon={<ReloadOutlined />} onClick={() => setMessages([])}
+              <Button icon={<ReloadOutlined />} onClick={() => { setMessages([]); setOrbCorner(false); }}
                 title="新对话" style={{ borderRadius: 10, height: 42, width: 42, flexShrink: isMobile ? 0 : undefined }} />
             )}
           </div>
         </div>
-      </div>
-    </div>
-  );
-}
-
-// ============== 欢迎屏 ==============
-function WelcomeScreen({ onQuick }: { onQuick: (q: string) => void }) {
-  const isMobile = useIsMobile();
-  return (
-    <div style={{
-      display: 'flex', flexDirection: 'column', alignItems: 'center',
-      padding: isMobile ? '24px 12px' : '40px 20px', textAlign: 'center',
-    }}>
-      <RobotOutlined style={{ fontSize: isMobile ? 40 : 56, color: 'rgba(22,163,74,0.4)', marginBottom: 20 }} />
-      <h2 style={{ color: '#1e1b2e', fontSize: 22, margin: '0 0 8px' }}>
-        数据中心测试专家
-      </h2>
-      <p style={{ color: '#6b6892', fontSize: 13, maxWidth: 480, lineHeight: 1.8, margin: '0 0 28px' }}>
-        基于 GLM-5.2 深度思考引擎，内置阿里巴巴/腾讯/字节跳动三大厂测试标准 + 国标 GB50174/GB50462。
-        可以问答设备参数、排障方法、验收标准，回答会标注厂商标准与国标的对应关系。
-      </p>
-      <div style={{
-        display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)', gap: isMobile ? 8 : 10,
-        maxWidth: 640, width: '100%',
-      }}>
-        {QUICK_QUESTIONS.map((q, i) => (
-          <div key={i} onClick={() => onQuick(q.text)} style={{
-            background: '#f6f5fc', border: '1px solid #e9e7f4',
-            borderRadius: 8, padding: '12px 14px', cursor: 'pointer', textAlign: 'left',
-            transition: 'all 0.2s', fontSize: 13, color: '#46436a',
-            display: 'flex', alignItems: 'center', gap: 8,
-          }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(99,102,241,0.08)'; e.currentTarget.style.borderColor = 'rgba(99,102,241,0.2)'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = '#f6f5fc'; e.currentTarget.style.borderColor = '#e9e7f4'; }}
-          >
-            <span style={{ fontSize: 16 }}>{q.icon}</span>
-            <span>{q.text}</span>
-          </div>
-        ))}
       </div>
     </div>
   );
@@ -466,7 +418,7 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
 
       {/* 思考过程 */}
       {!isUser && msg.reasoning && msg.reasoning.trim() && (
-        <div style={{ width: '100%', maxWidth: isMobile ? '100%' : 800, marginBottom: 8 }}>
+        <div style={{ width: '100%', maxWidth: isMobile ? '100%' : 1000, marginBottom: 8 }}>
           <Button size="small" type="text" icon={<BulbOutlined style={{ color: '#d97706' }} />}
             onClick={() => setShowReasoning(!showReasoning)}
             style={{ color: '#6b6892', fontSize: 12 }}>
@@ -486,16 +438,19 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
 
       {/* 气泡内容 */}
       <div style={{
-        background: isUser ? 'linear-gradient(135deg,#6366f1,#a855f7)' : '#ffffff',
-        border: isUser ? 'none' : '1px solid #e9e7f4',
+        background: isUser ? 'linear-gradient(135deg,#6366f1,#a855f7)' : 'rgba(255,255,255,0.72)',
+        backdropFilter: isUser ? undefined : 'blur(14px) saturate(1.3)',
+        WebkitBackdropFilter: isUser ? undefined : 'blur(14px) saturate(1.3)',
+        boxShadow: isUser ? '0 8px 24px rgba(99,102,241,0.25)' : '0 4px 20px rgba(99,102,241,0.08)',
+        border: isUser ? 'none' : '1px solid rgba(233,231,244,0.9)',
         color: isUser ? '#fff' : '#1e1b2e',
         borderRadius: isUser ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
-        padding: isMobile ? '10px 12px' : '14px 18px', maxWidth: isMobile ? '90%' : 800, fontSize: 14, lineHeight: 1.8, wordBreak: 'break-word',
+        padding: isMobile ? '10px 12px' : '14px 18px', maxWidth: isMobile ? '90%' : 1000, fontSize: 14, lineHeight: 1.8, wordBreak: 'break-word',
       }} dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content) }} />
 
       {/* 联网搜索来源 */}
       {!isUser && msg.webSearch && msg.webSearch.length > 0 && (
-        <div style={{ marginTop: 10, maxWidth: isMobile ? '100%' : 800, fontSize: 12 }}>
+        <div style={{ marginTop: 10, maxWidth: isMobile ? '100%' : 1000, fontSize: 12 }}>
           <div style={{ color: '#9d9ab8', marginBottom: 6 }}>
             <SearchOutlined style={{ marginRight: 4 }} />联网搜索来源：
           </div>
@@ -512,7 +467,7 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
       {!isUser && msg.sources && msg.sources.length > 0 && (
         <div style={{
           marginTop: 10, fontSize: 12, color: '#9d9ab8',
-          display: 'flex', flexWrap: 'wrap', gap: 6, maxWidth: isMobile ? '100%' : 800,
+          display: 'flex', flexWrap: 'wrap', gap: 6, maxWidth: isMobile ? '100%' : 1000,
         }}>
           <span>📎 知识库来源：</span>
           {msg.sources.map((s, i) => (
@@ -546,80 +501,6 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
           placeholder="补充或纠正 AI 的回答。后续相似问题会参考此补充。"
           rows={5} autoFocus />
       </Modal>
-    </div>
-  );
-}
-
-// ============== 右侧栏 ==============
-function SidePanel() {
-  const isMobile = useIsMobile();
-  return (
-    <div style={{
-      width: isMobile ? '100%' : 290, borderLeft: '1px solid #e9e7f4',
-      display: isMobile ? 'none' : 'flex', flexDirection: 'column', background: '#f1f0fe',
-      overflowY: 'auto',
-    }}>
-      {/* 能力说明 */}
-      <div style={{ padding: '16px' }}>
-        <div style={{ color: '#1e1b2e', fontSize: 13, fontWeight: 600, marginBottom: 12 }}>
-          ⚡ AI 能力
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {[
-            { icon: <BulbOutlined style={{ color: '#d97706' }} />, title: 'GLM-5.2 深度思考', desc: '思考强度最高，展示推理过程' },
-            { icon: <GlobalOutlined style={{ color: '#6366f1' }} />, title: '联网搜索', desc: '获取最新标准与资讯' },
-            { icon: <BookOutlined style={{ color: '#16a34a' }} />, title: '三大厂标准', desc: '阿里/腾讯/字节测试规范' },
-            { icon: <ThunderboltOutlined style={{ color: '#818cf8' }} />, title: '国标对照', desc: 'GB50174 / GB50462 关联' },
-            { icon: <CheckOutlined style={{ color: '#16a34a' }} />, title: '自我学习', desc: '采纳纠错，持续积累' },
-          ].map((cap, i) => (
-            <div key={i} style={{
-              display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 10px',
-              background: '#f6f5fc', borderRadius: 6,
-              border: '1px solid #eeedf8',
-            }}>
-              <div style={{ marginTop: 2 }}>{cap.icon}</div>
-              <div>
-                <div style={{ color: '#1e1b2e', fontSize: 12, fontWeight: 500 }}>{cap.title}</div>
-                <div style={{ color: '#9d9ab8', fontSize: 11, marginTop: 2 }}>{cap.desc}</div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* 内置知识库（清单见模块级 KB_ITEMS，移动端由顶部横滑徽章条承接） */}
-      <div style={{ padding: '0 16px 16px' }}>
-        <div style={{ color: '#1e1b2e', fontSize: 13, fontWeight: 600, marginBottom: 12 }}>
-          📚 内置知识库
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column' }}>
-          {KB_ITEMS.map((kb, i, arr) => (
-            <div key={i} style={{
-              display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0',
-              borderBottom: i < arr.length - 1 ? '1px solid #eeedf8' : 'none',
-            }}>
-              <div style={{
-                width: 22, height: 22, borderRadius: 6, flexShrink: 0,
-                background: kb.grad, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                boxShadow: '0 2px 6px #eceafb',
-              }}>
-                <span style={{ color: '#fff', fontSize: 11, lineHeight: 1 }}>{kb.icon}</span>
-              </div>
-              <span style={{ color: '#46436a', fontSize: 12 }}>{kb.title}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* 提示 */}
-      <div style={{ padding: '0 16px 16px', marginTop: 'auto' }}>
-        <div style={{
-          background: 'rgba(99,102,241,0.06)', border: '1px solid rgba(99,102,241,0.12)',
-          borderRadius: 6, padding: 10, fontSize: 11, color: '#6b6892', lineHeight: 1.7,
-        }}>
-          💡 回答涉及具体数值时会标注来源（国标条款号 / 厂商规范版本），方便交付引用。
-        </div>
-      </div>
     </div>
   );
 }

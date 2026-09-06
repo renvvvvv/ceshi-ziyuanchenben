@@ -1572,3 +1572,60 @@ body {
     gap: 10px !important;
   }
 }
+
+/* ============================================================
+   AI 测试专家页：白底星尘背景（球悬浮在星野中，配毛玻璃卡片）
+   ============================================================ */
+.ai-page {
+  background:
+    radial-gradient(1.5px 1.5px at 8% 18%, rgba(99,102,241,.14) 50%, transparent 51%),
+    radial-gradient(1px 1px at 22% 64%, rgba(168,85,247,.12) 50%, transparent 51%),
+    radial-gradient(1.5px 1.5px at 36% 32%, rgba(129,140,248,.10) 50%, transparent 51%),
+    radial-gradient(1px 1px at 52% 78%, rgba(236,72,153,.10) 50%, transparent 51%),
+    radial-gradient(1.5px 1.5px at 64% 12%, rgba(99,102,241,.13) 50%, transparent 51%),
+    radial-gradient(1px 1px at 78% 46%, rgba(168,85,247,.12) 50%, transparent 51%),
+    radial-gradient(1.5px 1.5px at 88% 70%, rgba(129,140,248,.10) 50%, transparent 51%),
+    radial-gradient(1px 1px at 14% 88%, rgba(99,102,241,.12) 50%, transparent 51%),
+    radial-gradient(1px 1px at 44% 8%, rgba(236,72,153,.09) 50%, transparent 51%),
+    radial-gradient(1px 1px at 94% 26%, rgba(168,85,247,.11) 50%, transparent 51%),
+    radial-gradient(1px 1px at 70% 92%, rgba(99,102,241,.12) 50%, transparent 51%),
+    linear-gradient(145deg, #ffffff 0%, #fafaff 45%, #f4f3fd 100%);
+  background-attachment: local;
+}
+
+/* ============================================================
+   AI 专家页：唯一粒子球 中心 ↔ 左上角 平滑 morph（.85s）
+   ============================================================ */
+.orb-layer { position: absolute; z-index: 4; pointer-events: auto; }
+/* 全屏入场：画布铺满视口，粒子从屏幕外飞入（消除画布矩形边界感），播完 morph 回英雄位 */
+.orb-intro {
+  position: fixed;
+  left: 0; top: 0;
+  width: 100vw; height: 100vh;
+  transform: none;
+  pointer-events: none;
+  transition: left .85s cubic-bezier(.5,.05,.2,1), top .85s cubic-bezier(.5,.05,.2,1),
+              width .85s cubic-bezier(.5,.05,.2,1), height .85s cubic-bezier(.5,.05,.2,1),
+              transform .85s cubic-bezier(.5,.05,.2,1);
+}
+.orb-hero {
+  left: 50%; top: 42%;
+  width: min(640px, calc(100% - 24px));
+  height: min(420px, 52vh);
+  transform: translate(-50%, -50%);
+  transition: left .85s cubic-bezier(.5,.05,.2,1), top .85s cubic-bezier(.5,.05,.2,1),
+              width .85s cubic-bezier(.5,.05,.2,1), height .85s cubic-bezier(.5,.05,.2,1),
+              transform .85s cubic-bezier(.5,.05,.2,1);
+}
+.orb-corner {
+  left: 16px; top: 10px;
+  width: 56px; height: 56px;
+  transform: none;
+  transition: left .85s cubic-bezier(.5,.05,.2,1), top .85s cubic-bezier(.5,.05,.2,1),
+              width .85s cubic-bezier(.5,.05,.2,1), height .85s cubic-bezier(.5,.05,.2,1),
+              transform .85s cubic-bezier(.5,.05,.2,1);
+}
+@media (max-width: 767px) {
+  .orb-hero { top: 34%; height: min(300px, 42vh); }
+  .orb-corner { left: 10px; top: 8px; width: 44px; height: 44px; }
+}
