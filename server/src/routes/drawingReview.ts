@@ -36,6 +36,22 @@ const asyncH = (fn: (req: Request, res: Response, next: NextFunction) => Promise
 const ID_RE = /^[a-z0-9-]+$/;
 function validId(id: string): boolean { return ID_RE.test(id) && id.length >= 6 && id.length <= 64; }
 
+// ============== 同任务串行锁（防并发复核互相覆盖 review/history/学习库） ==============
+const jobLocks = new Map<string, Promise<void>>();
+async function withJobLock<T>(id: string, fn: () => Promise<T>): Promise<T> {
+  const prev = jobLocks.get(id) || Promise.resolve();
+  let release!: () => void;
+  const gate = new Promise<void>(r => { release = r; });
+  jobLocks.set(id, gate);
+  try {
+    await prev.catch(() => undefined);
+    return await fn();
+  } finally {
+    release();
+    if (jobLocks.get(id) === gate) jobLocks.delete(id); // 仅当自己仍是队尾才清，防误删后来者
+  }
+}
+
 // ============== 复核产物读写 ==============
 
 interface Finding {
@@ -337,7 +353,8 @@ router.get('/jobs/:id/review', requireAuth, asyncH(async (req, res) => {
   const { id } = req.params;
   if (!validId(id)) { res.status(400).json({ success: false }); return; }
   const { review, history } = loadReview(id);
-  res.json({ success: true, review, history, learnings: loadLearnings() });
+  const all = loadLearnings();
+  res.json({ success: true, review, history, learnings: all.slice(-200) }); // 最新200条，防止库增大后拖慢详情打开
 }));
 
 /** 摘取小表全文 + 大表规模，控制送入 GLM 的上下文体积 */
@@ -376,6 +393,13 @@ router.post('/jobs/:id/review', requireAuth, asyncH(async (req, res) => {
   if (!existsSync(join(BASE, id, 'out', 'sheets', 'index.json'))) {
     res.status(400).json({ success: false, message: '任务尚未生成表格，无法复核' }); return;
   }
+  // 同任务串行：防止并发复核互相覆盖 review/history/学习库
+  const result = await withJobLock(id, () => runReview(id, req));
+  if (result.err) { res.status(502).json({ success: false, message: result.err }); return; }
+  res.json({ success: true, review: result.review, learnings: loadLearnings() });
+}));
+
+async function runReview(id: string, req: Request): Promise<{ review?: ReviewState; err?: string }> {
   const jobRows = await db.allAsync(`SELECT title FROM drawing_jobs WHERE id=$1`, id) as any[];
   const jobTitle: string = jobRows[0]?.title || '';
   const scan = prescan(id);
@@ -445,8 +469,8 @@ router.post('/jobs/:id/review', requireAuth, asyncH(async (req, res) => {
     by: (req as any).user?.username || '', stats, summary: review.summary,
     learned_applied: appliedN, learnings_known: matchLearnings(learnAll, jobTitle).length });
   saveReview(id, review, history);
-  res.json({ success: true, review, learnings: loadLearnings() });
-}));
+  return { review };
+}
 
 /** POST 人工反馈 → AI 重新复核 */
 router.post('/jobs/:id/review/feedback', requireAuth, asyncH(async (req, res) => {
@@ -454,8 +478,23 @@ router.post('/jobs/:id/review/feedback', requireAuth, asyncH(async (req, res) =>
   if (!validId(id)) { res.status(400).json({ success: false }); return; }
   const msg = String(req.body?.message || '').trim();
   if (!msg) { res.status(400).json({ success: false, message: '反馈内容不能为空' }); return; }
-  const { review, history } = loadReview(id);
+  const { review } = loadReview(id);
   if (!review) { res.status(400).json({ success: false, message: '请先发起一次 AI 复核' }); return; }
+  const result = await withJobLock(id, () => runFeedback(id, req, msg));
+  if (result.savedFeedbackOnly) {
+    // AI 重核失败但人工反馈已落盘，绝不丢用户的反馈
+    res.status(502).json({ success: false, message: `AI 重核失败（${result.err}）。你的反馈已保存，可稍后重新提交重核` });
+    return;
+  }
+  if (result.err) { res.status(502).json({ success: false, message: result.err }); return; }
+  res.json({ success: true, review: result.review, responses: result.responses, learnings: loadLearnings() });
+}));
+
+async function runFeedback(id: string, req: Request, msg: string): Promise<{
+  review?: ReviewState; responses?: any[]; err?: string; savedFeedbackOnly?: boolean;
+}> {
+  const { review, history } = loadReview(id);
+  if (!review) return { err: '请先发起一次 AI 复核' };
   const username = (req as any).user?.username || (req as any).user?.name || '';
   const at = new Date().toISOString();
   history.push({ role: 'human', kind: 'feedback', at, by: username, message: msg });
@@ -469,13 +508,21 @@ router.post('/jobs/:id/review/feedback', requireAuth, asyncH(async (req, res) =>
     `【人工反馈】（反馈人：${username}）\n${msg}\n\n` +
     `【原始表格上下文】\n${buildContext(id, [])}`;
   const t0 = Date.now();
-  const { json } = await callGLMJSON(SYS_REVERIFY, userPayload);
+  let json: any;
+  try {
+    json = (await callGLMJSON(SYS_REVERIFY, userPayload)).json;
+  } catch (e: any) {
+    // AI 失败也要保住人工反馈（历史已 push，先落盘再返回）
+    saveReview(id, review, history);
+    return { err: e?.message || 'AI 重核失败', savedFeedbackOnly: true };
+  }
   // 沉淀反馈中的可复用经验（去重）
   const [, addedN, dupN] = addLearnings(json.learnings, id, jobTitle, username);
-  // 以 AI 输出的全量 findings 为新状态（保留 id 兼容：AI 沿用原 id）
+  // 以 AI 输出的全量 findings 为新状态；source 沿用上一轮同 id 的值（AI 不回传该字段）
+  const prevSource = new Map(review.findings.map(f => [f.id, f.source]));
   const findings: Finding[] = ((json.findings || []) as any[]).filter(f => f && f.problem).map((f, i) => ({
     id: String(f.id || f.sid || `F${i + 1}`),
-    source: f.source === 'ai' ? 'ai' : 'scan',
+    source: prevSource.get(String(f.id || f.sid || '')) || (f.source === 'ai' ? 'ai' : 'scan'),
     type: f.type || '其他', severity: f.severity || '中',
     sheet: f.sheet || '', row: f.row || '',
     problem: f.problem, evidence: f.evidence || '', suggestion: f.suggestion || '',
@@ -498,7 +545,7 @@ router.post('/jobs/:id/review/feedback', requireAuth, asyncH(async (req, res) =>
     responses: json.responses || [], summary: updated.summary,
     learned_added: addedN, learned_dup: dupN, learned_applied: appliedN });
   saveReview(id, updated, history);
-  res.json({ success: true, review: updated, responses: json.responses || [], learnings: loadLearnings() });
-}));
+  return { review: updated, responses: json.responses || [] };
+}
 
 export default router;
