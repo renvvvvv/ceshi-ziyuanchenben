@@ -21,6 +21,16 @@ const UNIT_DAY_WIDTH: Record<GanttUnit, number> = {
   year:    1.5, // 每年 ~547px
 };
 
+// 各单位「每日最小像素」：时间轴宁可超宽由 .gantt-body 横向滚动承接，
+// 也不再为塞满一屏把格子压扁（此前下限 3px，天粒度被挤成细丝不可读）
+const UNIT_MIN_DAY_WIDTH: Record<GanttUnit, number> = {
+  day:     14,  // 天粒度格子至少 14px（月刻度 ~420px）
+  week:    8,   // 每周至少 ~56px
+  month:   4,   // 每月至少 ~120px
+  quarter: 2.2, // 每季至少 ~200px
+  year:    1.2, // 每年至少 ~440px
+};
+
 // 不同单位的刻度间隔（天数）和格式
 const UNIT_TICK: Record<GanttUnit, { interval: number; majorEvery: number }> = {
   day:     { interval: 1,   majorEvery: 1 },   // 每天一个刻度，每月一个主刻度
@@ -169,7 +179,7 @@ function GanttChart({ projects, unit = 'day' }: GanttChartProps) {
       const virtualWidth = isMobile ? Math.max(containerWidth, 900) : containerWidth;
       const usable = virtualWidth - labelWidth - 56;
       const fit = usable / range.daysTotal;
-      const floor = Math.min(3, base);
+      const floor = UNIT_MIN_DAY_WIDTH[unit] ?? Math.min(3, base);
       return Math.max(floor, Math.min(base, fit));
     }
     return base;
