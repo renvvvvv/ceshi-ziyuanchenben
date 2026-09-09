@@ -88,19 +88,31 @@ def run_job(job):
     cmd = ['python3', '-u', PIPE, src, out_dir, '--title', m.get('title') or '测试界面路由表(平台) V1.0']
     if m.get('battery') and os.path.exists(os.path.join(inbox, m['battery'])):
         cmd += ['--battery', os.path.join(inbox, m['battery'])]
+    for opt, key in (('--pairs', 'pairs'), ('--floors', 'floors')):
+        if m.get(key): cmd += [opt, str(m[key])]
     with open(os.path.join(out_dir, 'pipeline.log'), 'a') as lg:
         p = subprocess.Popen(cmd, stdout=lg, stderr=lg)
     # 运行中：每 2s 刷新阶段 + 日志尾
+    t0 = time.time()
+    txt_out = os.path.join(out_dir, 'txt')
     while p.poll() is None:
-        write_status(job, stage_from_log(out_dir), '', tail(out_dir + '/pipeline.log'))
-        time.sleep(2)
+        done_n = sum(1 for _ in glob.glob(os.path.join(txt_out, 'txt_*.txt')))
+        detail = ''
+        if n_dwgs and done_n > 0:
+            pct = min(done_n / n_dwgs, 0.98)
+            elapsed = time.time() - t0
+            eta = max(0, int(elapsed * (1 - pct) / pct / 60)) + 1
+            detail = '已完成 %d/%d 张（%d%%），预计还需约 %d 分钟' % (done_n, n_dwgs, int(pct*100), eta)
+        write_status(job, stage_from_log(out_dir), detail, tail(out_dir + '/pipeline.log'))
+        time.sleep(5)
+    dur = int((time.time() - t0) / 60)
     ok = os.path.exists(os.path.join(out_dir, '路由表.xlsx')) and p.returncode == 0
     if ok:
         write_status(job, '生成可视化', 'Excel 完成，转储表格数据', tail(out_dir + '/pipeline.log'))
         dump_sheets(out_dir)
-        write_status(job, 'done', f'成功：{n_dwgs} 张图纸', tail(out_dir + '/pipeline.log'))
+        write_status(job, 'done', f'成功：{n_dwgs} 张图纸，总耗时 {dur} 分钟', tail(out_dir + '/pipeline.log'))
     else:
-        write_status(job, 'error', f'管线失败（rc={p.returncode}），详见日志', tail(out_dir + '/pipeline.log'))
+        write_status(job, 'error', f'管线失败（rc={p.returncode}，已运行 {dur} 分钟），详见日志', tail(out_dir + '/pipeline.log'))
 
 def main():
     os.makedirs(BASE, exist_ok=True)

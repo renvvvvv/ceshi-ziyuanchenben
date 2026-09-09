@@ -51,6 +51,8 @@ export default function DrawingPipeline() {
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [title, setTitle] = useState('');
+  const [pairs, setPairs] = useState('');
+  const [floors, setFloors] = useState('');
   const [fileList, setFileList] = useState<UploadFile[]>([]);
   // 详情
   const [detailOpen, setDetailOpen] = useState(false);
@@ -109,6 +111,8 @@ export default function DrawingPipeline() {
     const fd = new FormData();
     fileList.forEach(f => { if (f.originFileObj) fd.append('files', f.originFileObj); });
     fd.append('title', title || '');
+    if (pairs.trim()) fd.append('pairs', pairs.trim());
+    if (floors.trim()) fd.append('floors', floors.trim());
     setUploading(true);
     try {
       // FormData 必须由浏览器自动设 multipart 边界，绕开统一 request 的 JSON 头
@@ -119,8 +123,8 @@ export default function DrawingPipeline() {
       });
       const r = await res.json().catch(() => ({}));
       if (res.ok && r?.success && r.jobId) {
-        message.success(`已提交，后台开始转换（${r.fileCount} 个文件）`);
-        setTitle(''); setFileList([]);
+        message.success(`已提交，后台开始转换（${r.fileCount} 个文件），预计 5-40 分钟`);
+        setTitle(''); setFileList([]); setPairs(''); setFloors('');
         loadJobs();
       } else {
         message.error(r?.message || `上传失败: ${res.status}`);
@@ -190,18 +194,25 @@ export default function DrawingPipeline() {
     { title: '上传人', dataIndex: 'username', key: 'user', width: 90 },
     { title: '发起时间', dataIndex: 'created_at', key: 'time', width: 150,
       render: (t: string) => new Date(t).toLocaleString('zh-CN', { hour12: false }) },
-    { title: '操作', key: 'actions', width: 170, render: (_: any, r: JobItem) => (
+    { title: '耗时', key: 'dur', width: 90,
+      render: (_: any, r: JobItem) => {
+        const start = new Date(r.created_at).getTime();
+        const end = r.finished_at ? new Date(r.finished_at).getTime() : Date.now();
+        const mins = Math.max(0, Math.round((end - start) / 60000));
+        return r.status === 'done' ? `${mins} 分钟` : r.status === 'running' ? `${mins} 分钟…` : '—';
+      } },
+    { title: '操作', key: 'actions', width: 210, render: (_: any, r: JobItem) => (
       <Space>
-        <Tooltip title="查看"><Button size="small" icon={<EyeOutlined />} onClick={() => openDetail(r.id)} /></Tooltip>
+        <Button size="small" icon={<EyeOutlined />} onClick={() => openDetail(r.id)}>查看</Button>
         {r.status === 'done' && (
           <Tooltip title="导出 Excel">
             <Button size="small" type="primary" ghost icon={<FileExcelOutlined />}
-              onClick={() => { window.open(`/api/drawing/jobs/${r.id}/export`, '_blank'); }} />
+              onClick={() => { window.open(`/api/drawing/jobs/${r.id}/export`, '_blank'); }}>导出</Button>
           </Tooltip>
         )}
         {user?.role === '管理者' && (
           <Popconfirm title="删除该任务及全部文件？" onConfirm={() => handleDelete(r.id)}>
-            <Button size="small" danger icon={<DeleteOutlined />} />
+            <Button size="small" danger icon={<DeleteOutlined />}>删除</Button>
           </Popconfirm>
         )}
       </Space>
@@ -249,6 +260,15 @@ export default function DrawingPipeline() {
               <Button type="primary" icon={<UploadOutlined />} loading={uploading} onClick={handleUpload}>
                 提交后台解析
               </Button>
+            </Space>
+            <Space wrap size={8}>
+              <Input style={{ width: isMobile ? '100%' : 250 }} placeholder="成对低压柜（可选）如 P5:P6,P7:P8"
+                value={pairs} onChange={e => setPairs(e.target.value)} />
+              <Input style={{ width: isMobile ? '100%' : 180 }} placeholder="楼层（可选）如 1,2,3"
+                value={floors} onChange={e => setFloors(e.target.value)} />
+              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                两项为精度参数：A/B 路成对柜与涉及楼层，填写后生成的配对与镜像表更准
+              </Typography.Text>
             </Space>
             <Upload.Dragger
               multiple

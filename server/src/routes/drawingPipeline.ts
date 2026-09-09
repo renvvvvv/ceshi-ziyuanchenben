@@ -98,7 +98,9 @@ router.post('/upload', requireAuth, requireRole(['管理者', '编辑者']), (re
     return;
   }
   const battery = files.find(f => f.originalname.toLowerCase().endsWith('.xlsx'))?.filename;
-  writeFileSync(join(BASE, id, 'JOB'), JSON.stringify({ id, title, battery }));
+  const pairs = String(req.body.pairs || '').trim() || null;
+  const floors = String(req.body.floors || '').trim() || null;
+  writeFileSync(join(BASE, id, 'JOB'), JSON.stringify({ id, title, battery, pairs, floors }));
   await db.runAsync(
     `INSERT INTO drawing_jobs (id, title, status, file_count, created_by, username)
      VALUES ($1,$2,'queued',$3,$4,$5)`,
