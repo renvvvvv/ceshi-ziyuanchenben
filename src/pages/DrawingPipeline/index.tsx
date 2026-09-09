@@ -5,11 +5,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Card, Table, Button, Input, Upload, message, Modal, Tag, Space, Tooltip,
-  Progress, Tabs, Empty, Spin, Popconfirm, Typography, Alert,
+  Progress, Tabs, Empty, Spin, Popconfirm, Typography, Alert, Collapse, Timeline,
 } from 'antd';
 import {
   UploadOutlined, FileExcelOutlined, ReloadOutlined, DeleteOutlined,
-  EyeOutlined, ExperimentOutlined, ClockCircleOutlined,
+  EyeOutlined, ExperimentOutlined, ClockCircleOutlined, AuditOutlined, SendOutlined,
 } from '@ant-design/icons';
 import type { UploadFile } from 'antd';
 import { useAuth } from '../../store/AuthContext';
@@ -24,6 +24,17 @@ interface JobItem {
 }
 interface SheetMeta { name: string; total: number; truncated: boolean; file: string }
 interface SheetData { name: string; total: number; rows: string[][] }
+/** AI 复核疑点（与后端 drawingReview.ts Finding 对齐） */
+interface ReviewFinding {
+  id: string; source: 'scan' | 'ai'; type: string; severity: string;
+  sheet: string; row: string; problem: string; evidence: string;
+  suggestion: string; confidence: string; status: string;
+}
+interface ReviewState {
+  model: string; updated_at: string; findings: ReviewFinding[];
+  stats: Record<string, number>; summary: string;
+}
+interface ReviewHistoryItem { role: string; kind: string; at: string; by?: string; [k: string]: any }
 
 const STAGE_TEXT: Record<string, { text: string; pct: number }> = {
   'queued': { text: '排队中', pct: 5 },
@@ -60,6 +71,12 @@ export default function DrawingPipeline() {
   const [activeSheet, setActiveSheet] = useState<string>('');
   const [sheetData, setSheetData] = useState<SheetData | null>(null);
   const [sheetLoading, setSheetLoading] = useState(false);
+  // AI 复核
+  const [review, setReview] = useState<ReviewState | null>(null);
+  const [reviewHistory, setReviewHistory] = useState<ReviewHistoryItem[]>([]);
+  const [reviewing, setReviewing] = useState(false);       // AI 复核进行中
+  const [feedbackText, setFeedbackText] = useState('');
+  const [feedbackSending, setFeedbackSending] = useState(false);
   const pollRef = useRef<number | null>(null);
 
   const loadJobs = useCallback(async () => {
@@ -136,6 +153,7 @@ export default function DrawingPipeline() {
 
   const openDetail = async (id: string) => {
     setSheetData(null);
+    setReview(null); setReviewHistory([]); setFeedbackText('');
     setDetailOpen(true);
     try {
       const r = await request<any>(`/drawing/jobs/${id}`);
@@ -147,6 +165,12 @@ export default function DrawingPipeline() {
           || r.sheetsIndex[0];
         setActiveSheet(prefer.file);
       }
+      // 已有 AI 复核结果则带出（含历史）
+      try {
+        const rv = await request<any>(`/drawing/jobs/${id}/review`);
+        if (rv?.review) setReview(rv.review);
+        if (rv?.history) setReviewHistory(rv.history);
+      } catch { /* 尚无复核 */ }
     } catch { message.error('读取任务详情失败'); }
   };
 
@@ -165,6 +189,44 @@ export default function DrawingPipeline() {
     })();
     return () => { stop = true; };
   }, [detail?.id, detail?.status, activeSheet]);
+
+  // ============== AI 复核 ==============
+  const runReview = async () => {
+    if (!detail?.id) return;
+    setReviewing(true);
+    try {
+      const r = await request<any>(`/drawing/jobs/${detail.id}/review`, { method: 'POST', timeout: 180000 });
+      if (r?.review) {
+        setReview(r.review);
+        message.success(`AI 复核完成：${r.review.stats?.total ?? 0} 条疑点`);
+        try {
+          const rv = await request<any>(`/drawing/jobs/${detail.id}/review`);
+          if (rv?.history) setReviewHistory(rv.history);
+        } catch { /* */ }
+      } else { message.error(r?.message || 'AI 复核失败'); }
+    } catch (e: any) { message.error(e?.message || 'AI 复核失败（可能超时，请重试）'); }
+    finally { setReviewing(false); }
+  };
+
+  const sendFeedback = async () => {
+    if (!detail?.id || !feedbackText.trim()) { message.warning('请先填写反馈内容'); return; }
+    setFeedbackSending(true);
+    try {
+      const r = await request<any>(`/drawing/jobs/${detail.id}/review/feedback`, {
+        method: 'POST', body: JSON.stringify({ message: feedbackText.trim() }), timeout: 180000,
+      });
+      if (r?.review) {
+        setReview(r.review);
+        setFeedbackText('');
+        message.success('AI 已结合你的反馈重新复核');
+        try {
+          const rv = await request<any>(`/drawing/jobs/${detail.id}/review`);
+          if (rv?.history) setReviewHistory(rv.history);
+        } catch { /* */ }
+      } else { message.error(r?.message || '反馈失败'); }
+    } catch (e: any) { message.error(e?.message || '反馈失败（可能超时，请重试）'); }
+    finally { setFeedbackSending(false); }
+  };
 
   const handleDelete = async (id: string) => {
     try {
@@ -363,9 +425,133 @@ export default function DrawingPipeline() {
                 </pre>
               </Card>
             )}
-            {/* 完成：校验报告 + sheet 可视化 */}
+            {/* 完成：AI 复核 + 校验报告 + sheet 可视化 */}
             {detail.status === 'done' && (
               <>
+                {/* AI 复核（二次确认）面板 */}
+                <Card size="small" style={{ marginBottom: 12 }}
+                  title={
+                    <Space>
+                      <AuditOutlined style={{ color: '#6366f1' }} />
+                      <span>AI 复核（二次确认）</span>
+                      {review && (
+                        <Space size={4}>
+                          <Tag color="red" style={{ margin: 0 }}>高 {review.stats?.high ?? 0}</Tag>
+                          <Tag color="orange" style={{ margin: 0 }}>中 {review.stats?.medium ?? 0}</Tag>
+                          <Tag color="blue" style={{ margin: 0 }}>低 {review.stats?.low ?? 0}</Tag>
+                          <Typography.Text type="secondary" style={{ fontSize: 12, fontWeight: 400 }}>
+                            {review.model} · {new Date(review.updated_at).toLocaleString('zh-CN', { hour12: false })}
+                          </Typography.Text>
+                        </Space>
+                      )}
+                    </Space>
+                  }
+                  extra={
+                    <Button size="small" type="primary" ghost icon={<AuditOutlined />}
+                      loading={reviewing} onClick={runReview} disabled={feedbackSending}>
+                      {review ? '重新复核' : '发起 AI 复核'}
+                    </Button>
+                  }
+                >
+                  {reviewing && (
+                    <Alert type="info" showIcon style={{ marginBottom: 10 }}
+                      message="AI 正在复核（预扫描疑点 → 逐条校准审核），约需 30~90 秒…" />
+                  )}
+                  {!review && !reviewing && (
+                    <Typography.Paragraph type="secondary" style={{ fontSize: 12.5, marginBottom: 0 }}>
+                      规则引擎负责确定性提取（可追溯坐标），AI 只做二次确认：扫描最终输出的<span style={{ color: '#dc2626' }}>缺失（?）、乱码、推定值、跨表不一致</span>，
+                      逐条给出证据与建议；AI 不直接改数，所有疑点以「建议需人工确认」呈现。
+                    </Typography.Paragraph>
+                  )}
+                  {review && (
+                    <div>
+                      {review.summary && (
+                        <Alert type={review.stats?.high ? 'warning' : 'success'} showIcon style={{ marginBottom: 10 }}
+                          message={review.summary} />
+                      )}
+                      <Table size="small" bordered
+                        dataSource={review.findings}
+                        rowKey="id"
+                        pagination={(review.findings?.length || 0) > 20 ? { pageSize: 20, showSizeChanger: false, size: 'small' } : false}
+                        scroll={{ x: 'max-content' }}
+                        expandable={{
+                          expandedRowRender: (f: ReviewFinding) => (
+                            <div style={{ fontSize: 12.5 }}>
+                              <div><b>证据：</b><span style={{ color: '#6b6892' }}>{f.evidence || '—'}</span></div>
+                              <div style={{ marginTop: 4 }}><b>建议：</b>{f.suggestion || '—'}</div>
+                            </div>
+                          ),
+                        }}
+                        columns={[
+                          { title: '级别', dataIndex: 'severity', width: 64,
+                            render: (v: string) => <Tag color={v === '高' ? 'red' : v === '中' ? 'orange' : 'blue'} style={{ margin: 0 }}>{v}</Tag> },
+                          { title: '类型', dataIndex: 'type', width: 70 },
+                          { title: '位置', width: 150,
+                            render: (_: any, f: ReviewFinding) => (
+                              <span style={{ fontSize: 12 }}>{f.sheet}{f.row ? ` · ${f.row}` : ''}</span>
+                            ) },
+                          { title: '问题', dataIndex: 'problem', ellipsis: true },
+                          { title: '置信度', dataIndex: 'confidence', width: 70,
+                            render: (v: string) => <span style={{ fontSize: 12, color: v === '高' ? '#16a34a' : v === '低' ? '#dc2626' : '#d97706' }}>{v}</span> },
+                          { title: '来源', dataIndex: 'source', width: 70,
+                            render: (v: string) => <Tag style={{ margin: 0 }}>{v === 'scan' ? '预扫描' : 'AI'}</Tag> },
+                          { title: '状态', dataIndex: 'status', width: 96,
+                            render: (v: string) => <Tag style={{ margin: 0 }}
+                              color={v === '已解决' ? 'success' : v === '人工已反馈' ? 'purple' : 'default'}>{v}</Tag> },
+                        ]}
+                      />
+                      {/* 人工反馈 → AI 重核 */}
+                      <div style={{ marginTop: 12 }}>
+                        <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 6 }}>
+                          指出 AI 哪里有错误或补充事实（如「F2-P1 中压柜实际为 1AH5/2AH3/2AH5，与 F1-P1 同构」），提交后 AI 会结合反馈重新复核
+                        </Typography.Text>
+                        <Space.Compact style={{ width: '100%' }}>
+                          <Input.TextArea
+                            value={feedbackText} onChange={e => setFeedbackText(e.target.value)}
+                            placeholder="例：F3-P3-T06 的 IT 变压器容量图纸标注为 2000kVA，不是推定值；柴发并机在 xx 图有标注…"
+                            autoSize={{ minRows: 1, maxRows: 3 }} maxLength={1000}
+                          />
+                        </Space.Compact>
+                        <Button size="small" type="primary" icon={<SendOutlined />} style={{ marginTop: 8 }}
+                          loading={feedbackSending} onClick={sendFeedback}
+                          disabled={!feedbackText.trim()}>
+                          提交反馈并让 AI 重新复核
+                        </Button>
+                      </div>
+                      {/* 复核历史 */}
+                      {reviewHistory.length > 0 && (
+                        <Collapse size="small" style={{ marginTop: 10 }}
+                          items={[{
+                            key: 'h', label: `复核历史（${reviewHistory.length} 条）`,
+                            children: (
+                              <Timeline mode="left" style={{ marginTop: 0, paddingTop: 4 }}
+                                items={reviewHistory.map(h => ({
+                                  color: h.role === 'human' ? 'purple' : 'blue',
+                                  children: (
+                                    <div style={{ fontSize: 12.5 }}>
+                                      <Typography.Text type="secondary">
+                                        {new Date(h.at).toLocaleString('zh-CN', { hour12: false })} ·{' '}
+                                        {h.role === 'human' ? `人工反馈（${h.by || '—'}）` : h.kind === 'reverify' ? 'AI 重核' : `AI 复核（${h.dur_sec ?? '?'}s）`}
+                                      </Typography.Text>
+                                      <div style={{ marginTop: 2 }}>
+                                        {h.role === 'human' ? h.message : h.summary}
+                                      </div>
+                                      {h.kind === 'reverify' && Array.isArray(h.responses) && h.responses.length > 0 && (
+                                        <ul style={{ margin: '4px 0 0', paddingLeft: 18, color: '#6b6892' }}>
+                                          {h.responses.map((rp: any, i: number) => (
+                                            <li key={i}>针对「{(rp.to || '').slice(0, 40)}」：{rp.conclusion}</li>
+                                          ))}
+                                        </ul>
+                                      )}
+                                    </div>
+                                  ),
+                                }))} />
+                            ),
+                          }]} />
+                      )}
+                    </div>
+                  )}
+                </Card>
                 {detail.__validate && (
                   <Card size="small" title="结构校验报告" style={{ marginBottom: 12 }}>
                     <pre style={{ maxHeight: 160, overflow: 'auto', fontSize: 11, margin: 0, whiteSpace: 'pre-wrap' }}>
