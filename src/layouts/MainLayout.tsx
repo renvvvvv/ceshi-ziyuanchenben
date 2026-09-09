@@ -18,6 +18,7 @@ import {
   FileSearchOutlined,
   RobotOutlined,
   AppstoreOutlined,
+  ApartmentOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../store/AuthContext';
 import { useData } from '../store/DataContext';
@@ -45,6 +46,7 @@ const ALL_MENU_ITEMS: MenuItemDef[] = [
   { key: '/report-review', icon: <FileSearchOutlined />, label: '测试报告审核', module: 'reportReview' },
   { key: '/resource-calculator', icon: <CalculatorOutlined />, label: '资源计算器', module: 'resourceCalc' },
   { key: '/resource-config', icon: <AppstoreOutlined />, label: '资源配置', module: 'resourceConfig' },
+  { key: '/drawing-pipeline', icon: <ApartmentOutlined />, label: '图纸路由', module: 'drawingPipeline' },
   { key: '/permission-config', icon: <SafetyOutlined />, label: '权限配置', module: 'permissionConfig' },
 ];
 
@@ -145,6 +147,7 @@ function MainLayout() {
     '/report-review': '测试报告审核',
     '/attendance': '人员考勤',
     '/permission-config': '权限配置',
+    '/drawing-pipeline': '图纸路由',
   };
 
   const currentTitle = pageTitles[selectedKey] || '';

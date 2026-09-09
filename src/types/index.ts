@@ -199,7 +199,8 @@ export type AppModule =
   | 'reportReview'
   | 'permissionConfig'
   | 'aiTestExpert'
-  | 'resourceConfig';
+  | 'resourceConfig'
+  | 'drawingPipeline';
 
 export interface ModulePermission {
   module: AppModule;

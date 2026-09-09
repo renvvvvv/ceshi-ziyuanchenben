@@ -38,6 +38,7 @@ const MODULE_LIST: AppModule[] = [
   'permissionConfig',
   'aiTestExpert',
   'resourceConfig',
+  'drawingPipeline',
 ];
 
 const DEFAULT_PERMISSIONS: PermissionConfig[] = [
