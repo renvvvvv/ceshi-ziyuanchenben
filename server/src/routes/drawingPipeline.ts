@@ -70,11 +70,11 @@ function syncStatus(id: string) {
   const map: Record<string, string> = { done: 'done', error: 'error' };
   const dbStatus = st.stage in map ? map[st.stage] : 'running';
   db.runAsync(
-    `UPDATE drawing_jobs SET status=$1, error=$2, dwg_count = COALESCE($4, dwg_count),
+    `UPDATE drawing_jobs SET status=$1, error=$2, dwg_count = COALESCE($4::int, dwg_count),
        finished_at = CASE WHEN $1 IN ('done','error') THEN now() ELSE finished_at END
-     WHERE id = $3 AND (status <> $1 OR ($4 IS NOT NULL AND dwg_count IS NULL))`,
+     WHERE id = $3 AND (status <> $1 OR ($4::int IS NOT NULL AND dwg_count IS NULL))`,
     dbStatus, st.stage === 'error' ? st.detail : null, id, st.n_dwgs ?? null
-  ).catch(() => {});
+  ).catch((e) => { console.warn('[drawing] syncStatus 失败:', id, e.message); });
 }
 
 /** 任务 id 合法性（时间戳36进制-随机段；同时挡住路径穿越） */
