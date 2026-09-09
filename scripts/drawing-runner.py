@@ -20,8 +20,11 @@ PIPE = os.environ.get('DRAWING_PIPELINE', '/root/drawing-tools/scripts/run_pipel
 LOG_LINES = 40          # STATUS 内保留的日志尾行数
 SHEET_ROW_CAP = 2000    # 单 sheet 可视化行数上限（导出仍是完整 xlsx）
 
+JOB_N_DWG = {}  # jobId -> 图纸数（供 STATUS 携带，平台落库显示）
+
 def write_status(job, stage, detail='', log=''):
     st = {'stage': stage, 'detail': detail, 'log': log.split('\n')[-LOG_LINES:],
+          'n_dwgs': JOB_N_DWG.get(os.path.basename(job)),
           'updated_at': time.strftime('%Y-%m-%d %H:%M:%S')}
     tmp = os.path.join(job, 'STATUS.tmp')
     with open(tmp, 'w') as f: json.dump(st, f, ensure_ascii=False)
@@ -81,6 +84,7 @@ def run_job(job):
             os.makedirs(os.path.join(src, 'dwg_direct'), exist_ok=True)
             shutil.copy2(f, os.path.join(src, 'dwg_direct', os.path.basename(f)))
     n_dwgs = sum(1 for r, _, fs in os.walk(src) for fn in fs if fn.lower().endswith('.dwg'))
+    JOB_N_DWG[os.path.basename(job)] = n_dwgs
     if n_dwgs == 0:
         write_status(job, 'error', '未在上传内容中发现任何 .dwg 文件', tail(out_dir + '/pipeline.log'))
         return
@@ -132,7 +136,8 @@ def main():
                 print('执行任务', job, flush=True)
                 try: run_job(job)
                 except Exception as e:
-                    write_status(job, 'error', f'执行器异常：{e}')
+                    try: write_status(job, 'error', f'执行器异常：{e}')
+                    except Exception: pass  # 任务目录可能已被删除
         time.sleep(2)
 
 if __name__ == '__main__':

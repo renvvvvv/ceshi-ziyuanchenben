@@ -54,7 +54,7 @@ const upload = multer({
   limits: { fileSize: 600 * 1024 * 1024, files: 120 },
   fileFilter: (_req, file, cb) => {
     const name = Buffer.from(file.originalname, 'latin1').toString('utf8').toLowerCase();
-    cb(null, /\.(dwg|zip|rar|7z|xlsx)$/.test(name));
+    cb(null, /\.(dwg|zip|rar|xlsx)$/.test(name));
   },
 });
 
@@ -70,12 +70,16 @@ function syncStatus(id: string) {
   const map: Record<string, string> = { done: 'done', error: 'error' };
   const dbStatus = st.stage in map ? map[st.stage] : 'running';
   db.runAsync(
-    `UPDATE drawing_jobs SET status=$1, error=$2,
+    `UPDATE drawing_jobs SET status=$1, error=$2, dwg_count = COALESCE($4, dwg_count),
        finished_at = CASE WHEN $1 IN ('done','error') THEN now() ELSE finished_at END
-     WHERE id = $3 AND status <> $1`,
-    dbStatus, st.stage === 'error' ? st.detail : null, id
+     WHERE id = $3 AND (status <> $1 OR ($4 IS NOT NULL AND dwg_count IS NULL))`,
+    dbStatus, st.stage === 'error' ? st.detail : null, id, st.n_dwgs ?? null
   ).catch(() => {});
 }
+
+/** 任务 id 合法性（时间戳36进制-随机段；同时挡住路径穿越） */
+const ID_RE = /^[a-z0-9-]+$/;
+function validId(id: string): boolean { return ID_RE.test(id) && id.length >= 6 && id.length <= 64; }
 
 /**
  * POST /api/drawing/upload  上传图纸（zip/rar 整包 或 多个 DWG；可选蓄电池配置 xlsx）
@@ -133,6 +137,7 @@ router.get('/jobs', requireAuth, asyncH(async (_req, res) => {
 /** GET /api/drawing/jobs/:id  任务详情（状态+日志尾+报告+sheet 索引） */
 router.get('/jobs/:id', requireAuth, asyncH(async (req, res) => {
   const { id } = req.params;
+  if (!validId(id)) { res.status(400).json({ success: false, message: '非法任务 id' }); return; }
   const rows = await db.allAsync(`SELECT * FROM drawing_jobs WHERE id=$1`, id) as any[];
   if (!rows.length) { res.status(404).json({ success: false, message: '任务不存在' }); return; }
   syncStatus(id);
@@ -151,6 +156,7 @@ router.get('/jobs/:id', requireAuth, asyncH(async (req, res) => {
 /** GET /api/drawing/jobs/:id/sheet?file=xxx.json  单个 sheet 数据（可视化表格） */
 router.get('/jobs/:id/sheet', requireAuth, asyncH(async (req, res) => {
   const { id } = req.params;
+  if (!validId(id)) { res.status(400).json({ success: false }); return; }
   const file = String(req.query.file || '').replace(/[/\\]/g, '');
   if (!/^[^/\\]+\.json$/.test(file)) { res.status(400).json({ success: false }); return; }
   try {
@@ -162,6 +168,7 @@ router.get('/jobs/:id/sheet', requireAuth, asyncH(async (req, res) => {
 /** GET /api/drawing/jobs/:id/export  一键导出成品 Excel */
 router.get('/jobs/:id/export', requireAuth, asyncH(async (req, res) => {
   const { id } = req.params;
+  if (!validId(id)) { res.status(400).json({ success: false, message: '非法任务 id' }); return; }
   const xlsx = join(BASE, id, 'out', '路由表.xlsx');
   if (!existsSync(xlsx)) { res.status(404).json({ success: false, message: '成品尚未生成' }); return; }
   const rows = await db.allAsync(`SELECT title FROM drawing_jobs WHERE id=$1`, id) as any[];
@@ -178,6 +185,12 @@ router.get('/jobs/:id/log', requireAuth, asyncH(async (req, res) => {
 /** DELETE /api/drawing/jobs/:id  删除任务及全部文件（仅管理者） */
 router.delete('/jobs/:id', requireAuth, requireRole(['管理者']), asyncH(async (req, res) => {
   const { id } = req.params;
+  if (!validId(id)) { res.status(400).json({ success: false, message: '非法任务 id' }); return; }
+  const cur = await db.allAsync(`SELECT status FROM drawing_jobs WHERE id=$1`, id) as any[];
+  if (cur[0] && ['queued', 'running'].includes(cur[0].status)) {
+    res.status(400).json({ success: false, message: '任务正在运行，请等待完成后再删除' });
+    return;
+  }
   await db.runAsync(`DELETE FROM drawing_jobs WHERE id=$1`, id);
   try { rmSync(join(BASE, id), { recursive: true, force: true }); } catch {}
   res.json({ success: true });

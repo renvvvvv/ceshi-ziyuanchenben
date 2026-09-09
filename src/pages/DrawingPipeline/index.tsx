@@ -288,13 +288,13 @@ export default function DrawingPipeline() {
               fileList={fileList}
               beforeUpload={() => false}
               onChange={({ fileList: fl }) => setFileList(fl)}
-              accept=".dwg,.zip,.rar,.7z,.xlsx"
+              accept=".dwg,.zip,.rar,.xlsx"
               showUploadList={{ showRemoveIcon: true }}
             >
               <p className="ant-upload-drag-icon"><UploadOutlined /></p>
               <p className="ant-upload-text">点击或拖入图纸文件</p>
               <p className="ant-upload-hint" style={{ fontSize: 12 }}>
-                支持整个图纸包（.zip / .rar，含子目录）或多个 .dwg；可附蓄电池配置 .xlsx（可选）
+                支持整个图纸包（.zip / .rar，含子目录）或多个 .dwg；可附蓄电池配置 .xlsx（可选，暂不支持 .7z）
               </p>
             </Upload.Dragger>
           </Space>
