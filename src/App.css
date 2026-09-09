@@ -1201,7 +1201,7 @@ body {
 }
 
 .gantt-body::-webkit-scrollbar {
-  height: 6px;
+  height: 10px;
 }
 
 .gantt-body::-webkit-scrollbar-track {
@@ -1210,8 +1210,11 @@ body {
 }
 
 .gantt-body::-webkit-scrollbar-thumb {
-  background: #e9e7f4;
-  border-radius: 3px;
+  background: #b9b4d6;
+  border-radius: 5px;
+}
+.gantt-body::-webkit-scrollbar-thumb:active {
+  background: #6366f1;
 }
 
 .gantt-body::-webkit-scrollbar-thumb:hover {
