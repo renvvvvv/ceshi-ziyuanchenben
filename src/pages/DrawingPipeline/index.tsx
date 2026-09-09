@@ -231,7 +231,8 @@ export default function DrawingPipeline() {
     if (!sheetData) return <Empty description={sheetLoading ? '加载中…' : '无数据'} />;
     const rows = sheetData.rows || [];
     // 首行作表头
-    const headers = (rows[0] || []).map((h, i) => ({ title: h || `列${i + 1}`, key: String(i), ellipsis: true, width: 140 }));
+    // AntD v5：列必须给 dataIndex 才能取到单元格值（只给 key 会渲染空格子）
+    const headers = (rows[0] || []).map((h, i) => ({ title: h || `列${i + 1}`, dataIndex: String(i), key: String(i), ellipsis: true, width: 140 }));
     const dataRows = rows.slice(1).map((r, ri) => {
       const obj: any = { __key: ri };
       r.forEach((c, ci) => { obj[String(ci)] = c; });
