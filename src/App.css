@@ -329,20 +329,21 @@ body {
 
 .kpi-cards-row {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  /* minmax(0,1fr)：允许轨道缩到内容以下，防 ECharts/卡片把页面撑出横向溢出 */
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
   margin-bottom: 20px;
 }
 
 @media (max-width: 1200px) {
   .kpi-cards-row {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 768px) {
   .kpi-cards-row {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -462,14 +463,14 @@ body {
 
 .charts-row {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 20px;
   margin-bottom: 20px;
 }
 
 @media (max-width: 992px) {
   .charts-row {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
