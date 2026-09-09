@@ -141,7 +141,11 @@ export default function DrawingPipeline() {
       const r = await request<any>(`/drawing/jobs/${id}`);
       setDetail({ ...r.job, __status: r.status, __report: r.report, __validate: r.validate, __sheets: r.sheetsIndex });
       if (r.sheetsIndex?.length) {
-        setActiveSheet(r.sheetsIndex[0].file);
+        // 默认打开数据最丰富的表：机柜路由 > 低压一层 > 首个（「说明」页仅3行文字，观感像空白）
+        const prefer = r.sheetsIndex.find((x: SheetMeta) => x.name.includes('机房机柜路由'))
+          || r.sheetsIndex.find((x: SheetMeta) => x.name.includes('低压系统'))
+          || r.sheetsIndex[0];
+        setActiveSheet(prefer.file);
       }
     } catch { message.error('读取任务详情失败'); }
   };
@@ -361,15 +365,20 @@ export default function DrawingPipeline() {
                   </Card>
                 )}
                 {sheets.length > 0 ? (
-                  <Tabs
-                    activeKey={activeSheet}
-                    onChange={setActiveSheet}
-                    items={sheets.map(s => ({
-                      key: s.file,
-                      label: `${s.name} (${s.total})`,
-                      children: sheetLoading ? <Spin /> : sheetTable(),
-                    }))}
-                  />
+                  <div>
+                    <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 6 }}>
+                      点击下方标签切换各张分析表（括号内为行数）；完整数据请用「一键导出 Excel」
+                    </Typography.Text>
+                    <Tabs
+                      activeKey={activeSheet}
+                      onChange={setActiveSheet}
+                      items={sheets.map(s => ({
+                        key: s.file,
+                        label: `${s.name} (${s.total})`,
+                        children: <div style={{ maxHeight: '52vh', overflow: 'auto' }}>{sheetLoading ? <Spin /> : sheetTable()}</div>,
+                      }))}
+                    />
+                  </div>
                 ) : <Empty description="无表格数据" />}
               </>
             )}
