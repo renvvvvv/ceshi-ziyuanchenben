@@ -110,11 +110,20 @@ def run_job(job):
         write_status(job, stage_from_log(out_dir), detail, tail(out_dir + '/pipeline.log'))
         time.sleep(5)
     dur = int((time.time() - t0) / 60)
-    ok = os.path.exists(os.path.join(out_dir, '路由表.xlsx')) and p.returncode == 0
+    # 空壳判定 + 告警展示（report.steps.gen=fail(empty-lv) 或 warnings 非空时降级提示）
+    warns, gen_fail = [], False
+    try:
+        rep = json.load(open(os.path.join(out_dir, 'report.json')))
+        warns = rep.get('warnings') or []
+        gen_fail = str((rep.get('steps') or {}).get('gen', '')).startswith('fail')
+    except Exception:
+        pass
+    ok = os.path.exists(os.path.join(out_dir, '路由表.xlsx')) and p.returncode == 0 and not gen_fail
     if ok:
         write_status(job, '生成可视化', 'Excel 完成，转储表格数据', tail(out_dir + '/pipeline.log'))
         dump_sheets(out_dir)
-        write_status(job, 'done', f'成功：{n_dwgs} 张图纸，总耗时 {dur} 分钟', tail(out_dir + '/pipeline.log'))
+        extra = ('。注意：' + '；'.join(warns)) if warns else ''
+        write_status(job, 'done', f'成功：{n_dwgs} 张图纸，总耗时 {dur} 分钟{extra}', tail(out_dir + '/pipeline.log'))
     else:
         write_status(job, 'error', f'管线失败（rc={p.returncode}，已运行 {dur} 分钟），详见日志', tail(out_dir + '/pipeline.log'))
 
