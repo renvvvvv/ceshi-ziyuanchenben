@@ -10,6 +10,7 @@ import {
 import {
   UploadOutlined, FileExcelOutlined, ReloadOutlined, DeleteOutlined,
   EyeOutlined, ExperimentOutlined, ClockCircleOutlined, AuditOutlined, SendOutlined,
+  BulbOutlined,
 } from '@ant-design/icons';
 import type { UploadFile } from 'antd';
 import { useAuth } from '../../store/AuthContext';
@@ -29,12 +30,18 @@ interface ReviewFinding {
   id: string; source: 'scan' | 'ai'; type: string; severity: string;
   sheet: string; row: string; problem: string; evidence: string;
   suggestion: string; confidence: string; status: string;
+  learning_ids?: string[];
 }
 interface ReviewState {
   model: string; updated_at: string; findings: ReviewFinding[];
   stats: Record<string, number>; summary: string;
 }
 interface ReviewHistoryItem { role: string; kind: string; at: string; by?: string; [k: string]: any }
+/** 自学习库条目（与后端 Learning 对齐） */
+interface LearningItem {
+  id: string; kind: string; content: string; buildings: string[];
+  source_job: string; created_by: string; at: string; applied: number;
+}
 
 const STAGE_TEXT: Record<string, { text: string; pct: number }> = {
   'queued': { text: '排队中', pct: 5 },
@@ -74,6 +81,7 @@ export default function DrawingPipeline() {
   // AI 复核
   const [review, setReview] = useState<ReviewState | null>(null);
   const [reviewHistory, setReviewHistory] = useState<ReviewHistoryItem[]>([]);
+  const [learnings, setLearnings] = useState<LearningItem[]>([]);
   const [reviewing, setReviewing] = useState(false);       // AI 复核进行中
   const [feedbackText, setFeedbackText] = useState('');
   const [feedbackSending, setFeedbackSending] = useState(false);
@@ -165,11 +173,12 @@ export default function DrawingPipeline() {
           || r.sheetsIndex[0];
         setActiveSheet(prefer.file);
       }
-      // 已有 AI 复核结果则带出（含历史）
+      // 已有 AI 复核结果则带出（含历史 + 自学习库）
       try {
         const rv = await request<any>(`/drawing/jobs/${id}/review`);
         if (rv?.review) setReview(rv.review);
         if (rv?.history) setReviewHistory(rv.history);
+        if (rv?.learnings) setLearnings(rv.learnings);
       } catch { /* 尚无复核 */ }
     } catch { message.error('读取任务详情失败'); }
   };
@@ -198,6 +207,7 @@ export default function DrawingPipeline() {
       const r = await request<any>(`/drawing/jobs/${detail.id}/review`, { method: 'POST', timeout: 180000 });
       if (r?.review) {
         setReview(r.review);
+        if (r.learnings) setLearnings(r.learnings);
         message.success(`AI 复核完成：${r.review.stats?.total ?? 0} 条疑点`);
         try {
           const rv = await request<any>(`/drawing/jobs/${detail.id}/review`);
@@ -217,6 +227,7 @@ export default function DrawingPipeline() {
       });
       if (r?.review) {
         setReview(r.review);
+        if (r.learnings) setLearnings(r.learnings);
         setFeedbackText('');
         message.success('AI 已结合你的反馈重新复核');
         try {
@@ -461,6 +472,9 @@ export default function DrawingPipeline() {
                     <Typography.Paragraph type="secondary" style={{ fontSize: 12.5, marginBottom: 0 }}>
                       规则引擎负责确定性提取（可追溯坐标），AI 只做二次确认：扫描最终输出的<span style={{ color: '#dc2626' }}>缺失（?）、乱码、推定值、跨表不一致</span>，
                       逐条给出证据与建议；AI 不直接改数，所有疑点以「建议需人工确认」呈现。
+                      {learnings.length > 0 && (
+                        <span style={{ color: '#6366f1' }}>自学习库已积累 {learnings.length} 条经验，会在复核时自动复用。</span>
+                      )}
                     </Typography.Paragraph>
                   )}
                   {review && (
@@ -479,6 +493,12 @@ export default function DrawingPipeline() {
                             <div style={{ fontSize: 12.5 }}>
                               <div><b>证据：</b><span style={{ color: '#6b6892' }}>{f.evidence || '—'}</span></div>
                               <div style={{ marginTop: 4 }}><b>建议：</b>{f.suggestion || '—'}</div>
+                              {f.learning_ids?.length ? (
+                                <div style={{ marginTop: 4 }}>
+                                  <b>引用经验：</b>{f.learning_ids.map(l => <Tag key={l} color="geekblue" style={{ marginInlineEnd: 4 }}>{l}</Tag>)}
+                                  <span style={{ color: '#6b6892', fontSize: 12 }}>（来自自学习库的人工反馈结论）</span>
+                                </div>
+                              ) : null}
                             </div>
                           ),
                         }}
@@ -543,9 +563,50 @@ export default function DrawingPipeline() {
                                           ))}
                                         </ul>
                                       )}
+                                      {h.kind === 'reverify' && (h.learned_added || h.learned_applied) ? (
+                                        <div style={{ marginTop: 2, color: '#6366f1' }}>
+                                          自学习：沉淀 {h.learned_added ?? 0} 条新经验{h.learned_dup ? `（${h.learned_dup} 条重复忽略）` : ''}，本轮引用 {h.learned_applied ?? 0} 条
+                                        </div>
+                                      ) : null}
+                                      {h.kind === 'review' && h.learned_applied ? (
+                                        <div style={{ marginTop: 2, color: '#6366f1' }}>自学习：本轮引用 {h.learned_applied} 条历史经验</div>
+                                      ) : null}
                                     </div>
                                   ),
                                 }))} />
+                            ),
+                          }]} />
+                      )}
+                      {/* 自学习库 */}
+                      {learnings.length > 0 && (
+                        <Collapse size="small" style={{ marginTop: 6 }}
+                          items={[{
+                            key: 'l',
+                            label: (
+                              <Space size={6}>
+                                <BulbOutlined style={{ color: '#f59e0b' }} />
+                                <span>自学习库（{learnings.length} 条经验，复核时自动复用）</span>
+                              </Space>
+                            ),
+                            children: (
+                              <div>
+                                <Typography.Paragraph type="secondary" style={{ fontSize: 12, marginBottom: 8 }}>
+                                  来自人工反馈的可复用事实结论：AI 复核时自动注入相关经验并引用编号；同类问题不会再犯第二次，精度随反馈持续提升。
+                                </Typography.Paragraph>
+                                {learnings.map(l => (
+                                  <div key={l.id} style={{ fontSize: 12.5, padding: '4px 0', borderBottom: '1px dashed #e8e6f0' }}>
+                                    <Space size={6} wrap>
+                                      <Tag color="geekblue" style={{ margin: 0 }}>{l.id}</Tag>
+                                      <Tag style={{ margin: 0 }}>{l.kind}</Tag>
+                                      <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                                        来源 {l.source_job} · {l.created_by || '—'} · {new Date(l.at).toLocaleDateString('zh-CN')}
+                                        {l.applied > 0 && ` · 已被引用 ${l.applied} 次`}
+                                      </Typography.Text>
+                                    </Space>
+                                    <div style={{ marginTop: 2 }}>{l.content}</div>
+                                  </div>
+                                ))}
+                              </div>
                             ),
                           }]} />
                       )}

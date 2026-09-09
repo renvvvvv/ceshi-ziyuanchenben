@@ -1,23 +1,29 @@
 /**
- * 图纸路由 · AI 复核（二次确认）+ 人工反馈闭环
+ * 图纸路由 · AI 复核（二次确认）+ 人工反馈闭环 + 自学习库
  *
  * 设计原则：规则提取是唯一数据源（确定性、可追溯到坐标文本）；AI 只做「校准审核」——
  * 对最终输出的缺失/乱码/不一致/推定值出复核报告，永远不直接改数；人工指出错误后
  * AI 结合反馈定向重核并更新疑点状态。所有复核产物随任务目录落地，纳入每周备份。
+ *
+ * 自学习：人工反馈中的可复用事实结论（映射确认/容量确认/版式说明）由 AI 提炼入库
+ * （data/drawing-learnings.json，与学习纠错库同模式：内存+落盘+引用计数），后续任何
+ * 任务的复核/重核自动注入相关经验，AI 引用后在 finding.learning_ids 里记账——
+ * 精度随人工反馈积累持续提升，同样的错不犯第二次。
  *
  * 文件协议：
  *   out/review.json         当前复核状态（model/findings[]/stats/updated_at）
  *   out/review-history.json 追加式记录：AI 复核 / 人工反馈 / AI 重核回应
  *
  * 接口：
- *   GET  /api/drawing/jobs/:id/review           读复核状态 + 历史
+ *   GET  /api/drawing/jobs/:id/review           读复核状态 + 历史 + 自学习库
  *   POST /api/drawing/jobs/:id/review           发起 AI 复核（预扫描 + GLM）
- *   POST /api/drawing/jobs/:id/review/feedback  人工反馈 → AI 重新复核
+ *   POST /api/drawing/jobs/:id/review/feedback  人工反馈 → AI 重新复核（并沉淀经验）
  */
 import { Router, Request, Response, NextFunction } from 'express';
-import { readFileSync, writeFileSync, existsSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import db from '../database.js';
 import { requireAuth } from './auth.js';
 
 const router = Router();
@@ -43,6 +49,7 @@ interface Finding {
   suggestion: string;
   confidence: string;      // 高 | 中 | 低
   status: string;          // 待复核 | AI已复核 | 人工已反馈 | 已解决 | 无需处理
+  learning_ids?: string[]; // 本条引用了哪些历史经验（自学习记账）
 }
 
 interface ReviewState {
@@ -68,6 +75,106 @@ function saveReview(id: string, review: ReviewState, history: any[]) {
   const p = reviewPath(id);
   writeFileSync(p.cur, JSON.stringify(review, null, 2));
   writeFileSync(p.hist, JSON.stringify(history, null, 2));
+}
+
+// ============== 自学习库（人工反馈沉淀 → 后续复核自动复用） ==============
+// 与 learnedCorrections 同模式：data/ 目录 JSON 持久化（容器挂载，随每周备份）
+
+interface Learning {
+  id: string;              // L1, L2…
+  kind: string;            // 映射确认 | 容量确认 | 版式说明 | 其他
+  content: string;         // 可复用的事实结论
+  buildings: string[];     // 关联楼栋/项目标识（从任务标题提取，用于匹配后续任务）
+  source_job: string;
+  created_by: string;
+  at: string;
+  applied: number;         // 被后续复核引用次数
+}
+
+const DATA_DIR = join(__dirname, '..', '..', '..', 'data');
+const LEARN_FILE = join(DATA_DIR, 'drawing-learnings.json');
+
+function loadLearnings(): Learning[] {
+  try { return JSON.parse(readFileSync(LEARN_FILE, 'utf8')); } catch { return []; }
+}
+
+function saveLearnings(list: Learning[]) {
+  try {
+    if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true });
+    writeFileSync(LEARN_FILE, JSON.stringify(list, null, 2));
+  } catch (e: any) { console.warn('[drawingReview] 学习库写入失败:', e?.message); }
+}
+
+/** 从任务标题提取楼栋/项目标识（A3、7#、D7、乌兰三期…），供经验与任务匹配 */
+function buildingKeys(title: string): string[] {
+  const t = String(title || '');
+  const keys = new Set<string>([t.trim()].filter(Boolean));
+  for (const m of t.matchAll(/[A-Za-z]\d{1,2}(?=#|楼|期|[-_ ]|$)|\d{1,2}#|D\d{1,2}|乌兰\S{0,4}/g)) {
+    keys.add(m[0].toUpperCase());
+  }
+  return [...keys];
+}
+
+/** 与某任务相关的经验（双向匹配：经验标识∩任务标识，或任务标识出现在经验内容里） */
+function matchLearnings(list: Learning[], title: string): Learning[] {
+  const keys = buildingKeys(title).map(k => k.toUpperCase());
+  const hit = (l: Learning) => {
+    if (!l.buildings?.length) return true; // 未绑定标识 = 通用经验
+    if (l.buildings.some(b => !b || keys.includes(b.toUpperCase()))) return true;
+    // 任务标识（如 A3、7#）作为子串出现在经验内容里 → 相关
+    const content = l.content.toUpperCase();
+    return keys.some(k => k.length >= 2 && content.includes(k));
+  };
+  return list.filter(hit);
+}
+
+/** 归一化指纹：去空白与标点，用于内容去重 */
+const fp = (s: string) => String(s || '').replace(/[\s，。；、,.;:：()（）"'\-—]/g, '').slice(0, 80);
+
+/** 沉淀新经验（去重），返回 [新库, 新增条数, 重复条数] */
+function addLearnings(
+  items: any[], jobId: string, title: string, by: string,
+): [Learning[], number, number] {
+  const list = loadLearnings();
+  const seen = new Set(list.map(l => fp(l.content)));
+  let added = 0, dup = 0;
+  for (const it of items || []) {
+    const content = String(it?.content || '').trim();
+    if (!content) continue;
+    if (seen.has(fp(content))) { dup++; continue; }
+    seen.add(fp(content));
+    list.push({
+      id: `L${list.length + 1}`, kind: String(it.kind || '其他'),
+      content: content.slice(0, 500),
+      // 楼栋标识：任务标题 ∪ 经验内容（内容里出现 A3/7# 等也能被后续同楼栋任务命中）
+      buildings: [...new Set([...buildingKeys(title), ...buildingKeys(content)])],
+      source_job: jobId, created_by: by, at: new Date().toISOString(), applied: 0,
+    });
+    added++;
+  }
+  if (added) saveLearnings(list);
+  return [list, added, dup];
+}
+
+/** AI 引用记账：findings.learning_ids → applied++（仅统计真实存在的 id） */
+function countLearningApplied(findings: Finding[], list: Learning[]): number {
+  const ids = new Set(findings.flatMap(f => f.learning_ids || []));
+  if (!ids.size) return 0;
+  let n = 0;
+  for (const l of list) {
+    if (ids.has(l.id)) { l.applied++; n++; }
+  }
+  if (n) saveLearnings(list);
+  return n;
+}
+
+/** 拼注入 prompt 的经验块（带编号，AI 引用时回填 learning_ids） */
+function learningsBlock(all: Learning[], title: string): string {
+  const matched = matchLearnings(all, title);
+  if (!matched.length) return '';
+  const items = matched.slice(0, 30).map(l =>
+    `${l.id} [${l.kind}] ${l.content.slice(0, 160)}（来源任务 ${l.source_job}，已被引用 ${l.applied} 次）`);
+  return `【历史学习知识（人工反馈沉淀，可直接作为依据引用）】\n` + items.join('\n');
 }
 
 // ============== 确定性预扫描（缺失/乱码/推定） ==============
@@ -129,7 +236,7 @@ async function callGLMJSON(system: string, user: string): Promise<{ json: any; r
   const apiKey = process.env.ZHIPU_API_KEY;
   if (!apiKey) throw new Error('ZHIPU_API_KEY 未设置');
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 165000);
+  const timer = setTimeout(() => controller.abort(), 175000); // nginx 反代 180s，留 5s 余量
   try {
     const resp = await fetch('https://open.bigmodel.cn/api/paas/v4/chat/completions', {
       method: 'POST',
@@ -155,35 +262,82 @@ async function callGLMJSON(system: string, user: string): Promise<{ json: any; r
     const text = raw.replace(/```(?:json)?/g, '').trim();
     const lo = text.indexOf('{'); const hi = text.lastIndexOf('}');
     if (lo < 0 || hi <= lo) throw new Error('AI 未返回 JSON');
-    return { json: JSON.parse(text.slice(lo, hi + 1)), raw };
+    const body = text.slice(lo, hi + 1);
+    try {
+      return { json: JSON.parse(body), raw };
+    } catch {
+      // 输出超长被截断时兜底打捞：逐元素括号扫描重建 findings 数组（丢掉残缺的末尾元素）
+      const salvaged = salvageFindingsJSON(body);
+      if (salvaged) {
+        console.warn(`[drawingReview] JSON 截断已打捞：${salvaged.findings?.length ?? 0} 条 findings`);
+        return { json: salvaged, raw };
+      }
+      throw new Error('AI 返回 JSON 解析失败（截断且无法打捞）');
+    }
   } finally { clearTimeout(timer); }
 }
 
+/** 截断 JSON 打捞：从残缺文本中提取完整的 findings 元素与 summary */
+function salvageFindingsJSON(text: string): any | null {
+  const arrStart = text.indexOf('"findings"');
+  if (arrStart < 0) return null;
+  const open = text.indexOf('[', arrStart);
+  if (open < 0) return null;
+  const items: any[] = [];
+  let depth = 0, str = false, esc = false, objStart = -1;
+  for (let i = open + 1; i < text.length; i++) {
+    const ch = text[i];
+    if (str) { if (esc) esc = false; else if (ch === '\\') esc = true; else if (ch === '"') str = false; continue; }
+    if (ch === '"') { str = true; continue; }
+    if (ch === '{') { if (depth === 0) objStart = i; depth++; }
+    else if (ch === '}') {
+      depth--;
+      if (depth === 0 && objStart >= 0) {
+        try { items.push(JSON.parse(text.slice(objStart, i + 1))); } catch { /* 残缺元素丢弃 */ }
+        objStart = -1;
+      }
+    } else if (ch === ']' && depth === 0) break;
+  }
+  if (!items.length) return null;
+  const out: any = { findings: items };
+  const sm = text.match(/"summary"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+  if (sm) { try { out.summary = JSON.parse('"' + sm[1] + '"'); } catch { /* 忽略 */ } }
+  return out;
+}
+
 const SYS_REVIEW = `你是数据中心配电图纸路由表的复核专家（测试部 AI 校准审核角色）。
-规则引擎已从 DWG 图纸的坐标文本确定性提取数据并生成路由表；你拿到【预扫描疑点】和关键表格内容。
+规则引擎已从 DWG 图纸的坐标文本确定性提取数据并生成路由表；你拿到【预扫描疑点】和关键表格内容；
+若下方提供【历史学习知识】，那是此前测试人员人工反馈沉淀下来的事实结论，可直接作为复核依据引用。
 你的职责是校准审核，不是重新提取：
 1. 逐条评估预扫描疑点：判断问题定性是否准确、严重级别是否合适、给出可执行建议（如何补录/如何核对）；
+   能用历史知识直接解答的疑点，suggestion 写明结论并引用经验编号；
 2. 结合表格内容补充预扫描漏掉的跨表不一致（如配电室统计与中压/低压表数量对不上、A/B 路不配对）；
 3. 对推断性建议（如按楼层同构推测缺失映射）必须在 suggestion 里写明推断依据，confidence 只能给"低"或"中"；
+   但若历史知识中已有人工确认的同款结论，则可直接采用且 confidence 给"高"；
 4. 铁律：所有结论必须引用给定材料原文，不得编造单元格内容；你不能修改数据，只输出复核意见；禁止臆造具体数值当作事实。
-输出严格 JSON（无 markdown）：{"findings":[{"sid":"预扫描id，AI补充则null","type":"缺失|乱码|不一致|推定|其他","severity":"高|中|低","sheet":"表名","row":"行","problem":"问题","evidence":"引用的原文依据","suggestion":"建议","confidence":"高|中|低"}],"summary":"整体结论2-3句"}
-findings 最多 40 条，预扫描已有的每条都要出现在结果里（可修订字段），再补充新的。`;
+输出严格 JSON（无 markdown）：{"findings":[{"sid":"预扫描id，AI补充则null","type":"缺失|乱码|不一致|推定|其他","severity":"高|中|低","sheet":"表名","row":"行","problem":"问题(≤60字)","evidence":"引用的原文依据(≤60字)","suggestion":"建议(≤120字)","confidence":"高|中|低","learning_ids":["引用的历史经验编号，如[\"L3\"]，未引用则省略"]}],"summary":"整体结论2-3句"}
+铁律：预扫描的每一条都必须在输出中逐条对应（sid 填该条的 id，禁止合并、禁止遗漏），AI 补充的新发现才用 sid=null；字段务必简短，防止输出截断。`;
 
 const SYS_REVERIFY = `你是数据中心配电图纸路由表的复核专家。上一轮 AI 复核产出了疑点清单，现在测试人员给出了人工反馈（指出 AI 哪里说错了/补充了事实）。
 你的职责是结合人工反馈重新复核：
 1. 对每条反馈逐条回应：承认并修正错误、或说明理由坚持原判断（引用材料原文）；
 2. 输出【完整更新后的 findings 全量清单】（不是增量）：人工已确认修正的条目 status 设"已解决"；被反馈纠正的条目修正 problem/suggestion 并 status 设"人工已反馈"；其余维持；
-3. 铁律同前：不得编造，推断必须标注，你不能修改数据本身。
-输出严格 JSON（无 markdown）：{"responses":[{"to":"对应反馈原文摘录","conclusion":"回应与处理"}],"findings":[同上结构，每条多一个"status"字段],"summary":"2-3句"}`;
+3. 同时从人工反馈中提炼【可复用的经验结论】进 learnings：只收事实性、以后同类任务还用得上的结论
+   （映射确认：某房间变压器↔中压柜对应关系；容量确认：某设备实际容量；版式说明：某图版式特征导致规则识别不到），
+   排除一次性讨论、情绪表达、与图纸无关的内容；每条 content 要自包含：开头写明楼栋/项目（如「A3楼：…」），
+   写清房间/设备/结论，不写"如上所述"；
+4. 铁律同前：不得编造，推断必须标注，你不能修改数据本身。
+输出严格 JSON（无 markdown）：{"responses":[{"to":"对应反馈原文摘录(≤30字)","conclusion":"回应与处理(≤100字)"}],"findings":[同复核结构，每条多一个"status"字段，可含"learning_ids"，最多25条],"learnings":[{"kind":"映射确认|容量确认|版式说明|其他","content":"自包含的事实结论(≤150字)"}],"summary":"2-3句"}
+responses 每条反馈一个；findings 是全量清单，字段务必简短，防止输出截断。`;
 
 // ============== 路由 ==============
 
-/** GET 复核状态 + 历史 */
+/** GET 复核状态 + 历史 + 自学习库 */
 router.get('/jobs/:id/review', requireAuth, asyncH(async (req, res) => {
   const { id } = req.params;
   if (!validId(id)) { res.status(400).json({ success: false }); return; }
   const { review, history } = loadReview(id);
-  res.json({ success: true, review, history });
+  res.json({ success: true, review, history, learnings: loadLearnings() });
 }));
 
 /** 摘取小表全文 + 大表规模，控制送入 GLM 的上下文体积 */
@@ -222,35 +376,60 @@ router.post('/jobs/:id/review', requireAuth, asyncH(async (req, res) => {
   if (!existsSync(join(BASE, id, 'out', 'sheets', 'index.json'))) {
     res.status(400).json({ success: false, message: '任务尚未生成表格，无法复核' }); return;
   }
+  const jobRows = await db.allAsync(`SELECT title FROM drawing_jobs WHERE id=$1`, id) as any[];
+  const jobTitle: string = jobRows[0]?.title || '';
   const scan = prescan(id);
-  const context = buildContext(id, scan);
+  const learnAll = loadLearnings();
+  const lblock = learningsBlock(learnAll, jobTitle);
+  const context = (lblock ? lblock + '\n\n' : '') + buildContext(id, scan);
   const t0 = Date.now();
   const { json } = await callGLMJSON(SYS_REVIEW, context);
   // 合并：预扫描为事实底座，AI 输出按 sid 修订，AI 新增条目追加
   const bySid = new Map<string, any>(scan.map(f => [f.id, { ...f }]));
+  const updated = new Set<string>();
+  const applyTo = (cur: any, af: any, lids?: string[]) => {
+    cur.type = af.type || cur.type;
+    cur.severity = af.severity || cur.severity;
+    cur.problem = af.problem || cur.problem;
+    if (af.evidence) cur.evidence = af.evidence;
+    if (af.suggestion) cur.suggestion = af.suggestion;
+    cur.confidence = af.confidence || cur.confidence;
+    if (lids) cur.learning_ids = lids;
+    cur.status = 'AI已复核';
+  };
   let aiIdx = 0;
   for (const af of (json.findings || []) as any[]) {
     if (!af || !af.problem) continue;
-    if (af.sid && bySid.has(String(af.sid))) {
-      const cur = bySid.get(String(af.sid));
-      cur.type = af.type || cur.type;
-      cur.severity = af.severity || cur.severity;
-      cur.problem = af.problem || cur.problem;
-      if (af.evidence) cur.evidence = af.evidence;
-      if (af.suggestion) cur.suggestion = af.suggestion;
-      cur.confidence = af.confidence || cur.confidence;
-      cur.status = 'AI已复核';
-    } else if (!af.sid) {
+    const lids: string[] | undefined = Array.isArray(af.learning_ids) ? af.learning_ids.map(String) : undefined;
+    const sid = String(af.sid || af.id || '');
+    if (sid && bySid.has(sid) && !updated.has(sid)) {
+      applyTo(bySid.get(sid), af, lids);
+      updated.add(sid);
+      continue;
+    }
+    // sid 缺失/对不上时按 表名+行 兜底匹配（防 AI 改写 id 造成映射落空）
+    const rowKey = String(af.row || '');
+    const byPos = [...bySid.keys()].find(k => !updated.has(k)
+      && bySid.get(k).sheet === String(af.sheet || '') && String(bySid.get(k).row) === rowKey);
+    if (byPos) {
+      applyTo(bySid.get(byPos), af, lids);
+      updated.add(byPos);
+      continue;
+    }
+    if (!sid || !bySid.has(sid)) {
       bySid.set(`A${++aiIdx}`, {
         id: `A${aiIdx}`, source: 'ai', type: af.type || '其他', severity: af.severity || '中',
         sheet: af.sheet || '', row: af.row || '', problem: af.problem,
         evidence: af.evidence || '', suggestion: af.suggestion || '',
         confidence: af.confidence || '中', status: 'AI已复核',
+        ...(lids ? { learning_ids: lids } : {}),
       });
     }
   }
   // 预扫描未被 AI 覆盖的条目保留原样（不丢事实）
   const findings = [...bySid.values()];
+  // 自学习记账：本轮 AI 引用了哪些历史经验
+  const appliedN = countLearningApplied(findings as Finding[], learnAll);
   const stats: Record<string, number> = {
     total: findings.length,
     high: findings.filter(f => f.severity === '高').length,
@@ -263,9 +442,10 @@ router.post('/jobs/:id/review', requireAuth, asyncH(async (req, res) => {
   };
   const { history } = loadReview(id);
   history.push({ role: 'ai', kind: 'review', at: review.updated_at, dur_sec: Math.round((Date.now() - t0) / 1000),
-    by: (req as any).user?.username || '', stats, summary: review.summary });
+    by: (req as any).user?.username || '', stats, summary: review.summary,
+    learned_applied: appliedN, learnings_known: matchLearnings(learnAll, jobTitle).length });
   saveReview(id, review, history);
-  res.json({ success: true, review });
+  res.json({ success: true, review, learnings: loadLearnings() });
 }));
 
 /** POST 人工反馈 → AI 重新复核 */
@@ -279,12 +459,19 @@ router.post('/jobs/:id/review/feedback', requireAuth, asyncH(async (req, res) =>
   const username = (req as any).user?.username || (req as any).user?.name || '';
   const at = new Date().toISOString();
   history.push({ role: 'human', kind: 'feedback', at, by: username, message: msg });
+  const jobRows = await db.allAsync(`SELECT title FROM drawing_jobs WHERE id=$1`, id) as any[];
+  const jobTitle: string = jobRows[0]?.title || '';
+  const learnAll = loadLearnings();
+  const lblock = learningsBlock(learnAll, jobTitle);
   const userPayload =
+    (lblock ? lblock + '\n\n' : '') +
     `【上一轮复核 findings】\n${JSON.stringify(review.findings, null, 1)}\n\n` +
     `【人工反馈】（反馈人：${username}）\n${msg}\n\n` +
     `【原始表格上下文】\n${buildContext(id, [])}`;
   const t0 = Date.now();
   const { json } = await callGLMJSON(SYS_REVERIFY, userPayload);
+  // 沉淀反馈中的可复用经验（去重）
+  const [, addedN, dupN] = addLearnings(json.learnings, id, jobTitle, username);
   // 以 AI 输出的全量 findings 为新状态（保留 id 兼容：AI 沿用原 id）
   const findings: Finding[] = ((json.findings || []) as any[]).filter(f => f && f.problem).map((f, i) => ({
     id: String(f.id || f.sid || `F${i + 1}`),
@@ -293,7 +480,10 @@ router.post('/jobs/:id/review/feedback', requireAuth, asyncH(async (req, res) =>
     sheet: f.sheet || '', row: f.row || '',
     problem: f.problem, evidence: f.evidence || '', suggestion: f.suggestion || '',
     confidence: f.confidence || '中', status: f.status || 'AI已复核',
+    ...(Array.isArray(f.learning_ids) ? { learning_ids: f.learning_ids.map(String) } : {}),
   }));
+  // 自学习记账：本轮引用了哪些历史经验
+  const appliedN = countLearningApplied(findings, loadLearnings());
   const stats: Record<string, number> = {
     total: findings.length,
     high: findings.filter(f => f.severity === '高').length,
@@ -305,9 +495,10 @@ router.post('/jobs/:id/review/feedback', requireAuth, asyncH(async (req, res) =>
     summary: String(json.summary || review.summary),
   };
   history.push({ role: 'ai', kind: 'reverify', at: updated.updated_at, dur_sec: Math.round((Date.now() - t0) / 1000),
-    responses: json.responses || [], summary: updated.summary });
+    responses: json.responses || [], summary: updated.summary,
+    learned_added: addedN, learned_dup: dupN, learned_applied: appliedN });
   saveReview(id, updated, history);
-  res.json({ success: true, review: updated, responses: json.responses || [] });
+  res.json({ success: true, review: updated, responses: json.responses || [], learnings: loadLearnings() });
 }));
 
 export default router;
