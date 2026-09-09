@@ -230,10 +230,18 @@ export default function DrawingPipeline() {
   const sheetTable = () => {
     if (!sheetData) return <Empty description={sheetLoading ? '加载中…' : '无数据'} />;
     const rows = sheetData.rows || [];
-    // 首行作表头
+    // 智能表头：跳过大标题行（非空格子占比低且文本长），取首个「多数格子非空」的行作列名行
+    let hi = 0;
+    for (let i = 0; i < Math.min(3, rows.length); i++) {
+      const cols = rows[i].length || 1;
+      const nonEmpty = rows[i].filter(c => c && c.trim()).length;
+      if (nonEmpty >= Math.max(2, Math.floor(cols * 0.5))) { hi = i; break; }
+      hi = i + 1;
+    }
+    if (hi >= rows.length) hi = 0;
     // AntD v5：列必须给 dataIndex 才能取到单元格值（只给 key 会渲染空格子）
-    const headers = (rows[0] || []).map((h, i) => ({ title: h || `列${i + 1}`, dataIndex: String(i), key: String(i), ellipsis: true, width: 140 }));
-    const dataRows = rows.slice(1).map((r, ri) => {
+    const headers = (rows[hi] || []).map((h, i) => ({ title: h || `列${i + 1}`, dataIndex: String(i), key: String(i), ellipsis: true, width: 140 }));
+    const dataRows = rows.slice(hi + 1).map((r, ri) => {
       const obj: any = { __key: ri };
       r.forEach((c, ci) => { obj[String(ci)] = c; });
       return obj;
