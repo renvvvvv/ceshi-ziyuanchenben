@@ -1631,12 +1631,11 @@ body {
               width .85s cubic-bezier(.5,.05,.2,1), height .85s cubic-bezier(.5,.05,.2,1),
               transform .85s cubic-bezier(.5,.05,.2,1);
 }
-/* 退位对话卡：右侧毛玻璃卡，多轮追问在同一空间连续进行 */
+/* 退位对话卡：整屏毛玻璃卡（左上角小球浮于卡上，同原版视觉），多轮追问同屏连续 */
 .retreat-card {
   position: absolute;
-  top: 8px; right: 16px; bottom: 8px;
-  width: min(860px, 68%);
-  z-index: 4;
+  top: 8px; left: 16px; right: 16px; bottom: 8px;
+  z-index: 3; /* 低于 orb-layer(4)：角落小球压在卡上 */
   display: flex; flex-direction: column;
   background: rgba(255,255,255,.78);
   backdrop-filter: blur(18px) saturate(1.35);
@@ -1652,5 +1651,5 @@ body {
 @media (max-width: 767px) {
   .orb-hero { top: 34%; height: min(300px, 42vh); }
   .orb-corner { left: 10px; top: 8px; width: 44px; height: 44px; }
-  .retreat-card { left: 8px; right: 8px; width: auto; top: 56px; bottom: 12px; }
+  .retreat-card { left: 8px; right: 8px; width: auto; top: 8px; bottom: 8px; }
 }

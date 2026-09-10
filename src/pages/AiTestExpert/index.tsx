@@ -291,7 +291,9 @@ function ChatArea() {
           <div className="retreat-card">
             <div style={{
               display: 'flex', alignItems: 'center', gap: 10,
-              padding: '13px 18px 11px', borderBottom: '1px solid rgba(233,231,244,0.9)',
+              /* 左侧留出左上角小球位置（桌面 88px / 移动 66px），同原版头部条 */
+              padding: isMobile ? '10px 14px 10px 66px' : '13px 18px 11px 88px',
+              borderBottom: '1px solid rgba(233,231,244,0.9)',
             }}>
               <div style={{
                 width: 30, height: 30, borderRadius: 9, flex: 'none',
@@ -310,7 +312,7 @@ function ChatArea() {
                 style={{ borderRadius: 8, borderColor: '#d9d5f0', color: '#6366f1', flex: 'none' }}>新对话</Button>
             </div>
             <div ref={listRef} className="retreat-list">
-              <div style={{ maxWidth: '100%', padding: isMobile ? '10px 6px' : '14px 10px' }}>
+              <div style={{ maxWidth: 1150, margin: '0 auto', width: '100%', padding: isMobile ? '10px 6px' : '14px 10px' }}>
                 {messages.map((msg, i) => <MessageBubble key={i} msg={msg} />)}
               </div>
             </div>
