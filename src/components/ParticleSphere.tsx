@@ -49,6 +49,10 @@ export interface ParticleSphereProps {
   /** 点击知识标签回调（连线即入口） */
   onLabelClick?: (item: KBSphereLabel) => void;
   dots?: number;
+  /** 画布铺满页面时球体半径上限（像素）；球体几何与原英雄位一致，裂变可飞满全屏 */
+  maxRadius?: number;
+  /** 球心垂直锚点（0~1，画布高度占比），默认 0.42 */
+  anchorY?: number;
   interactive?: boolean;
   className?: string;
   style?: React.CSSProperties;
@@ -219,6 +223,10 @@ class SphereEngine {
   kbLine: boolean;
 
   private w = 300; private h = 300;
+  /** 画布铺满页面时的球体几何钉位：半径上限 + 垂直锚点（裂变可飞满全屏而不被画布裁切） */
+  maxR = Infinity;
+  anchorY = 0.42;
+  cx = 0; cy = 0; R = 0;
   private rotY = Math.random() * Math.PI * 2;
   private rotX = 0.3;
   private t = 0;
@@ -257,11 +265,14 @@ class SphereEngine {
   constructor(canvas: HTMLCanvasElement, opts: {
     mode: 'light' | 'dark'; kbLine: boolean; dots: number; interactive: boolean; intro: boolean;
     onIntroDone?: () => void;
+    maxR?: number; anchorY?: number;
   }) {
     this.cv = canvas;
     this.ctx = canvas.getContext('2d')!;
     this.mode = opts.mode;
     this.kbLine = opts.kbLine;
+    this.maxR = opts.maxR ?? Infinity;
+    this.anchorY = opts.anchorY ?? 0.42;
     this.interactive = opts.interactive;
     this.reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     this.introEnabled = opts.intro && !this.reduceMotion;
@@ -406,9 +417,11 @@ class SphereEngine {
 
   private project() {
     const { w, h } = this;
-    const R = this.vb ? this.vb.r : Math.min(w, h) * (this.kbLine ? 0.33 : 0.42);
+    const R = this.vb ? this.vb.r
+      : Math.min(Math.min(w, h) * (this.kbLine ? 0.33 : 0.42), this.mini ? Infinity : this.maxR);
     const cx = this.vb ? this.vb.cx : w / 2;
-    const cy = this.vb ? this.vb.cy : h / 2;
+    const cy = this.vb ? this.vb.cy : (this.kbLine && !this.mini ? h * this.anchorY : h / 2);
+    this.cx = cx; this.cy = cy; this.R = R;
     const tgtE = this.thinking ? 1 : 0;
     const rate = this.energyKill ? 0.12 : 0.022;
     this.energy += (tgtE - this.energy) * rate;
@@ -496,12 +509,14 @@ class SphereEngine {
       if (!this.kbLine) { this.conns = []; }
       return null;
     }
-    const { w, h } = this;
+    const { w } = this;
+    const cX = this.cx || w / 2, cY = this.cy, RR = this.R || Math.min(this.h, w) * 0.33;
+    const offX = Math.min(RR * 2.35, w * 0.47);
     const slots = [
-      { x: w * 0.015, y: h * 0.24, align: 'left' as const },
-      { x: w * 0.985, y: h * 0.18, align: 'right' as const },
-      { x: w * 0.015, y: h * 0.74, align: 'left' as const },
-      { x: w * 0.985, y: h * 0.80, align: 'right' as const },
+      { x: cX - offX, y: cY - RR * 0.95, align: 'left' as const },
+      { x: cX + offX, y: cY - RR * 1.30, align: 'right' as const },
+      { x: cX - offX, y: cY + RR * 1.15, align: 'left' as const },
+      { x: cX + offX, y: cY + RR * 1.50, align: 'right' as const },
     ];
     this.nextSpawn -= dt;
     const introDone = !this.introEnabled || this.introT > 1.4;
@@ -869,7 +884,8 @@ class SphereEngine {
 
 const ParticleSphere = forwardRef<ParticleSphereHandle, ParticleSphereProps>(function ParticleSphere({
   width = 300, height, mode = 'light', thinking = false, streaming = false, burstSignal = 0,
-  intro = true, onIntroDone, viewBox, kbLine = false, kbItems = [], onLabelClick, dots, interactive = true, className, style,
+  intro = true, onIntroDone, viewBox, kbLine = false, kbItems = [], onLabelClick, dots,
+  maxRadius, anchorY, interactive = true, className, style,
 }, ref) {
   const isMobile = useIsMobile();
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -878,6 +894,10 @@ const ParticleSphere = forwardRef<ParticleSphereHandle, ParticleSphereProps>(fun
 
   const vbRef = useRef(viewBox);
   vbRef.current = viewBox;
+  const maxRRef = useRef(maxRadius);
+  maxRRef.current = maxRadius;
+  const anchorYRef = useRef(anchorY);
+  anchorYRef.current = anchorY;
 
   // useLayoutEffect：无入场的重建在绘制前同步画好首帧（零空白帧）；带入场路径只调度 rAF，布局阶段零开销
   useLayoutEffect(() => {
@@ -888,6 +908,7 @@ const ParticleSphere = forwardRef<ParticleSphereHandle, ParticleSphereProps>(fun
     const create = () => {
       engine = new SphereEngine(cv, {
         mode, kbLine, dots: baseDots, interactive, intro, onIntroDone,
+        maxR: maxRRef.current, anchorY: anchorYRef.current,
       });
       engine.kbItems = kbItems;
       engineRef.current = engine;
@@ -915,6 +936,13 @@ const ParticleSphere = forwardRef<ParticleSphereHandle, ParticleSphereProps>(fun
   useEffect(() => {
     engineRef.current?.setViewBox(viewBox ?? null);
   }, [viewBox]);
+
+  useEffect(() => {
+    const e = engineRef.current;
+    if (!e) return;
+    e.maxR = maxRadius ?? Infinity;
+    e.anchorY = anchorY ?? 0.42;
+  }, [maxRadius, anchorY]);
 
   useEffect(() => {
     const e = engineRef.current;

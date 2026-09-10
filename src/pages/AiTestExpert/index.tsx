@@ -105,6 +105,9 @@ function ChatArea() {
   // 全屏入场：聚拢期间画布经 orb-intro 铺满全屏，球心/半径用 viewBox 钉在最终英雄位
   const [introPlaying, setIntroPlaying] = useState(true);
   const [introVB, setIntroVB] = useState<{ cx: number; cy: number; r: number } | null>(null);
+  // 英雄位画布铺满页面后的球体几何钉位（半径上限；裂变不再被旧 640x420 画布裁切）
+  const [heroRCap, setHeroRCap] = useState(140);
+  const introPlayingRef = useRef(true);
   const pageRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -218,30 +221,36 @@ function ChatArea() {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAsk(); }
   };
 
-  // 全屏入场收尾：换回英雄位 class（CSS morph），随后解除 viewBox 让球用画布自身几何
+  // 全屏入场收尾：换回英雄位 class（画布铺满页面，球几何由 maxR/anchorY 钉住，视觉无缝）
   const handleIntroDone = useCallback(() => {
+    introPlayingRef.current = false;
     setIntroPlaying(false);
-    setIntroVB(null); // Portal 换回页面内会重建引擎，必须立即清钉位（旧坐标对新画布越界 → 球消失）
+    setIntroVB(null); // Portal 换回页面内会重建引擎，必须立即清钉位（旧视口坐标对新画布越界）
   }, []);
 
-  // 入场期间：orb-intro 画布铺满全屏，viewBox 把球心/半径钉在最终英雄位（按 .orb-hero 几何计算）
+  // 球体几何（挂载 + resize 常驻计算）：入场 vb（视口坐标）与英雄位半径上限共用一套尺寸
   useEffect(() => {
-    if (!introPlaying) return;
-    const raf = requestAnimationFrame(() => {
+    const calc = () => {
       const page = pageRef.current;
       if (!page) return;
       const rect = page.getBoundingClientRect();
       const mob = window.matchMedia('(max-width: 767px)').matches;
       const hw = Math.min(640, rect.width - 24);
       const hh = Math.min(mob ? 300 : 420, window.innerHeight * (mob ? 0.42 : 0.52));
-      setIntroVB({
-        cx: rect.left + rect.width / 2,
-        cy: rect.top + rect.height * (mob ? 0.34 : 0.42),
-        r: Math.min(hw, hh) * 0.33, // 引擎 kbLine 模式半径系数
-      });
-    });
-    return () => cancelAnimationFrame(raf);
-  }, [introPlaying]);
+      const r = Math.min(hw, hh) * 0.33; // 引擎 kbLine 模式半径系数
+      setHeroRCap(r);
+      if (introPlayingRef.current) {
+        setIntroVB({
+          cx: rect.left + rect.width / 2,
+          cy: rect.top + rect.height * (mob ? 0.34 : 0.42),
+          r,
+        });
+      }
+    };
+    const raf = requestAnimationFrame(calc);
+    window.addEventListener('resize', calc);
+    return () => { cancelAnimationFrame(raf); window.removeEventListener('resize', calc); };
+  }, []);
 
   return (
     <div ref={pageRef} className="ai-page" style={{ flex: 1, minHeight: 0, position: 'relative', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
@@ -253,6 +262,8 @@ function ChatArea() {
             <ParticleSphere
               ref={heroRef}
               width="100%" height="100%"
+              maxRadius={heroRCap}
+              anchorY={isMobile ? 0.34 : 0.42}
               kbLine
               kbItems={KB_SPHERE_LABELS}
               thinking={asking}
