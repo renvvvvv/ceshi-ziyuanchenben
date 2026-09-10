@@ -177,7 +177,7 @@ function ChatArea() {
                   firstToken = false;
                   setBurstTick(t => t + 1); // 💥 先在全尺寸裂变（此时流式输出已开始）
                   // 裂变峰值过后再启程：粒子先炸开→弹性重组回完整球→整球缩小飞向左上角，全程连续
-                  setTimeout(() => setChatOpen(true), 620);
+                  setTimeout(() => setChatOpen(true), 760);
                 }
                 fullContent += data.text;
                 setMessages(prev => prev.map((m, i) => i === assistantIdx ? { ...m, content: fullContent } : m));

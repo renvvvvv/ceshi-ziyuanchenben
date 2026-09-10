@@ -227,6 +227,10 @@ class SphereEngine {
   maxR = Infinity;
   anchorY = 0.42;
   cx = 0; cy = 0; R = 0;
+  /** 显示几何逐帧缓动（morph 插帧）：球体飞行/缩放脱离 RO 步进节奏，恒定丝滑 */
+  private dCx = 0; private dCy = 0; private dR = 0;
+  /** mini 渐变：跨过小尺寸阈值时连线淡出/粒子样式平滑过渡，不再硬切 */
+  private miniBlend = 0;
   private rotY = Math.random() * Math.PI * 2;
   private rotX = 0.3;
   private t = 0;
@@ -417,10 +421,21 @@ class SphereEngine {
 
   private project() {
     const { w, h } = this;
-    const R = this.vb ? this.vb.r
+    const Rt = this.vb ? this.vb.r
       : Math.min(Math.min(w, h) * (this.kbLine ? 0.33 : 0.42), this.mini ? Infinity : this.maxR);
-    const cx = this.vb ? this.vb.cx : w / 2;
-    const cy = this.vb ? this.vb.cy : (this.kbLine && !this.mini ? h * this.anchorY : h / 2);
+    const cxT = this.vb ? this.vb.cx : w / 2;
+    const cyT = this.vb ? this.vb.cy : (this.kbLine && !this.mini ? h * this.anchorY : h / 2);
+    // 插帧：morph 期间画布尺寸随 CSS 过渡逐帧变化，球体几何按 rAF 逐帧缓动跟随，
+    // 与量化缓冲重分配解耦，消除步进顿挫；引擎重建等大跳变直接贴齐
+    if (!this.dR || Math.abs(Rt - this.dR) > Rt * 1.6) {
+      this.dCx = cxT; this.dCy = cyT; this.dR = Rt;
+    } else {
+      const k = this.reduceMotion ? 1 : 0.2;
+      this.dCx += (cxT - this.dCx) * k;
+      this.dCy += (cyT - this.dCy) * k;
+      this.dR += (Rt - this.dR) * k;
+    }
+    const R = this.dR, cx = this.dCx, cy = this.dCy;
     this.cx = cx; this.cy = cy; this.R = R;
     const tgtE = this.thinking ? 1 : 0;
     const rate = this.energyKill ? 0.12 : 0.022;
@@ -636,6 +651,7 @@ class SphereEngine {
     const dt = 1 / 60;
     if (this.burstT >= 0) { this.burstT += dt; if (this.burstT > 1.15) this.burstT = -1; }
     for (const rp of this.ripples) rp.t += dt;
+    this.miniBlend += ((this.mini ? 1 : 0) - this.miniBlend) * (this.reduceMotion ? 1 : 0.12);
     if (this.introEnabled) this.introT += dt;
     if (this.introEnabled && !this.introFired && this.introT > 1.65) {
       this.introFired = true;
@@ -706,7 +722,7 @@ class SphereEngine {
     ctx.globalAlpha = 1;
 
     // 陀螺仪轨道环 ×2：缓慢进动、随球俯仰、thinking 加速、裂变联动膨胀；每环 2 颗轨道粒子巡行
-    if (!this.mini && R > 60) {
+    if (this.miniBlend < 0.6 && R > 60) {
       const spin = this.speedCur;
       for (let ri = 0; ri < 2; ri++) {
         const ringR = R * (1.16 + ri * 0.17) * (1 + disp * 0.55);
@@ -738,12 +754,12 @@ class SphereEngine {
     ctx.lineWidth = dark ? 0.4 : 0.5;
     ctx.strokeStyle = dark ? '#8f7fe8' : '#6366f1';
     const mouseActive = this.interactive && this.mouse.x > -999 && !this.mini;
-    if (!this.mini) for (let pI = 0; pI < this.pairs.length; pI += this.qLines) {
+    if (this.miniBlend < 0.985) for (let pI = 0; pI < this.pairs.length; pI += this.qLines) {
       const [i, j] = this.pairs[pI];
       const a = proj[i], b = proj[j];
       const depth = (a.persp + b.persp) / 2;
       if (depth < 0.9) continue;
-      let alpha = (depth - 0.9) * (dark ? 0.30 : 0.16);
+      let alpha = (depth - 0.9) * (dark ? 0.30 : 0.16) * (1 - this.miniBlend);
       if (mouseActive) {
         const mx = (a.sx + b.sx) / 2, my = (a.sy + b.sy) / 2;
         const d = Math.hypot(mx - this.mouse.x, my - this.mouse.y);
@@ -753,40 +769,41 @@ class SphereEngine {
       ctx.beginPath(); ctx.moveTo(a.sx, a.sy); ctx.lineTo(b.sx, b.sy); ctx.stroke();
     }
     // 粒子 + 亮星十字星芒
-    const order = (this.mini ? this.orderMini : this.orderBuf)
+    const order = (this.miniBlend > 0.5 ? this.orderMini : this.orderBuf)
       .sort((a, b) => proj[a].persp - proj[b].persp);
     const sprites = this.sprites[this.mode];
     const rscale = R / 123; // 粒子尺寸随球半径等比缩放：hero=1，morph 途中/移动端自动缩小
     for (const i of order) {
       const q = proj[i], p = this.pts[i];
       const dn = clamp01((q.persp - 0.64) / 0.92);
-      let alpha: number, size: number;
-      if (this.mini) {
-        // 角落光珠：统一微光点 + 深度微调，配大柔光核心 —— 精致而非噪点糊
-        alpha = 0.5 + dn * 0.4;
-        size = 0.55 + dn * 0.75;
-      } else if (dark && dn < 0.38) {
+      // normal / mini（角落光珠）两套公式按 miniBlend 插值：跨阈值平滑过渡
+      let alphaN: number, sizeN: number;
+      if (dark && dn < 0.38) {
         const blur = 1 - dn / 0.38;
-        alpha = 0.05 + dn * 0.22 + blur * 0.04;
-        size = p.base * (2.6 - dn * 2.0) * (1 + blur * 1.2);
+        alphaN = 0.05 + dn * 0.22 + blur * 0.04;
+        sizeN = p.base * (2.6 - dn * 2.0) * (1 + blur * 1.2);
       } else if (!dark && dn < 0.3) {
-        alpha = 0.05 + dn * 0.4;
-        size = p.base * (0.9 - dn * 0.3);
+        alphaN = 0.05 + dn * 0.4;
+        sizeN = p.base * (0.9 - dn * 0.3);
       } else {
-        alpha = 0.30 + (dn - 0.38) * 0.9;
-        size = p.base * (dark ? (0.85 + dn * 1.35) : (0.8 + dn * 1.5));
+        alphaN = 0.30 + (dn - 0.38) * 0.9;
+        sizeN = p.base * (dark ? (0.85 + dn * 1.35) : (0.8 + dn * 1.5));
       }
-      if (!this.mini) {
-        size *= rscale;
+      if (this.miniBlend < 0.999) {
+        sizeN *= rscale;
         if (p.bright) {
           const twv = 0.65 + Math.sin(this.t * 1.8 + p.tw) * 0.35;
-          alpha = Math.min(1, alpha * (0.7 + twv * 0.6));
-          size *= 1.25 + twv * 0.35;
+          alphaN = Math.min(1, alphaN * (0.7 + twv * 0.6));
+          sizeN *= 1.25 + twv * 0.35;
         }
       }
+      const alphaM = 0.5 + dn * 0.4;   // 角落光珠：统一微光点，配大柔光核心
+      const sizeM = 0.55 + dn * 0.75;
+      const alpha = alphaN + (alphaM - alphaN) * this.miniBlend;
+      const size = sizeN + (sizeM - sizeN) * this.miniBlend;
       ctx.globalAlpha = Math.min(1, alpha) * iFade;
       ctx.drawImage(sprites[p.sprite], q.sx - size * 2, q.sy - size * 2, size * 4, size * 4);
-      if (p.bright && dn > 0.55 && !this.mini) {
+      if (p.bright && dn > 0.55 && this.miniBlend < 0.5) {
         const len = size * 4.2 * (0.7 + 0.3 * Math.sin(this.t * 2 + p.tw));
         ctx.globalAlpha = alpha * 0.28;
         ctx.strokeStyle = '#a78bfa';
