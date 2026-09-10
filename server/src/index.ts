@@ -9,6 +9,7 @@ import kbRouter from './routes/kb.js';
 import kbQARouter from './routes/kbQA.js';
 import drawingRouter from './routes/drawingPipeline.js';
 import drawingReviewRouter from './routes/drawingReview.js';
+import systemLogsRouter, { installLogRing } from './routes/systemLogs.js';
 import rcStoreRouter from './routes/rcStore.js';
 import testDocsRouter from './routes/testDocs.js';
 import attendanceRouter from './routes/attendance.js';
@@ -19,6 +20,7 @@ import db from './database.js';
 const app = express();
 // nginx 反代后端：仅信任一跳代理，req.ip 取 X-Real-IP/X-Forwarded-For（否则登录限流退化为全平台共享桶）
 app.set('trust proxy', 1);
+installLogRing(); // 后端运行日志 ring buffer（故障日志抓取用，越早装越全）
 const PORT = parseInt(process.env.PORT || '3001', 10);
 
 // CORS 白名单：只允许配置的源（默认同源），避免任意网站带 cookie 调接口
@@ -48,6 +50,7 @@ app.use('/api/kb', kbRouter);
 app.use('/api/kb/qa', kbQARouter);
 app.use('/api/drawing', drawingRouter);
 app.use('/api/drawing', drawingReviewRouter);
+app.use('/api/syslogs', systemLogsRouter);
 app.use('/api/rc', rcStoreRouter);
 app.use('/api/test-docs', testDocsRouter);
 app.use('/api/attendance-adjustments', attendanceRouter);

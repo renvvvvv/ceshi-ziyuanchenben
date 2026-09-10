@@ -39,6 +39,7 @@ const MODULE_LIST: AppModule[] = [
   'aiTestExpert',
   'resourceConfig',
   'drawingPipeline',
+  'systemLogs',
 ];
 
 const DEFAULT_PERMISSIONS: PermissionConfig[] = [

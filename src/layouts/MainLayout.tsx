@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { Layout, Menu, Button, Avatar, Dropdown, Tag, Alert, Drawer, Grid } from 'antd';
 import {
+  BugOutlined,
   DashboardOutlined,
   ProjectOutlined,
   HistoryOutlined,
@@ -47,6 +48,7 @@ const ALL_MENU_ITEMS: MenuItemDef[] = [
   { key: '/resource-calculator', icon: <CalculatorOutlined />, label: '资源计算器', module: 'resourceCalc' },
   { key: '/resource-config', icon: <AppstoreOutlined />, label: '资源配置', module: 'resourceConfig' },
   { key: '/drawing-pipeline', icon: <ApartmentOutlined />, label: '图纸路由', module: 'drawingPipeline' },
+  { key: '/system-logs', icon: <BugOutlined />, label: '故障日志', module: 'systemLogs' },
   { key: '/permission-config', icon: <SafetyOutlined />, label: '权限配置', module: 'permissionConfig' },
 ];
 
@@ -148,6 +150,7 @@ function MainLayout() {
     '/attendance': '人员考勤',
     '/permission-config': '权限配置',
     '/drawing-pipeline': '图纸路由',
+    '/system-logs': '故障日志抓取',
   };
 
   const currentTitle = pageTitles[selectedKey] || '';

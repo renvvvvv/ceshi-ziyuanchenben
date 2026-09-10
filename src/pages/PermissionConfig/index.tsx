@@ -30,6 +30,7 @@ const MODULE_LABELS: Record<AppModule, string> = {
   permissionConfig: '权限配置',
   aiTestExpert: 'AI 测试专家',
   drawingPipeline: '图纸路由',
+    systemLogs: '故障日志抓取',
 };
 
 const ROLE_COLORS: Record<UserRole, string> = {

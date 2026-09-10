@@ -24,6 +24,7 @@ const AiTestExpert = lazy(() => import('./pages/AiTestExpert'));
 const ResourceConfig = lazy(() => import('./pages/ResourceConfig'));
 const ResourceConfigDetail = lazy(() => import('./pages/ResourceConfig/detail'));
 const DrawingPipeline = lazy(() => import('./pages/DrawingPipeline'));
+const SystemLogs = lazy(() => import('./pages/SystemLogs'));
 
 // 加载中组件（带淡入动画）
 function PageLoading() {
@@ -105,6 +106,7 @@ function AppRoutes() {
           <Route path="resource-config" element={<RequirePermission module="resourceConfig"><ResourceConfig /></RequirePermission>} />
           <Route path="resource-config/:id" element={<RequirePermission module="resourceConfig"><ResourceConfigDetail /></RequirePermission>} />
           <Route path="drawing-pipeline" element={<RequirePermission module="drawingPipeline"><DrawingPipeline /></RequirePermission>} />
+          <Route path="system-logs" element={<RequirePermission module="systemLogs"><SystemLogs /></RequirePermission>} />
           <Route path="permission-config" element={<RequirePermission module="permissionConfig"><PermissionConfig /></RequirePermission>} />
           <Route path="knowledge-base" element={<RequirePermission module="dashboard"><KnowledgeBase /></RequirePermission>} />
           <Route path="ai-test-expert" element={<RequirePermission module="aiTestExpert"><AiTestExpert /></RequirePermission>} />
