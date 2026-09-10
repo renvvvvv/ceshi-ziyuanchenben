@@ -249,7 +249,7 @@ function ChatArea() {
           → orb-hero 居中 ↔ orb-corner 左上角，CSS morph + 引擎实时自适应 */}
       {(() => {
         const orbNode = (
-          <div className={`orb-layer ${introPlaying ? 'orb-intro' : chatOpen ? 'orb-retreat' : 'orb-hero'}`}>
+          <div className={`orb-layer ${introPlaying ? 'orb-intro' : chatOpen ? 'orb-corner' : 'orb-hero'}`}>
             <ParticleSphere
               ref={heroRef}
               width="100%" height="100%"
@@ -286,7 +286,7 @@ function ChatArea() {
           </div>
         </div>
       ) : (
-        /* 退位回答层：球缩小退位（orb-retreat 层），右侧毛玻璃对话卡承接多轮追问 */
+        /* 退位回答层：球按原版形式缩小至左上角常驻（orb-corner），右侧毛玻璃对话卡承接多轮追问 */
         <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
           <div className="retreat-card">
             <div style={{
