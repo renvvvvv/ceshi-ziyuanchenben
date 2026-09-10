@@ -17,6 +17,8 @@ import { initDatabase } from './database.js';
 import db from './database.js';
 
 const app = express();
+// nginx 反代后端：仅信任一跳代理，req.ip 取 X-Real-IP/X-Forwarded-For（否则登录限流退化为全平台共享桶）
+app.set('trust proxy', 1);
 const PORT = parseInt(process.env.PORT || '3001', 10);
 
 // CORS 白名单：只允许配置的源（默认同源），避免任意网站带 cookie 调接口
@@ -115,6 +117,7 @@ app.get('/api/health/deep', async (_req, res) => {
 // 捕获所有路由漏出来的异常，统一返回 JSON（避免前端 fetch 拿到 HTML）
 // ============================================================
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  if (res.headersSent) return;
   console.error('[Server] Unhandled error:', err);
   // PG 错误码 → 友好状态码
   if (err?.code === '23505') {

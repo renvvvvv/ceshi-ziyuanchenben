@@ -54,7 +54,7 @@ export default function ExternalPage({ store }: { store: RcStore }) {
     return <Card><Typography.Text type="secondary">请先选择项目</Typography.Text></Card>;
   }
 
-  const rows = p.external;
+  const rows = p.external ?? [];
   const sumCount = rows.reduce((s, r) => s + num(r.count), 0); // 人数合计 = Σ 数量
 
   return (

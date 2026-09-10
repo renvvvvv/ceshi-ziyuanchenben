@@ -152,7 +152,10 @@ function GanttChart({ projects, unit = 'day' }: GanttChartProps) {
   const range = useMemo(() => {
     if (validProjects.length === 0) return null;
     const allStarts = validProjects.map((p) => dayjs(p.startDate));
-    const allEnds = validProjects.map((p) => dayjs(p.endDate || dayjs().add(1, 'month')));
+    const allEnds = validProjects.map((p) => {
+      const ed = p.endDate ? dayjs(p.endDate) : null;
+      return ed && ed.isValid() ? ed : dayjs().add(1, 'month'); // 非法 endDate 回退，防 NaN 布局
+    });
     const today = dayjs().startOf('day');
     const globalStart = [
       allStarts.reduce((a, b) => (a.isBefore(b) ? a : b)),

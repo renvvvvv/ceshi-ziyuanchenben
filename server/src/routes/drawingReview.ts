@@ -87,10 +87,15 @@ function loadReview(id: string): { review: ReviewState | null; history: any[] } 
   return { review, history };
 }
 
+/** 原子写：tmp + rename，防止崩溃留下半截 JSON 丢失已有人工反馈 */
+import { renameSync } from 'fs';
 function saveReview(id: string, review: ReviewState, history: any[]) {
   const p = reviewPath(id);
-  writeFileSync(p.cur, JSON.stringify(review, null, 2));
-  writeFileSync(p.hist, JSON.stringify(history, null, 2));
+  for (const [f, data] of [[p.cur, review], [p.hist, history]] as const) {
+    const tmp = f + '.tmp';
+    writeFileSync(tmp, JSON.stringify(data, null, 2));
+    renameSync(tmp, f);
+  }
 }
 
 // ============== 自学习库（人工反馈沉淀 → 后续复核自动复用） ==============
@@ -117,7 +122,9 @@ function loadLearnings(): Learning[] {
 function saveLearnings(list: Learning[]) {
   try {
     if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true });
-    writeFileSync(LEARN_FILE, JSON.stringify(list, null, 2));
+    const tmp = LEARN_FILE + '.tmp';
+    writeFileSync(tmp, JSON.stringify(list, null, 2));
+    renameSync(tmp, LEARN_FILE);
   } catch (e: any) { console.warn('[drawingReview] 学习库写入失败:', e?.message); }
 }
 
@@ -452,8 +459,8 @@ async function runReview(id: string, req: Request): Promise<{ review?: ReviewSta
   }
   // 预扫描未被 AI 覆盖的条目保留原样（不丢事实）
   const findings = [...bySid.values()];
-  // 自学习记账：本轮 AI 引用了哪些历史经验
-  const appliedN = countLearningApplied(findings as Finding[], learnAll);
+  // 自学习记账：本轮 AI 引用了哪些历史经验（全局锁内读改写）
+  const appliedN = await withJobLock('__learnings__', async () => countLearningApplied(findings as Finding[], learnAll));
   const stats: Record<string, number> = {
     total: findings.length,
     high: findings.filter(f => f.severity === '高').length,
@@ -516,8 +523,8 @@ async function runFeedback(id: string, req: Request, msg: string): Promise<{
     saveReview(id, review, history);
     return { err: e?.message || 'AI 重核失败', savedFeedbackOnly: true };
   }
-  // 沉淀反馈中的可复用经验（去重）
-  const [, addedN, dupN] = addLearnings(json.learnings, id, jobTitle, username);
+  // 沉淀反馈中的可复用经验（去重）；学习库为全局文件，用全局锁防跨任务并发丢失更新
+  const [, addedN, dupN] = await withJobLock('__learnings__', async () => addLearnings(json.learnings, id, jobTitle, username));
   // 以 AI 输出的全量 findings 为新状态；source 沿用上一轮同 id 的值（AI 不回传该字段）
   const prevSource = new Map(review.findings.map(f => [f.id, f.source]));
   const findings: Finding[] = ((json.findings || []) as any[]).filter(f => f && f.problem).map((f, i) => ({
@@ -529,8 +536,8 @@ async function runFeedback(id: string, req: Request, msg: string): Promise<{
     confidence: f.confidence || '中', status: f.status || 'AI已复核',
     ...(Array.isArray(f.learning_ids) ? { learning_ids: f.learning_ids.map(String) } : {}),
   }));
-  // 自学习记账：本轮引用了哪些历史经验
-  const appliedN = countLearningApplied(findings, loadLearnings());
+  // 自学习记账：本轮引用了哪些历史经验（全局锁内读改写）
+  const appliedN = await withJobLock('__learnings__', async () => countLearningApplied(findings, loadLearnings()));
   const stats: Record<string, number> = {
     total: findings.length,
     high: findings.filter(f => f.severity === '高').length,

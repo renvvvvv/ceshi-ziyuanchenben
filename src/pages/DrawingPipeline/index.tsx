@@ -161,7 +161,7 @@ export default function DrawingPipeline() {
 
   const openDetail = async (id: string) => {
     setSheetData(null);
-    setReview(null); setReviewHistory([]); setFeedbackText('');
+    setReview(null); setReviewHistory([]); setLearnings([]); setFeedbackText('');
     setDetailOpen(true);
     try {
       const r = await request<any>(`/drawing/jobs/${id}`);

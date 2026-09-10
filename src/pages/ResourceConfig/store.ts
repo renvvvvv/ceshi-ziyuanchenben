@@ -55,10 +55,21 @@ export function useRcStore() {
     (async () => {
       const map = await cloudPull();
       if (map) {
-        if (map[LS_KEYS.config]) setConfig(map[LS_KEYS.config] as ProjectConfig);
-        if (map[LS_KEYS.assets]) setAssets(map[LS_KEYS.assets] as RcAsset[]);
-        if (map[LS_KEYS.dept]) setDept(map[LS_KEYS.dept] as { members: RcDeptMember[] });
-        if (map[LS_KEYS.delivered]) setDelivered(map[LS_KEYS.delivered] as RcDelivered[]);
+        // 合并策略（防丢多端数据）：本地与云端都有内容时，保留项目数/库存数更多的一侧；
+        // 本地胜出时仍标记已拉取，下次编辑全量推送即完成"多者为准"的合并
+        const localCfg = lsGet<ProjectConfig>(LS_KEYS.config, { projects: {}, currentId: '' });
+        const remoteCfg = map[LS_KEYS.config] as ProjectConfig | undefined;
+        const localN = Object.keys(localCfg.projects || {}).length;
+        const remoteN = remoteCfg ? Object.keys(remoteCfg.projects || {}).length : 0;
+        if (remoteN >= localN) {
+          if (remoteCfg) setConfig(remoteCfg);
+          if (map[LS_KEYS.assets]) setAssets(map[LS_KEYS.assets] as RcAsset[]);
+          if (map[LS_KEYS.dept]) setDept(map[LS_KEYS.dept] as { members: RcDeptMember[] });
+          if (map[LS_KEYS.delivered]) setDelivered(map[LS_KEYS.delivered] as RcDelivered[]);
+        } else {
+          console.warn(`[rc-store] 本地 ${localN} 项目 > 云端 ${remoteN}，保留本地（下次编辑合并上云）`);
+        }
+        pulledRef.current = true;
         setCloud('ok');
       } else {
         setCloud('off');
@@ -67,10 +78,17 @@ export function useRcStore() {
     })();
   }, []);
 
-  // 防抖云端推送（本地已即时落 localStorage）
+  // 防抖云端推送（本地已即时落 localStorage）。
+  // P0 防护：pull 从未成功（off）期间挂起推送——新设备/清缓存场景下本地为空，
+  // 贸然全量推送会把云端清空；此期间编辑仅存本地，待 pull 成功后恢复推送
+  const pulledRef = useRef(false);
   const pushCloud = useCallback(() => {
     if (pushTimer.current) clearTimeout(pushTimer.current);
     pushTimer.current = window.setTimeout(async () => {
+      if (!pulledRef.current) {
+        console.warn('[rc-store] 云端基线未确认，推送挂起（本地已保存）');
+        return;
+      }
       setCloud('pushing');
       try {
         const body: Record<string, unknown> = {
@@ -90,10 +108,32 @@ export function useRcStore() {
           body: JSON.stringify(body),
         });
         if (r.status === 403) { setCloud('forbid'); return; }
+        if (r.status === 409) {
+          // 服务端空覆盖防护拦截（本地为空集而云端有数据）：禁止覆盖，提示刷新
+          console.warn('[rc-store] 云端拒绝覆盖（409）：云端数据较新，请刷新页面获取');
+          setCloud('off');
+          return;
+        }
         if (!r.ok) throw new Error('HTTP ' + r.status);
         setCloud('ok');
       } catch { setCloud('off'); }
     }, 500);
+  }, []);
+
+  // 多标签页同步：其他标签页写 localStorage 时同步本页 state（不触发推送，避免回环）
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === null || !Object.values(LS_KEYS).includes(e.key as any) || e.newValue == null) return;
+      try {
+        const v = JSON.parse(e.newValue);
+        if (e.key === LS_KEYS.config) setConfig(v as ProjectConfig);
+        else if (e.key === LS_KEYS.assets) setAssets(v as RcAsset[]);
+        else if (e.key === LS_KEYS.dept) setDept(v as { members: RcDeptMember[] });
+        else if (e.key === LS_KEYS.delivered) setDelivered(v as RcDelivered[]);
+      } catch { /* 忽略畸形 */ }
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
   }, []);
 
   // ---- 变更入口（改完自动本地落盘 + 推云）----

@@ -60,7 +60,7 @@ export default function StaffPage({ store }: { store: RcStore }) {
     return <Card><Typography.Text type="secondary">请先选择项目</Typography.Text></Card>;
   }
 
-  const rows = p.staff;
+  const rows = p.staff ?? [];
   const sumSurvey = rows.reduce((s, r) => s + num(r.survey), 0);
   const sumRetest = rows.reduce((s, r) => s + num(r.retest), 0);
   const sumTest = rows.reduce((s, r) => s + num(r.test), 0);

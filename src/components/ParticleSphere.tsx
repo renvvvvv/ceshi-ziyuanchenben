@@ -929,7 +929,9 @@ const ParticleSphere = forwardRef<ParticleSphereHandle, ParticleSphereProps>(fun
   const isMobile = useIsMobile();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<SphereEngine | null>(null);
-  const baseDots = dots ?? (isMobile ? 1000 : 2200);
+  // antd useBreakpoint 首帧返回 {}（isMobile 恒 true），若在渲染期取值会把桌面端粒子数
+  // 固化为 1000；引擎只创建一次，故在创建时用 matchMedia 现取真实断点
+  const baseDots = dots ?? (window.matchMedia('(max-width: 767px)').matches ? 1000 : 2200);
 
   const vbRef = useRef(viewBox);
   vbRef.current = viewBox;

@@ -199,7 +199,9 @@ function extractToken(req: Request): string | null {
   const cookies = (req.headers.cookie || '').split(';');
   for (const c of cookies) {
     const [k, v] = c.trim().split('=');
-    if (k === 'session_token' && v) return decodeURIComponent(v);
+    if (k === 'session_token' && v) {
+      try { return decodeURIComponent(v); } catch { return v; } // 畸形 cookie 防护
+    }
   }
   // 2. Authorization: Bearer xxx
   const auth = req.headers.authorization;

@@ -114,20 +114,32 @@ export default function SummaryPage({ store }: { store: RcStore }) {
       message.error('文件格式不正确：缺少 projects 字段');
       return;
     }
-    const keys = Object.keys(rec.projects);
+    // 逐项目清洗：剔除非对象值、补齐 9 个数据数组（非数组重置为空）、id 以 map 键为准
+    const ARR_KEYS = ['personnel', 'staff', 'subsidy', 'external', 'loads', 'instruments', 'consumables', 'safety', 'labor'] as const;
+    const cleaned: ProjectConfig['projects'] = {};
+    let dropped = 0;
+    for (const k of Object.keys(rec.projects)) {
+      const v = (rec.projects as Record<string, unknown>)[k];
+      if (!v || typeof v !== 'object' || Array.isArray(v)) { dropped++; continue; }
+      const proj: any = { ...(v as object), id: k };
+      for (const ak of ARR_KEYS) if (!Array.isArray(proj[ak])) proj[ak] = [];
+      if (typeof proj.name !== 'string') proj.name = k;
+      cleaned[k] = proj;
+    }
+    const keys = Object.keys(cleaned);
     if (!keys.length) {
-      message.warning('文件中没有任何项目');
+      message.error('文件中没有任何有效项目（全部为畸形数据，已忽略）');
       return;
     }
-    const currentId = typeof rec.currentId === 'string' && rec.currentId in rec.projects ? rec.currentId : keys[0];
+    const currentId = typeof rec.currentId === 'string' && rec.currentId in cleaned ? rec.currentId : keys[0];
     const count = Object.keys(store.config.projects).length;
     Modal.confirm({
       title: '确认导入并覆盖当前配置？',
-      content: `文件包含 ${keys.length} 个项目，导入后将覆盖当前全部 ${count} 个项目，此操作不可撤销。`,
+      content: `文件包含 ${keys.length} 个项目${dropped ? `（另有 ${dropped} 个畸形项目已剔除）` : ''}，导入后将覆盖当前全部 ${count} 个项目，此操作不可撤销。`,
       okText: '覆盖导入',
       okButtonProps: { danger: true },
       onOk: () => {
-        store.updateConfig({ projects: rec.projects as ProjectConfig['projects'], currentId });
+        store.updateConfig({ projects: cleaned, currentId });
         message.success(`导入成功：共 ${keys.length} 个项目`);
       },
     });

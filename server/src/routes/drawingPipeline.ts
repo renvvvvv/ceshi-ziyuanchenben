@@ -64,12 +64,12 @@ function readStatus(id: string): any | null {
 }
 
 /** 把 STATUS 同步回 DB 行（列表页免逐文件读） */
-function syncStatus(id: string) {
+function syncStatus(id: string): Promise<unknown> {
   const st = readStatus(id);
-  if (!st) return;
+  if (!st) return Promise.resolve();
   const map: Record<string, string> = { done: 'done', error: 'error' };
   const dbStatus = st.stage in map ? map[st.stage] : 'running';
-  db.runAsync(
+  return db.runAsync(
     `UPDATE drawing_jobs SET status=$1, error=$2, dwg_count = COALESCE($4::int, dwg_count),
        finished_at = CASE WHEN $1 IN ('done','error') THEN now() ELSE finished_at END
      WHERE id = $3 AND (status <> $1 OR ($4::int IS NOT NULL AND dwg_count IS NULL))`,
@@ -121,7 +121,7 @@ router.get('/jobs', requireAuth, asyncH(async (_req, res) => {
     `SELECT id, title, status, file_count, dwg_count, username, error, created_at, finished_at
      FROM drawing_jobs ORDER BY created_at DESC LIMIT 100`
   ) as any[];
-  for (const r of rows) syncStatus(r.id);
+  await Promise.all(rows.map((r: any) => syncStatus(r.id)));
   const fresh = await db.allAsync(
     `SELECT id, title, status, file_count, dwg_count, username, error, created_at, finished_at
      FROM drawing_jobs ORDER BY created_at DESC LIMIT 100`
@@ -140,7 +140,7 @@ router.get('/jobs/:id', requireAuth, asyncH(async (req, res) => {
   if (!validId(id)) { res.status(400).json({ success: false, message: '非法任务 id' }); return; }
   const rows = await db.allAsync(`SELECT * FROM drawing_jobs WHERE id=$1`, id) as any[];
   if (!rows.length) { res.status(404).json({ success: false, message: '任务不存在' }); return; }
-  syncStatus(id);
+  await syncStatus(id);
   const fresh = await db.allAsync(`SELECT * FROM drawing_jobs WHERE id=$1`, id) as any[];
   const st = readStatus(id);
   let sheetsIndex: any[] = [];
@@ -177,8 +177,10 @@ router.get('/jobs/:id/export', requireAuth, asyncH(async (req, res) => {
 
 /** GET /api/drawing/jobs/:id/log  完整管线日志（排障用） */
 router.get('/jobs/:id/log', requireAuth, asyncH(async (req, res) => {
+  const { id } = req.params;
+  if (!validId(id)) { res.status(400).send('非法任务 id'); return; }
   try {
-    res.type('text/plain').send(readFileSync(join(BASE, req.params.id, 'out', 'pipeline.log'), 'utf8'));
+    res.type('text/plain').send(readFileSync(join(BASE, id, 'out', 'pipeline.log'), 'utf8'));
   } catch { res.status(404).send('暂无日志'); }
 }));
 

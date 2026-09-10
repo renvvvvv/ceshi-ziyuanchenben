@@ -39,7 +39,7 @@ export default function PersonnelPage({ store }: { store: RcStore }) {
     return <Card><Typography.Text type="secondary">请先选择项目</Typography.Text></Card>;
   }
 
-  const rows = p.personnel;
+  const rows = p.personnel ?? [];
   const sumCount = rows.reduce((s, r) => s + num(r.count), 0); // 人数合计 = 各岗位组人数之和
 
   return (

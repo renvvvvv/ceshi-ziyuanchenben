@@ -164,15 +164,38 @@ router.post('/store/bulk', requireAuth, requireRole(['管理者', '编辑者']),
   if (bad.length) { res.status(400).json({ error: 'unknown keys: ' + bad.join(', ') }); return; }
   try {
     await ensureTable();
+    // 空覆盖防护（P0）：提交值为空集而云端同键有实质数据时拒绝该键——
+    // 拦截"本地为空 + 全量推送"把云端清空的数据丢失路径；正常清空需求联系管理员处理
+    const measure = (k: string, v: unknown): number => {
+      try {
+        if (k === 'testProjectConfig_v1') return Object.keys((v as any)?.projects || {}).length;
+        if (k === 'deptMembersLib_v1') return ((v as any)?.members || []).length;
+        return Array.isArray(v) ? v.length : (v && typeof v === 'object' ? Object.keys(v).length : 0);
+      } catch { return 0; }
+    };
+    const rows = await db.allAsync(
+      `SELECT key, value FROM rc_store WHERE key = ANY($1::text[])`, keys
+    ) as any[];
+    const blocked: string[] = [];
+    const allowed = keys.filter(k => {
+      const cur = rows.find(r => r.key === k);
+      if (!cur) return true;
+      if (measure(k, map[k]) === 0 && measure(k, cur.value) > 0) { blocked.push(k); return false; }
+      return true;
+    });
+    if (blocked.length && !allowed.length) {
+      res.status(409).json({ error: '拒绝空覆盖（云端该键有数据而提交为空）：' + blocked.join(', '), blocked });
+      return;
+    }
     // 平台 DB 封装无跨语句事务：顺序幂等 UPSERT（前端每次自动保存整包重推，天然最终一致）
-    for (const k of keys) {
+    for (const k of allowed) {
       await db.runAsync(
         `INSERT INTO rc_store (key, value, updated_at) VALUES ($1, $2::jsonb, now())
          ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()`,
         k, JSON.stringify(map[k])
       );
     }
-    res.json({ ok: true, saved: keys.length });
+    res.json({ ok: true, saved: allowed.length, skipped: blocked.length ? blocked : undefined });
   } catch (e: any) {
     res.status(500).json({ error: e.message });
   }

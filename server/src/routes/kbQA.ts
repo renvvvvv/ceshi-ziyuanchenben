@@ -964,13 +964,18 @@ router.post('/learn', requireAuth, (req, res) => {
   if (question.trim().length < 2 || answer.trim().length < 2) {
     return res.status(400).json({ success: false, message: '问题和答案至少 2 个字符' });
   }
+  // 防注入/防配额炸：补充内容全量进所有用户后续问答的 system prompt，必须限长
+  if (answer.trim().length > 2000) {
+    return res.status(400).json({ success: false, message: '补充内容过长（≤2000 字），请精简后提交' });
+  }
 
   // 以问题为 key 去重，相同问题覆盖更新（count 累加）
   const key = question.trim().slice(0, 200);
   const existing = learnedCache[key];
+  const answerSafe = answer.trim().slice(0, 2000);
   learnedCache[key] = {
     question: question.trim(),
-    answer: answer.trim(),
+    answer: answerSafe,
     source: (req as any).user?.username || 'unknown',
     count: (existing?.count || 0) + 1,
     createdAt: existing?.createdAt || new Date().toISOString(),

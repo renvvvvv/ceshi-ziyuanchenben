@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { Button, Spin, Input, message, Modal, Empty, Segmented, Tooltip } from 'antd';
 import {
@@ -101,6 +101,12 @@ function ChatArea() {
   // 大球 ref（文字粒子吸收）+ 首次挂载标记（入场汇聚动画只在第一次播）
   const heroRef = useRef<ParticleSphereHandle>(null);
   const heroMountedOnce = useRef(false);
+  // SSE 生命周期：abort/超时/收缩定时器统一挂 ref，卸载与新对话时可取消（防泄漏与锁死输入）
+  const abortRef = useRef<AbortController | null>(null);
+  const askTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cornerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 首挂载标记：effect 内置位（StrictMode 双渲染下渲染期写 ref 会导致 intro prop 两次取值不一致）
+  useLayoutEffect(() => { heroMountedOnce.current = true; }, []);
   const listRef = useRef<HTMLDivElement>(null);
   // 全屏入场：聚拢期间画布经 orb-intro 铺满全屏，球心/半径用 viewBox 钉在最终英雄位
   const [introPlaying, setIntroPlaying] = useState(true);
@@ -117,6 +123,13 @@ function ChatArea() {
   useEffect(() => {
     if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight;
   }, [messages, asking]);
+
+  // 卸载清理：中止在途 SSE、清理定时器（防后台继续消费流 / 对已卸载组件 setState）
+  useEffect(() => () => {
+    abortRef.current?.abort();
+    if (askTimeoutRef.current) clearTimeout(askTimeoutRef.current);
+    if (cornerTimerRef.current) clearTimeout(cornerTimerRef.current);
+  }, []);
 
   // ===== 收缩/回位 morph 编排（画布盒子不动，球体引擎飞行）=====
   // 去程：chatOpen 置位 → 球飞向左上角（~1.1s 缓动）→ 落地切 56px 角落盒（几何无缝）
@@ -164,7 +177,9 @@ function ChatArea() {
 
     try {
       const controller = new AbortController();
+      abortRef.current = controller;
       const timeoutId = setTimeout(() => controller.abort(), 175000);
+      askTimeoutRef.current = timeoutId;
 
       const res = await fetch('/api/kb/qa', {
         method: 'POST',
@@ -174,8 +189,11 @@ function ChatArea() {
         signal: controller.signal,
       });
 
-      if (res.status === 401) { message.error('登录已失效，请重新登录'); clearTimeout(timeoutId); return; }
-      if (!res.ok) { message.error(`AI 问答失败（HTTP ${res.status}）`); clearTimeout(timeoutId); return; }
+      // 早退回滚占位消息（用户气泡 + 空 assistant 气泡），不留空白气泡在对话流
+      const rollback = () => setMessages(prev => prev.length >= 2 && prev[prev.length - 1]._question === question
+        ? prev.slice(0, -2) : prev);
+      if (res.status === 401) { message.error('登录已失效，请重新登录'); rollback(); return; }
+      if (!res.ok) { message.error(`AI 问答失败（HTTP ${res.status}）`); rollback(); return; }
 
       // 流式读取 SSE
       const reader = res.body?.getReader();
@@ -207,7 +225,7 @@ function ChatArea() {
                   firstToken = false;
                   setBurstTick(t => t + 1); // 💥 先在全尺寸裂变（此时流式输出已开始）
                   // 裂变峰值过后再启程：粒子先炸开→弹性重组回完整球→整球缩小飞向左上角，全程连续
-                  setTimeout(() => setChatOpen(true), 760);
+                  cornerTimerRef.current = setTimeout(() => setChatOpen(true), 760);
                 }
                 fullContent += data.text;
                 setMessages(prev => prev.map((m, i) => i === assistantIdx ? { ...m, content: fullContent } : m));
@@ -231,8 +249,6 @@ function ChatArea() {
           }
         }
       }
-      clearTimeout(timeoutId);
-
       // 兜底：流已关闭但 content 仍为空（GLM 返回了空响应）
       if (!fullContent.trim()) {
         setMessages(prev => prev.map((m, i) => i === assistantIdx ? {
@@ -243,6 +259,8 @@ function ChatArea() {
       if (err?.name === 'AbortError') message.warning('AI 回答超时（GLM-5.2 思考+联网搜索耗时较长），请稍后重试');
       else message.error('问答请求失败，请确认后端服务正常');
     } finally {
+      if (askTimeoutRef.current) { clearTimeout(askTimeoutRef.current); askTimeoutRef.current = null; }
+      abortRef.current = null;
       setAsking(false);
     }
   }, [input, asking, messages]);
@@ -307,8 +325,7 @@ function ChatArea() {
         );
         return introPlaying ? createPortal(orbNode, document.body) : orbNode;
       })()}
-      {/* 挂载即标记：后续不重播入场汇聚 */}
-      <div style={{ display: 'none' }}>{(() => { heroMountedOnce.current = true; return null; })()}</div>
+{' '}
 
       {!chatOpen ? (
         /* 欢迎层（球居中）：提问时显示思考回显。
@@ -349,7 +366,7 @@ function ChatArea() {
                   {asking ? `正在解答：${currentQuestion.slice(0, 40)}` : `对话进行中 · 第 ${messages.filter(m => m.role === 'user').length} 轮，可继续追问`}
                 </div>
               </div>
-              <Button size="small" icon={<ReloadOutlined />} onClick={() => { setMessages([]); setChatOpen(false); }}
+              <Button size="small" icon={<ReloadOutlined />} onClick={() => { abortRef.current?.abort(); setMessages([]); setChatOpen(false); }}
                 style={{ borderRadius: 8, borderColor: '#d9d5f0', color: '#6366f1', flex: 'none' }}>新对话</Button>
             </div>
             <div ref={listRef} className="retreat-list">
@@ -403,7 +420,7 @@ function ChatArea() {
             <Button type="primary" icon={<SendOutlined />} onClick={() => handleAsk()}
               loading={asking} disabled={!input.trim()} style={{ borderRadius: 10, height: 42, width: 42, flexShrink: isMobile ? 0 : undefined }} />
             {messages.length > 0 && (
-              <Button icon={<ReloadOutlined />} onClick={() => { setMessages([]); setChatOpen(false); }}
+              <Button icon={<ReloadOutlined />} onClick={() => { abortRef.current?.abort(); setMessages([]); setChatOpen(false); }}
                 title="新对话" style={{ borderRadius: 10, height: 42, width: 42, flexShrink: isMobile ? 0 : undefined }} />
             )}
           </div>

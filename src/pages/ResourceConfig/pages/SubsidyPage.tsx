@@ -46,7 +46,7 @@ export default function SubsidyPage({ store }: { store: RcStore }) {
     return <Card><Typography.Text type="secondary">请先选择项目</Typography.Text></Card>;
   }
 
-  const rows = p.subsidy;
+  const rows = p.subsidy ?? [];
   const sumCount = rows.reduce((s, r) => s + num(r.count), 0);
   const totalAmount = subsidyTotal(rows); // 补贴总额 = Σ 人数 × 天数 × 标准
 

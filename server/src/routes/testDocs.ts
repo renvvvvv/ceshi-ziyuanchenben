@@ -28,7 +28,8 @@ const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),
   filename: (_req, file, cb) => {
     // 安全文件名：去掉路径，保留扩展名；加随机前缀防同毫秒并发覆盖
-    const safeName = file.originalname.replace(/[\\/]/g, '_').replace(/\s+/g, '_');
+    // multer originalname 为 latin1 编码，中文名需先解码（与 drawingPipeline 一致）
+    const safeName = Buffer.from(file.originalname, 'latin1').toString('utf8').replace(/[\\/]/g, '_').replace(/\s+/g, '_');
     cb(null, `${Date.now()}_${randomUUID().slice(0, 8)}_${safeName}`);
   },
 });

@@ -281,8 +281,8 @@ function Dashboard() {
   // 甘特图项目：根据筛选状态过滤
   const ganttProjects = useMemo(() => {
     return filteredProjects
-      .filter((p) => p.status !== '阻塞')
-      .sort((a, b) => a.startDate.localeCompare(b.startDate));
+      .filter((p) => p.status !== '阻塞' && typeof p.startDate === 'string' && p.startDate)
+      .sort((a, b) => (a.startDate || '').localeCompare(b.startDate || ''));
   }, [filteredProjects]);
 
   // 计数（基于筛选后的项目）

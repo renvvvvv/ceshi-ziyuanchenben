@@ -79,7 +79,10 @@ def run_job(job):
     for f in sorted(glob.glob(os.path.join(inbox, '*'))):
         low = f.lower()
         if low.endswith('.zip') or low.endswith('.rar'):
-            subprocess.run(['bsdtar', '-xf', f, '-C', src], capture_output=True, timeout=600)
+            r = subprocess.run(['bsdtar', '-xf', f, '-C', src], capture_output=True, timeout=600)
+            if r.returncode != 0:  # 解压失败要报真实原因，不能误报"没有 dwg"
+                write_status(job, 'error', f'解压失败({os.path.basename(f)}): {r.stderr.decode(errors="replace")[:300]}')
+                return
         elif low.endswith('.dwg'):
             os.makedirs(os.path.join(src, 'dwg_direct'), exist_ok=True)
             shutil.copy2(f, os.path.join(src, 'dwg_direct', os.path.basename(f)))
