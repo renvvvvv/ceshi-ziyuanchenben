@@ -166,6 +166,27 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
   ctx.closePath();
 }
 
+/** 背景知识网络层：球后缓慢漂移的微点（近邻淡连线在 draw 里绘制） */
+interface NebulaDot { x: number; y: number; vx: number; vy: number; ph: number; sz: number; hue: number[] }
+function makeNebula(n: number): NebulaDot[] {
+  const arr: NebulaDot[] = [];
+  const hues = [[99, 102, 241], [168, 85, 247], [129, 140, 248]];
+  for (let i = 0; i < n; i++) {
+    arr.push({
+      x: Math.random(), y: Math.random(),
+      vx: (Math.random() - 0.5) * 0.010, vy: (Math.random() - 0.5) * 0.008,
+      ph: Math.random() * Math.PI * 2, sz: 0.6 + Math.random() * 1.5,
+      hue: hues[i % 3],
+    });
+  }
+  return arr;
+}
+
+/** 鼠标涟漪（波前推散） */
+interface Ripple { x: number; y: number; t: number; s: number }
+/** 思考态信号线：球面两点间的瞬态信号弧 */
+interface Signal { i: number; j: number; t: number; dur: number }
+
 interface Conn {
   pi: number; slot: number; item: KBSphereLabel;
   phase: 'grow' | 'hold' | 'fade';
@@ -226,6 +247,12 @@ class SphereEngine {
   private orderMini: number[] = [];
   private introFired = false;
   private onIntroDoneCb: (() => void) | null = null;
+  /** 融合特性：鼠标涟漪 / 思考态信号线 / 背景知识网络层 */
+  private ripples: Ripple[] = [];
+  private signals: Signal[] = [];
+  private signalNext = 0;
+  private nebula: NebulaDot[] = makeNebula(64);
+  private lastRippleAt = 0;
 
   constructor(canvas: HTMLCanvasElement, opts: {
     mode: 'light' | 'dark'; kbLine: boolean; dots: number; interactive: boolean; intro: boolean;
@@ -262,6 +289,11 @@ class SphereEngine {
     const r = this.cv.getBoundingClientRect();
     this.mouse.x = e.clientX - r.left;
     this.mouse.y = e.clientY - r.top;
+    // 鼠标涟漪：移动时节流落下弱波前（拖尾感）
+    if (performance.now() - this.lastRippleAt > 140 && !this.reduceMotion) {
+      this.lastRippleAt = performance.now();
+      this.ripples.push({ x: this.mouse.x, y: this.mouse.y, t: 0, s: 0.55 });
+    }
     const hov = this.labelRects.some(L =>
       this.mouse.x >= L.x && this.mouse.x <= L.x + L.w && this.mouse.y >= L.y && this.mouse.y <= L.y + L.h);
     this.cv.style.cursor = hov ? 'pointer' : (this.interactive ? 'crosshair' : 'default');
@@ -269,6 +301,11 @@ class SphereEngine {
   private onLeave = () => { this.mouse.x = -9999; };
   private onResize = () => this.resize();
   private onClick = (e: MouseEvent) => {
+    // 点击 = 强涟漪脉冲（先于标签判定，两者不冲突）
+    if (!this.reduceMotion) {
+      const r = this.cv.getBoundingClientRect();
+      this.ripples.push({ x: e.clientX - r.left, y: e.clientY - r.top, t: 0, s: 1.6 });
+    }
     if (!this.onLabelClick || !this.labelRects.length) return;
     const r = this.cv.getBoundingClientRect();
     const x = e.clientX - r.left, y = e.clientY - r.top;
@@ -393,6 +430,8 @@ class SphereEngine {
     const introActive = this.introEnabled && this.introT < 1.6;
     // 全屏入场（vb 生效时）：散布按画布对角线放大，粒子自屏幕边缘外飞入，画布矩形边界不可见
     const iSpread = this.vb ? (Math.hypot(w, h) * 0.5) / (R * 2.6) : 1;
+    // 涟漪寿命淘汰（1.15s）
+    if (this.ripples.length) this.ripples = this.ripples.filter(rp => rp.t < 1.15);
     const proj = this.projBuf;
     for (let i = 0; i < this.pts.length; i++) {
       const p = this.pts[i];
@@ -436,6 +475,15 @@ class SphereEngine {
           const off = (1 - d / 49) * 10;
           sx += dx / d * off; sy += dy / d * off;
         }
+      }
+      // 鼠标涟漪：波前环推散（高斯环 × 时间衰减，自点击/悬停处向外传播）
+      for (let ri = 0; ri < this.ripples.length; ri++) {
+        const rp = this.ripples[ri];
+        const dx = sx - rp.x, dy = sy - rp.y;
+        const d = Math.hypot(dx, dy) || 1;
+        const ring = rp.t * 300 + 8;
+        const wave = Math.exp(-Math.pow((d - ring) / 46, 2)) * Math.exp(-rp.t * 2.1) * rp.s;
+        if (wave > 0.004) { sx += dx / d * wave * 22; sy += dy / d * wave * 22; }
       }
       const q = proj[i]; q.sx = sx; q.sy = sy; q.persp = persp;
     }
@@ -572,6 +620,7 @@ class SphereEngine {
     this.lastFrameT = nowMs;
     const dt = 1 / 60;
     if (this.burstT >= 0) { this.burstT += dt; if (this.burstT > 1.15) this.burstT = -1; }
+    for (const rp of this.ripples) rp.t += dt;
     if (this.introEnabled) this.introT += dt;
     if (this.introEnabled && !this.introFired && this.introT > 1.65) {
       this.introFired = true;
@@ -591,6 +640,38 @@ class SphereEngine {
     const dark = this.mode === 'dark';
     const { proj, cx, cy, R, disp } = this.project();
     const slots = this.updateConns(proj, this.reduceMotion ? 0 : dt);
+
+    // 背景知识网络层：缓慢漂移的微点 + 稀疏淡连线（角落 mini 模式跳过省资源）
+    if (!this.mini) {
+      const nb = this.nebula;
+      for (const p of nb) {
+        p.x += p.vx * dt; p.y += p.vy * dt;
+        if (p.x < -0.02 || p.x > 1.02) p.vx *= -1;
+        if (p.y < -0.02 || p.y > 1.02) p.vy *= -1;
+      }
+      ctx.save();
+      ctx.lineWidth = 0.5;
+      for (let i = 0; i < nb.length; i++) {
+        const a = nb[i], ax = a.x * w, ay = a.y * h;
+        const tw2 = 0.5 + 0.5 * Math.sin(this.t * 0.9 + a.ph);
+        ctx.strokeStyle = `rgba(${a.hue[0]},${a.hue[1]},${a.hue[2]},${0.05 + tw2 * 0.05})`;
+        for (let j = i + 1; j < nb.length; j++) {
+          const b = nb[j], bx2 = b.x * w, by2 = b.y * h;
+          const dd = (ax - bx2) ** 2 + (ay - by2) ** 2;
+          if (dd < 16900) {
+            ctx.globalAlpha = (1 - dd / 16900) * 0.35 * iFade;
+            ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx2, by2); ctx.stroke();
+          }
+        }
+      }
+      for (const p of nb) {
+        const tw2 = 0.5 + 0.5 * Math.sin(this.t * 1.2 + p.ph);
+        ctx.globalAlpha = (0.22 + tw2 * 0.30) * iFade;
+        ctx.fillStyle = `rgb(${p.hue[0]},${p.hue[1]},${p.hue[2]})`;
+        ctx.beginPath(); ctx.arc(p.x * w, p.y * h, p.sz, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.restore();
+    }
 
     const g = ctx.createRadialGradient(cx, cy, R * 0.1, cx, cy, R * 1.35);
     if (dark) {
@@ -701,6 +782,52 @@ class SphereEngine {
         ctx.stroke();
       }
     }
+    // 思考态信号线：思考时球面随机两点间闪现瞬态信号弧（带亮点巡行头部）
+    if (this.thinking && !this.reduceMotion && !this.mini) {
+      this.signalNext -= dt;
+      if (this.signalNext <= 0 && this.signals.length < 10) {
+        this.signalNext = 0.12 + Math.random() * 0.1;
+        let pi = -1;
+        for (let tries = 0; tries < 12; tries++) {
+          const idx = Math.floor(Math.random() * proj.length);
+          if (proj[idx].persp > 1.02) { pi = idx; break; }
+        }
+        if (pi >= 0) {
+          let bj = -1, bd = Infinity;
+          for (let o = Math.max(0, pi - 40); o < Math.min(proj.length, pi + 40); o++) {
+            if (o === pi) continue;
+            const dd = (proj[o].sx - proj[pi].sx) ** 2 + (proj[o].sy - proj[pi].sy) ** 2;
+            if (dd > 4000 && dd < bd) { bd = dd; bj = o; }
+          }
+          if (bj >= 0) this.signals.push({ i: pi, j: bj, t: 0, dur: 0.5 + Math.random() * 0.3 });
+        }
+      }
+      const aliveS: Signal[] = [];
+      for (const s of this.signals) {
+        s.t += dt;
+        if (s.t >= s.dur) continue;
+        const a = proj[s.i], b = proj[s.j];
+        const up = s.t / s.dur;
+        const alpha = Math.sin(Math.PI * up) * 0.8;
+        const mx = (a.sx + b.sx) / 2 + ((a.sx + b.sx) / 2 - cx) * 0.14;
+        const my = (a.sy + b.sy) / 2 + ((a.sy + b.sy) / 2 - cy) * 0.14;
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.strokeStyle = dark ? '#c4b5fd' : '#7c3aed';
+        ctx.lineWidth = 1.1; ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(a.sx, a.sy);
+        ctx.quadraticCurveTo(mx, my, b.sx, b.sy);
+        ctx.stroke();
+        const hx = (1 - up) * (1 - up) * a.sx + 2 * (1 - up) * up * mx + up * up * b.sx;
+        const hy = (1 - up) * (1 - up) * a.sy + 2 * (1 - up) * up * my + up * up * b.sy;
+        ctx.drawImage(sprites[10], hx - 5, hy - 5, 10, 10);
+        ctx.restore();
+        aliveS.push(s);
+      }
+      this.signals = aliveS;
+    } else if (this.signals.length) this.signals.length = 0;
+
     // 文字吸收粒子：从下方飞向球面目标点（目标随球旋转实时更新）
     if (this.absorbers.length) {
       const alive: Absorber[] = [];

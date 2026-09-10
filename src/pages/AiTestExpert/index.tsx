@@ -94,9 +94,9 @@ function ChatArea() {
   // 问答模式：fast=GLM-5.3-Flash 秒级（默认），deep=GLM-5.2 深度思考
   const [qaMode, setQaMode] = useState<'fast' | 'deep'>('fast');
   const [asking, setAsking] = useState(false);
-  // 粒子球：唯一实例常驻。orbCorner=false 居中大球；首个答案 token 到达后 morph 到左上角常驻
+  // 粒子球：唯一实例常驻。chatOpen=false 居中大球；首个答案 token 到达后裂变并退位（缩小让位于对话卡）
   const [burstTick, setBurstTick] = useState(0);
-  const [orbCorner, setOrbCorner] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
   const [currentQuestion, setCurrentQuestion] = useState('');
   // 大球 ref（文字粒子吸收）+ 首次挂载标记（入场汇聚动画只在第一次播）
   const heroRef = useRef<ParticleSphereHandle>(null);
@@ -174,7 +174,7 @@ function ChatArea() {
                   firstToken = false;
                   setBurstTick(t => t + 1); // 💥 先在全尺寸裂变（此时流式输出已开始）
                   // 裂变峰值过后再启程：粒子先炸开→弹性重组回完整球→整球缩小飞向左上角，全程连续
-                  setTimeout(() => setOrbCorner(true), 620);
+                  setTimeout(() => setChatOpen(true), 620);
                 }
                 fullContent += data.text;
                 setMessages(prev => prev.map((m, i) => i === assistantIdx ? { ...m, content: fullContent } : m));
@@ -249,7 +249,7 @@ function ChatArea() {
           → orb-hero 居中 ↔ orb-corner 左上角，CSS morph + 引擎实时自适应 */}
       {(() => {
         const orbNode = (
-          <div className={`orb-layer ${introPlaying ? 'orb-intro' : orbCorner ? 'orb-corner' : 'orb-hero'}`}>
+          <div className={`orb-layer ${introPlaying ? 'orb-intro' : chatOpen ? 'orb-retreat' : 'orb-hero'}`}>
             <ParticleSphere
               ref={heroRef}
               width="100%" height="100%"
@@ -269,7 +269,7 @@ function ChatArea() {
       {/* 挂载即标记：后续不重播入场汇聚 */}
       <div style={{ display: 'none' }}>{(() => { heroMountedOnce.current = true; return null; })()}</div>
 
-      {!orbCorner ? (
+      {!chatOpen ? (
         /* 欢迎层（球居中）：提问时显示思考回显。
            外层 flex:1 占位把输入区压到底部，欢迎文案锚在占位区底部（即输入区上方） */
         <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
@@ -286,35 +286,36 @@ function ChatArea() {
           </div>
         </div>
       ) : (
-        /* 答案层：左上角球伴飞（球在绝对层），毛玻璃头卡给球留位 */
-        <>
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 12,
-            minHeight: isMobile ? 60 : 76,
-            padding: isMobile ? '8px 12px 8px 68px' : '10px 20px 10px 88px',
-            background: 'rgba(255,255,255,0.62)',
-            backdropFilter: 'blur(16px) saturate(1.4)',
-            WebkitBackdropFilter: 'blur(16px) saturate(1.4)',
-            borderBottom: '1px solid rgba(233,231,244,0.8)',
-            zIndex: 2,
-          }}>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ color: '#1e1b2e', fontSize: 13, fontWeight: 600 }}>
-                AI 测试专家 {asking && <span style={{ color: '#6366f1', fontWeight: 400 }}>· 思考中…</span>}
+        /* 退位回答层：球缩小退位（orb-retreat 层），右侧毛玻璃对话卡承接多轮追问 */
+        <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
+          <div className="retreat-card">
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 10,
+              padding: '13px 18px 11px', borderBottom: '1px solid rgba(233,231,244,0.9)',
+            }}>
+              <div style={{
+                width: 30, height: 30, borderRadius: 9, flex: 'none',
+                background: 'linear-gradient(135deg,#6366f1,#a855f7)', color: '#fff',
+                display: 'grid', placeItems: 'center', fontSize: 15,
+              }}><RobotOutlined /></div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ color: '#1e1b2e', fontSize: 13.5, fontWeight: 600 }}>
+                  AI 测试专家 {asking && <span style={{ color: '#6366f1', fontWeight: 400 }}>· 思考中…</span>}
+                </div>
+                <div style={{ color: '#9d9ab8', fontSize: 11, marginTop: 1 }}>
+                  {asking ? `正在解答：${currentQuestion.slice(0, 40)}` : `对话进行中 · 第 ${messages.filter(m => m.role === 'user').length} 轮，可继续追问`}
+                </div>
               </div>
-              <div style={{ color: '#9d9ab8', fontSize: 11, marginTop: 1 }}>
-                {asking ? currentQuestion.slice(0, 40) : '继续提问，球在此思考并回答'}
+              <Button size="small" icon={<ReloadOutlined />} onClick={() => { setMessages([]); setChatOpen(false); }}
+                style={{ borderRadius: 8, borderColor: '#d9d5f0', color: '#6366f1', flex: 'none' }}>新对话</Button>
+            </div>
+            <div ref={listRef} className="retreat-list">
+              <div style={{ maxWidth: '100%', padding: isMobile ? '10px 6px' : '14px 10px' }}>
+                {messages.map((msg, i) => <MessageBubble key={i} msg={msg} />)}
               </div>
             </div>
-            <Button size="small" icon={<ReloadOutlined />} onClick={() => { setMessages([]); setOrbCorner(false); }}
-              style={{ borderRadius: 8, borderColor: '#d9d5f0', color: '#6366f1' }}>新对话</Button>
           </div>
-          <div ref={listRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: isMobile ? '12px 12px' : '20px 24px' }}>
-            <div style={{ maxWidth: 1150, margin: '0 auto' }}>
-              {messages.map((msg, i) => <MessageBubble key={i} msg={msg} />)}
-            </div>
-          </div>
-        </>
+        </div>
       )}
 
       {/* 输入区（毛玻璃悬浮）—— marginTop:auto 钉在底部：
@@ -359,7 +360,7 @@ function ChatArea() {
             <Button type="primary" icon={<SendOutlined />} onClick={() => handleAsk()}
               loading={asking} disabled={!input.trim()} style={{ borderRadius: 10, height: 42, width: 42, flexShrink: isMobile ? 0 : undefined }} />
             {messages.length > 0 && (
-              <Button icon={<ReloadOutlined />} onClick={() => { setMessages([]); setOrbCorner(false); }}
+              <Button icon={<ReloadOutlined />} onClick={() => { setMessages([]); setChatOpen(false); }}
                 title="新对话" style={{ borderRadius: 10, height: 42, width: 42, flexShrink: isMobile ? 0 : undefined }} />
             )}
           </div>
