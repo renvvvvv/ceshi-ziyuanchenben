@@ -772,13 +772,16 @@ class SphereEngine {
     ctx.lineWidth = dark ? 0.4 : 0.5;
     ctx.strokeStyle = dark ? '#8f7fe8' : '#6366f1';
     const mouseActive = this.interactive && this.mouse.x > -999 && !this.mini;
+    // 进场门控：星图连线按球面成形后的邻居关系计算，散布飞入阶段画出来是满屏蛛网；
+    // 聚拢完成（粒子最晚 ~1.2s 到位）后 0.95~1.45s 淡入
+    const lineIntro = this.introEnabled ? clamp01((this.introT - 0.95) / 0.5) : 1;
     if (this.miniBlend < 0.985) for (let pI = 0; pI < this.pairs.length; pI += this.qLines) {
       const [i, j] = this.pairs[pI];
       const a = proj[i], b = proj[j];
       const depth = (a.persp + b.persp) / 2;
       if (depth < 0.9) continue;
       let alpha = (depth - 0.9) * (dark ? 0.30 : 0.16) * (1 - this.miniBlend)
-        * clamp01((R - 30) / 80);
+        * clamp01((R - 30) / 80) * lineIntro;
       if (mouseActive) {
         const mx = (a.sx + b.sx) / 2, my = (a.sy + b.sy) / 2;
         const d = Math.hypot(mx - this.mouse.x, my - this.mouse.y);
