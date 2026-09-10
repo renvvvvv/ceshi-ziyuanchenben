@@ -103,6 +103,7 @@ function ChatArea() {
   const heroMountedOnce = useRef(false);
   // SSE 生命周期：abort/超时/收缩定时器统一挂 ref，卸载与新对话时可取消（防泄漏与锁死输入）
   const abortRef = useRef<AbortController | null>(null);
+  const manualAbortRef = useRef(false); // 用户主动取消（新对话/卸载）与超时区分提示
   const askTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cornerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // 首挂载标记：effect 内置位（StrictMode 双渲染下渲染期写 ref 会导致 intro prop 两次取值不一致）
@@ -126,6 +127,7 @@ function ChatArea() {
 
   // 卸载清理：中止在途 SSE、清理定时器（防后台继续消费流 / 对已卸载组件 setState）
   useEffect(() => () => {
+    manualAbortRef.current = true;
     abortRef.current?.abort();
     if (askTimeoutRef.current) clearTimeout(askTimeoutRef.current);
     if (cornerTimerRef.current) clearTimeout(cornerTimerRef.current);
@@ -176,6 +178,7 @@ function ChatArea() {
     let firstToken = true;
 
     try {
+      manualAbortRef.current = false;
       const controller = new AbortController();
       abortRef.current = controller;
       const timeoutId = setTimeout(() => controller.abort(), 175000);
@@ -256,7 +259,8 @@ function ChatArea() {
         } : m));
       }
     } catch (err: any) {
-      if (err?.name === 'AbortError') message.warning('AI 回答超时（GLM-5.2 思考+联网搜索耗时较长），请稍后重试');
+      if (err?.name === 'AbortError' && !manualAbortRef.current) message.warning('AI 回答超时（GLM-5.2 思考+联网搜索耗时较长），请稍后重试');
+      else if (err?.name === 'AbortError' && manualAbortRef.current) { /* 用户主动取消，静默 */ }
       else message.error('问答请求失败，请确认后端服务正常');
     } finally {
       if (askTimeoutRef.current) { clearTimeout(askTimeoutRef.current); askTimeoutRef.current = null; }
@@ -366,7 +370,7 @@ function ChatArea() {
                   {asking ? `正在解答：${currentQuestion.slice(0, 40)}` : `对话进行中 · 第 ${messages.filter(m => m.role === 'user').length} 轮，可继续追问`}
                 </div>
               </div>
-              <Button size="small" icon={<ReloadOutlined />} onClick={() => { abortRef.current?.abort(); setMessages([]); setChatOpen(false); }}
+              <Button size="small" icon={<ReloadOutlined />} onClick={() => { manualAbortRef.current = true; abortRef.current?.abort(); if (cornerTimerRef.current) { clearTimeout(cornerTimerRef.current); cornerTimerRef.current = null; } setMessages([]); setChatOpen(false); }}
                 style={{ borderRadius: 8, borderColor: '#d9d5f0', color: '#6366f1', flex: 'none' }}>新对话</Button>
             </div>
             <div ref={listRef} className="retreat-list">
@@ -420,7 +424,7 @@ function ChatArea() {
             <Button type="primary" icon={<SendOutlined />} onClick={() => handleAsk()}
               loading={asking} disabled={!input.trim()} style={{ borderRadius: 10, height: 42, width: 42, flexShrink: isMobile ? 0 : undefined }} />
             {messages.length > 0 && (
-              <Button icon={<ReloadOutlined />} onClick={() => { abortRef.current?.abort(); setMessages([]); setChatOpen(false); }}
+              <Button icon={<ReloadOutlined />} onClick={() => { manualAbortRef.current = true; abortRef.current?.abort(); if (cornerTimerRef.current) { clearTimeout(cornerTimerRef.current); cornerTimerRef.current = null; } setMessages([]); setChatOpen(false); }}
                 title="新对话" style={{ borderRadius: 10, height: 42, width: 42, flexShrink: isMobile ? 0 : undefined }} />
             )}
           </div>

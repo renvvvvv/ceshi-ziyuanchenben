@@ -57,7 +57,7 @@ cd "${ROOT_DIR}"
 
 TARBALL="/tmp/deploy-platform-${USER}-$$.tar.gz"
 TARBALL_BASE="$(basename "$TARBALL")"
-tar --exclude='node_modules' --exclude='dist' --exclude='.git' \
+tar --exclude='node_modules' --exclude='dist' --exclude='.git' --exclude='backups' --exclude='._*' --exclude='.DS_Store' \
     --exclude='server/node_modules' --exclude='server/dist' \
     --exclude='server/data' --exclude='server/.env' \
     --exclude='.env' --exclude='__pycache__' \
@@ -86,11 +86,18 @@ docker compose down --remove-orphans 2>/dev/null || true
 tar xzf "/tmp/${TARBALL_BASE}"
 rm -f "/tmp/${TARBALL_BASE}"
 
-# 写入 .env
-cat > .env <<ENV
+# .env 保护：绝不覆盖服务器现有配置（历史事故：覆盖式写入曾抹掉 ZHIPU/FEISHU 等
+# 9 个变量并随机重置 DB_PASSWORD 导致后端起不来）。仅当 .env 不存在时生成初始文件；
+# 已存在时只提示，不做任何修改。
+if [ ! -f .env ]; then
+  cat > .env <<ENV
 DB_PASSWORD=${DB_PASSWORD}
 MINIMAX_API_KEY=${MINIMAX_API_KEY}
 ENV
+  echo "  已生成初始 .env"
+else
+  echo "  ⚠️ 检测到已有 .env，跳过写入（如需变更请手动编辑服务器 .env）"
+fi
 
 # 构建并启动
 echo "  构建镜像..."

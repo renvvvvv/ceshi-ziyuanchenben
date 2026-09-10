@@ -21,16 +21,21 @@ function lsSet(key: string, v: unknown) {
   try { localStorage.setItem(key, JSON.stringify(v)); } catch { /* 满/禁用 */ }
 }
 
-async function cloudPull(): Promise<Record<string, unknown> | null> {
+/**
+ * 拉取云端 store。
+ * 返回 null = 真实失败（网络/未登录），调用方应挂起推送；
+ * 返回 {} = 云端为空（新部署）——这是合法状态，推送允许（首次播种）。
+ * persist=false：只取数据不落盘（冲突合并时防止远端覆盖本地独有数据的落盘副本）。
+ */
+async function cloudPullRaw(persist = true): Promise<Record<string, unknown> | null> {
   if (!canEditCloud()) return null;
   try {
     const r = await fetch('/api/rc/store', { credentials: 'include' });
     if (!r.ok) return null;
-    const map = await r.json();
-    const keys = Object.keys(map || {}).filter(k => !k.startsWith('_'));
-    if (!keys.length) return null;
-    keys.forEach(k => lsSet(k, map[k]));
-    return map;
+    const map = (await r.json()) || {};
+    const keys = Object.keys(map).filter(k => !k.startsWith('_'));
+    if (persist) keys.forEach(k => lsSet(k, map[k]));
+    return keys.length ? map : {};
   } catch { return null; }
 }
 
@@ -50,27 +55,13 @@ export function useRcStore() {
   const deptRef = useRef(dept); deptRef.current = dept;
   const delivRef = useRef(delivered); delivRef.current = delivered;
 
-  // 启动：云端优先恢复
+  // 启动：云端优先恢复（空云 {} 也是成功——允许首次播种）
   useEffect(() => {
     (async () => {
-      const map = await cloudPull();
-      if (map) {
-        // 合并策略（防丢多端数据）：本地与云端都有内容时，保留项目数/库存数更多的一侧；
-        // 本地胜出时仍标记已拉取，下次编辑全量推送即完成"多者为准"的合并
-        const localCfg = lsGet<ProjectConfig>(LS_KEYS.config, { projects: {}, currentId: '' });
-        const remoteCfg = map[LS_KEYS.config] as ProjectConfig | undefined;
-        const localN = Object.keys(localCfg.projects || {}).length;
-        const remoteN = remoteCfg ? Object.keys(remoteCfg.projects || {}).length : 0;
-        if (remoteN >= localN) {
-          if (remoteCfg) setConfig(remoteCfg);
-          if (map[LS_KEYS.assets]) setAssets(map[LS_KEYS.assets] as RcAsset[]);
-          if (map[LS_KEYS.dept]) setDept(map[LS_KEYS.dept] as { members: RcDeptMember[] });
-          if (map[LS_KEYS.delivered]) setDelivered(map[LS_KEYS.delivered] as RcDelivered[]);
-        } else {
-          console.warn(`[rc-store] 本地 ${localN} 项目 > 云端 ${remoteN}，保留本地（下次编辑合并上云）`);
-        }
+      const map = await cloudPullRaw();
+      if (map !== null) {
+        mergeRemote(map);
         pulledRef.current = true;
-        versionsRef.current = (map._versions as Record<string, number>) || {};
         setCloud('ok');
       } else {
         setCloud('off');
@@ -79,18 +70,61 @@ export function useRcStore() {
     })();
   }, []);
 
+  /**
+   * 四键同口径合并（启动与冲突收敛共用）：每键独立比较条目数，多者为准；
+   * 远端胜出 → 采纳远端（state + 落盘）；本地胜出 → 保留本地（state 即本地，回写落盘防分叉）。
+   * 返回是否有本地胜出的键（调用方可据此立即重推收敛云端）。
+   */
+  const mergeRemote = (map: Record<string, unknown>): boolean => {
+    versionsRef.current = (map._versions as Record<string, number>) || versionsRef.current;
+    const count = (v: unknown, key: 'projects' | 'members' | 'length'): number => {
+      try {
+        if (key === 'projects') return Object.keys((v as any)?.projects || {}).length;
+        if (key === 'members') return ((v as any)?.members || []).length;
+        return Array.isArray(v) ? v.length : 0;
+      } catch { return 0; }
+    };
+    let localWon = false;
+    const pairs: [string, 'projects' | 'members' | 'length', any, (v: any) => void, any][] = [
+      [LS_KEYS.config, 'projects', cfgRef.current, setConfig, map[LS_KEYS.config]],
+      [LS_KEYS.assets, 'length', assetsRef.current, setAssets, map[LS_KEYS.assets]],
+      [LS_KEYS.dept, 'members', deptRef.current, setDept, map[LS_KEYS.dept]],
+      [LS_KEYS.delivered, 'length', delivRef.current, setDelivered, map[LS_KEYS.delivered]],
+    ];
+    for (const [key, dim, local, setter, remote] of pairs) {
+      if (remote === undefined) continue;
+      const ln = count(local, dim), rn = count(remote, dim);
+      if (rn > ln) {
+        setter(remote);
+        lsSet(key, remote);
+      } else if (ln > rn) {
+        localWon = true;
+        lsSet(key, local); // 落盘与 state 对齐（防 cloudPullRaw 已写远端副本导致关页丢本地）
+      }
+      // 相等：维持现状
+    }
+    return localWon;
+  };
+
   // 防抖云端推送（本地已即时落 localStorage）。
   // P0 防护：pull 从未成功（off）期间挂起推送——新设备/清缓存场景下本地为空，
   // 贸然全量推送会把云端清空；此期间编辑仅存本地，待 pull 成功后恢复推送
   const pulledRef = useRef(false);
   /** 乐观锁基线：pull 拿到各键云端版本，push 携带；版本不匹配服务端拒写（conflicts）后自动重拉合并 */
   const versionsRef = useRef<Record<string, number>>({});
+  const pushCloudRef = useRef<(() => void) | null>(null);
   const pushCloud = useCallback(() => {
     if (pushTimer.current) clearTimeout(pushTimer.current);
     pushTimer.current = window.setTimeout(async () => {
       if (!pulledRef.current) {
-        console.warn('[rc-store] 云端基线未确认，推送挂起（本地已保存）');
-        return;
+        // 基线未确认（启动 pull 失败）→ 先补一次 pull，成功则继续推送（自动恢复，不再永久挂起）
+        const map = await cloudPullRaw();
+        if (map === null) {
+          console.warn('[rc-store] 云端仍不可达，推送挂起（本地已保存，恢复后自动重试）');
+          return;
+        }
+        mergeRemote(map);
+        pulledRef.current = true;
       }
       setCloud('pushing');
       try {
@@ -108,19 +142,23 @@ export function useRcStore() {
           body: JSON.stringify(body),
         });
         if (r.status === 403) { setCloud('forbid'); return; }
-        // 乐观锁冲突：他人已先推送（版本前进）→ 重拉合并（多者为准），本地仍多则再推一轮收敛
         if (r.ok) {
           const data = await r.json().catch(() => ({}));
           if (data?._versions) versionsRef.current = { ...versionsRef.current, ...data._versions };
+          // 空覆盖防护拦截（云端保留数据）：明确提示，不静默
+          if (Array.isArray(data?.blocked) && data.blocked.length) {
+            console.warn('[rc-store] 云端拒绝空覆盖（保留较新数据）:', data.blocked);
+          }
+          // 乐观锁冲突：他人先推送 → 重拉（不落盘）→ 四键同口径合并 → 本地有胜出键则立即重推收敛
           if (Array.isArray(data?.conflicts) && data.conflicts.length) {
-            console.warn('[rc-store] 版本冲突，自动重拉合并:', data.conflicts);
-            const map2 = await cloudPull();
+            console.warn('[rc-store] 版本冲突，自动收敛:', data.conflicts);
+            const map2 = await cloudPullRaw(false);
             if (map2) {
-              versionsRef.current = (map2._versions as Record<string, number>) || versionsRef.current;
-              const rc = map2[LS_KEYS.config] as ProjectConfig | undefined;
-              const localN = Object.keys(cfgRef.current.projects || {}).length;
-              const remoteN = rc ? Object.keys(rc.projects || {}).length : 0;
-              if (remoteN > localN && rc) { setConfig(rc); lsSet(LS_KEYS.config, rc); }
+              const localWon = mergeRemote(map2);
+              if (localWon) {
+                // 本地有独有数据：以新基线立即重推一轮（原调用是一次性防抖，此处补推收敛云端）
+                setTimeout(() => { pushCloudRef.current?.(); }, 300);
+              }
             }
           }
           setCloud('ok');
@@ -137,6 +175,7 @@ export function useRcStore() {
       } catch { setCloud('off'); }
     }, 500);
   }, []);
+  pushCloudRef.current = pushCloud;
 
   // 多标签页同步：其他标签页写 localStorage 时同步本页 state（不触发推送，避免回环）
   useEffect(() => {
@@ -148,6 +187,10 @@ export function useRcStore() {
         else if (e.key === LS_KEYS.assets) setAssets(v as RcAsset[]);
         else if (e.key === LS_KEYS.dept) setDept(v as { members: RcDeptMember[] });
         else if (e.key === LS_KEYS.delivered) setDelivered(v as RcDelivered[]);
+        // 锁键变更：写入即触发页面刷新（页面 useState 只挂载读一次，这里补发一个自定义事件）
+        else if (String(e.key).endsWith('Lock_v1') || String(e.key).endsWith('EditPw_v1')) {
+          window.dispatchEvent(new CustomEvent('rc-lock-changed', { detail: e.key }));
+        }
       } catch { /* 忽略畸形 */ }
     };
     window.addEventListener('storage', onStorage);
@@ -195,20 +238,20 @@ export function useRcStore() {
       return true;
     } catch { return false; }
   }, []);
-  /** 解锁：服务端比对密码（云端未设密码则直接成功），成功后本地同步 */
-  const unlockLib = useCallback(async (key: string, password: string): Promise<boolean> => {
+  /** 解锁：服务端比对密码。返回 'ok' | 'wrong'（密码错）| 'error'（服务不可用），页面区分提示 */
+  const unlockLib = useCallback(async (key: string, password: string): Promise<'ok' | 'wrong' | 'error'> => {
     try {
       const r = await fetch('/api/rc/store/unlock', {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ key, password }),
       });
-      if (r.status === 401) return false;
-      if (!r.ok) return false;
+      if (r.status === 401) return 'wrong';
+      if (!r.ok) return 'error';
       const local: LockState = { locked: false, password: '' };
       lsSet(key, local);
-      return true;
-    } catch { return false; }
+      return 'ok';
+    } catch { return 'error'; }
   }, []);
 
   return {

@@ -4,7 +4,7 @@
  *  - 维护部门人员台账（姓名/职级/岗位/公司/电话/技能/备注），跨项目共享复用；
  *  - 锁定后整表只读；解锁需输入密码（密码为空则直接解锁）。
  */
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Alert, Button, Card, Input, Modal, Space, Tag, Typography, message } from 'antd';
 import { LockOutlined, TeamOutlined, UnlockOutlined } from '@ant-design/icons';
 import { useAuth } from '../../../store/AuthContext';
@@ -34,6 +34,15 @@ export default function DeptLibPage({ store }: { store: RcStore }) {
   const { canEdit } = useAuth();
   const editable = canEdit('resourceConfig');
   const [lock, setLockState] = useState<LockState>(() => store.getLock(LS_KEYS.deptLock));
+  // 跨标签页锁状态同步（其他标签页锁/解锁时本页即时刷新）
+  useEffect(() => {
+    const onLock = (e: Event) => {
+      const k = (e as CustomEvent).detail;
+      if (k === LS_KEYS.deptLock) setLockState(store.getLock(LS_KEYS.deptLock));
+    };
+    window.addEventListener('rc-lock-changed', onLock);
+    return () => window.removeEventListener('rc-lock-changed', onLock);
+  }, []);
   const [pwOpen, setPwOpen] = useState(false);
   const [pw1, setPw1] = useState('');
   const [pw2, setPw2] = useState('');
@@ -55,8 +64,9 @@ export default function DeptLibPage({ store }: { store: RcStore }) {
         </div>
       ),
       onOk: async () => {
-        const ok = await store.unlockLib(LS_KEYS.deptLock, pw.trim());
-        if (!ok) { message.error('密码错误'); return Promise.reject(new Error('密码错误')); }
+        const rv = await store.unlockLib(LS_KEYS.deptLock, pw.trim());
+        if (rv === 'wrong') { message.error('密码错误'); return Promise.reject(new Error('密码错误')); }
+        if (rv === 'error') { message.error('服务不可用，请稍后重试'); return Promise.reject(new Error('服务不可用')); }
         setLockState({ locked: false, password: '' });
         message.success('已解锁，可修改部门人员库');
       },

@@ -220,6 +220,7 @@ router.get('/learned', requireAuth, (_req, res) => {
  * 避免"AI 挂了但前端显示审核完成 0 错误"的误导。
  */
 async function callAiReview(apiKey: string, text: string): Promise<Array<{original: string; suggestion: string; context: string}>> {
+  const okBatches: { ok: number; total: number; why: any }[] = [];
   // 长文档分段（按段落切，每段 ≤ 3500 字）
   const chunks = splitText(text, 8000);
   // 并发调用：分批并行（每批 5 段同时调，避免触发限流）

@@ -13,8 +13,8 @@ export default defineConfig({
         changeOrigin: true,
         // Vite 的 http-proxy 超时控制在 proxyTimeout（毫秒），不是 timeout
         // GLM-5.2 审核长文档可能需要 30-60s，给 120s 余量
-        proxyTimeout: 120000,
-        timeout: 120000,
+        proxyTimeout: 185000,
+        timeout: 185000,
       },
     },
   },

@@ -20,7 +20,12 @@ mkdir -p "${TODAY_DIR}"
 
 # 2. PostgreSQL 数据库 dump（自定义格式，支持选择性恢复）
 echo "  → 备份 PostgreSQL 数据库..."
-docker exec "${PG_CONTAINER}" pg_dump -U "${DB_USER}" -d "${DB_NAME}" -Fc --no-owner --no-privileges > "${TODAY_DIR}/database.dump" 2>/dev/null
+docker exec "${PG_CONTAINER}" pg_dump -U "${DB_USER}" -d "${DB_NAME}" -Fc --no-owner --no-privileges > "${TODAY_DIR}/database.dump.tmp" 2>>"${BACKUP_DIR}/backup.log" || {
+  rm -f "${TODAY_DIR}/database.dump.tmp"
+  echo "[$(date +%H:%M:%S)] ⚠️⚠️ pg_dump 失败，本次备份无数据库快照！" >> "${BACKUP_DIR}/backup.log"
+  exit 1
+}
+mv "${TODAY_DIR}/database.dump.tmp" "${TODAY_DIR}/database.dump"
 DB_SIZE=$(du -h "${TODAY_DIR}/database.dump" | cut -f1)
 echo "    数据库备份完成: ${DB_SIZE}"
 
@@ -49,7 +54,20 @@ if [ -d "${PROJECT_DIR}/uploads/drawing" ]; then
     [ -f "${job}/JOB" ] || continue
     tgz="${ARCHIVE_DIR}/${jid}.tar.gz"
     if [ ! -f "${tgz}" ] || [ -n "$(find "${job}" -newer "${tgz}" -print -quit 2>/dev/null)" ]; then
-      tar czf "${tgz}.tmp" -C "${PROJECT_DIR}/uploads/drawing" "${jid}" && mv -f "${tgz}.tmp" "${tgz}"
+      # tar 单任务失败不中止整份备份（运行中任务 STATUS/log 变动会致 exit 1）：
+      # 清理 tmp、记录告警、继续其余任务；沿用旧归档保底
+      # 排障核心材料 pipeline.log/STATUS 尽量入档：已完成任务不排除；
+      # 运行中任务排除（tar 读变动文件会 exit 1）；file-changed 告警降级
+      RUNNING=""
+      if [ -f "${job}/STATUS" ] && ! grep -qE '"stage": *"(done|error)"' "${job}/STATUS" 2>/dev/null; then
+        RUNNING="--exclude=STATUS --exclude=pipeline.log"
+      fi
+      if ! tar czf "${tgz}.tmp" --warning=no-file-changed ${RUNNING} -C "${PROJECT_DIR}/uploads/drawing" "${jid}" 2>>"${BACKUP_DIR}/backup.log"; then
+        rm -f "${tgz}.tmp"
+        echo "  ⚠️ 图纸归档失败（保留旧档）: ${jid}" | tee -a "${BACKUP_DIR}/backup.log"
+      else
+        mv -f "${tgz}.tmp" "${tgz}"
+      fi
     fi
   done
   echo "    图纸归档完成: $(du -sh "${ARCHIVE_DIR}" | cut -f1)（$(ls "${ARCHIVE_DIR}" | wc -l) 个任务）"

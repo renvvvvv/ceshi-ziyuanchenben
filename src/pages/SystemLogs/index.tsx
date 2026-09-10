@@ -19,6 +19,7 @@ import { useAuth } from '../../store/AuthContext';
 interface SnapshotItem {
   id: string; title: string; hours: number; username: string;
   created_at: string; component_count: number; ai_at: string | null;
+  componentCount?: number; // POST /snapshot 即时响应字段（与列表的 component_count 对齐用）
 }
 interface ComponentLog { name: string; desc: string; lines: string }
 interface AiAnalysis {
@@ -40,8 +41,8 @@ const SEV_TAG: Record<string, { color: string; icon: React.ReactNode }> = {
 
 export default function SystemLogs() {
   const isMobile = useIsMobile();
-  const { user } = useAuth();
-  const canOperate = user?.role === '管理者' || user?.role === '编辑者';
+  const { canEdit } = useAuth();
+  const canOperate = canEdit('systemLogs'); // 走权限矩阵（含 manualPerms），与全站一致
   const [items, setItems] = useState<SnapshotItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [hours, setHours] = useState(6);
@@ -71,7 +72,7 @@ export default function SystemLogs() {
       const r = await request<{ success: boolean; snapshot: SnapshotItem; message?: string }>(
         '/syslogs/snapshot', { method: 'POST', body: JSON.stringify({ hours, title }), timeout: 60000 });
       if (r?.success) {
-        message.success(`快照已抓取（${r.snapshot.component_count} 个组件）`);
+        message.success(`快照已抓取（${r.snapshot.componentCount ?? '?'} 个组件）`);
         setTitle('');
         load();
       } else message.error(r?.message || '抓取失败');
@@ -80,6 +81,7 @@ export default function SystemLogs() {
   };
 
   const openDetail = async (id: string) => {
+    setDetail(null); // 防失败时残留上一个快照内容
     setDetailOpen(true); setDetailLoading(true); setActiveComp('');
     try {
       const r = await request<{ success: boolean; snapshot: SnapshotDetail }>(`/syslogs/${id}`);
@@ -93,12 +95,13 @@ export default function SystemLogs() {
 
   const analyze = async () => {
     if (!detail) return;
+    const targetId = detail.id; // 闭包捕获：响应到达时校验仍是这个快照（防结果串台）
     setAnalyzing(true);
     try {
       const r = await request<{ success: boolean; analysis?: AiAnalysis; message?: string }>(
-        `/syslogs/${detail.id}/analyze`, { method: 'POST', timeout: 180000 });
+        `/syslogs/${targetId}/analyze`, { method: 'POST', timeout: 180000 });
       if (r?.success && r.analysis) {
-        setDetail(prev => prev ? { ...prev, ai_analysis: r.analysis!, ai_model: 'glm-5.2' } : prev);
+        setDetail(prev => prev && prev.id === targetId ? { ...prev, ai_analysis: r.analysis!, ai_model: 'glm-5.2' } : prev);
         message.success('AI 解析完成');
       } else message.error(r?.message || 'AI 解析失败');
     } catch (e: any) { message.error(e?.message || 'AI 解析失败（可能超时）'); }
@@ -155,7 +158,7 @@ export default function SystemLogs() {
               disabled={!canOperate} onClick={capture}>抓取快照</Button>
           </Space>
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            聚合来源：后端运行日志（内存实时）· 容器日志（backend/frontend，宿主 30 分钟采集）· 图纸执行器 journal · 宿主资源（磁盘/内存）· 最近图纸任务管线日志 · 数据库健康。
+            聚合来源：后端运行日志（内存实时，按所选范围过滤）· 容器/执行器/宿主日志（宿主滚动采集，固定尾部行数）· 最近图纸任务管线日志 · 数据库健康。
             {!canOperate && <span style={{ color: '#d97706' }}> 当前角色仅可查看，抓取与 AI 解析需编辑者以上权限。</span>}
           </Typography.Text>
         </Space>

@@ -53,14 +53,24 @@ export function installLogRing() {
   console.log = (...a: unknown[]) => { ringPush('info', a); orig.log(...a); };
   console.warn = (...a: unknown[]) => { ringPush('warn', a); orig.warn(...a); };
   console.error = (...a: unknown[]) => { ringPush('error', a); orig.error(...a); };
-  // 进程异常也进 ring（崩溃前最后的话）
-  process.on('uncaughtException', e => ringPush('fatal', [`UncaughtException: ${e?.stack || e}`]));
+  // 进程异常也进 ring（崩溃前最后的话）。uncaughtException 记录后必须退出：
+  // 进程可能处于未定义状态（句柄泄漏/半途请求），带伤运行无自愈路径；
+  // Docker restart:unless-stopped 会拉起干净实例。rejection 仅记录（Node 官方允许）。
+  process.on('uncaughtException', e => {
+    ringPush('fatal', [`UncaughtException: ${e?.stack || e}`]);
+    // eslint-disable-next-line no-console
+    console.error('[fatal] uncaughtException, exiting:', e);
+    // 给 stdout 一点时间冲刷出 ring 里这行 fatal（供宿主采集与 docker logs 留痕）
+    setTimeout(() => process.exit(1), 150);
+  });
   process.on('unhandledRejection', r => ringPush('fatal', [`UnhandledRejection: ${r}`]));
 }
 
 function tailLines(text: string, n: number): string {
   const lines = text.split('\n');
-  return lines.slice(-n).join('\n');
+  let out = lines.slice(-n).join('\n');
+  if (out.length > 200000) out = out.slice(-200000); // 单组件 200KB 上限（防超长堆栈行撑爆 JSONB）
+  return out;
 }
 
 function readTail(path: string, n: number, hours: number): string | null {
@@ -214,9 +224,13 @@ router.post('/snapshot', requireAuth, requireRole(['管理者', '编辑者']), a
     `INSERT INTO sys_snapshots (id, title, hours, created_by, username, components)
      VALUES ($1,$2,$3,$4,$5,$6::jsonb)`,
     id, title, hours,
-    (req as any).user?.id ?? '', (req as any).user?.username ?? '',
+    (req as any).user?.userId ?? '', (req as any).user?.username ?? '',
     JSON.stringify(components)
   );
+  // 保留策略：仅保留最近 50 份快照（防编辑者反复抓取撑爆 DB）
+  await db.runAsync(
+    `DELETE FROM sys_snapshots WHERE id NOT IN (SELECT id FROM sys_snapshots ORDER BY created_at DESC LIMIT 50)`
+  ).catch(() => {});
   const rows = await db.allAsync(`SELECT id, title, hours, username, created_at FROM sys_snapshots WHERE id=$1`, id) as any[];
   res.json({ success: true, snapshot: { ...rows[0], componentCount: components.length } });
 }));
@@ -231,7 +245,7 @@ router.get('/', requireAuth, asyncH(async (_req, res) => {
 }));
 
 /** GET /api/syslogs/:id 快照详情 */
-router.get('/:id', requireAuth, asyncH(async (req, res) => {
+router.get('/:id', requireAuth, requireRole(['管理者', '编辑者']), asyncH(async (req, res) => {
   const { id } = req.params;
   if (!id.startsWith('snap-') || !validId(id)) { res.status(400).json({ success: false }); return; }
   const rows = await db.allAsync(`SELECT * FROM sys_snapshots WHERE id=$1`, id) as any[];
@@ -257,7 +271,7 @@ router.post('/:id/analyze', requireAuth, requireRole(['管理者', '编辑者'])
 }));
 
 /** GET /api/syslogs/:id/export 导出快照 JSON */
-router.get('/:id/export', requireAuth, asyncH(async (req, res) => {
+router.get('/:id/export', requireAuth, requireRole(['管理者', '编辑者']), asyncH(async (req, res) => {
   const { id } = req.params;
   if (!id.startsWith('snap-') || !validId(id)) { res.status(400).json({ success: false }); return; }
   const rows = await db.allAsync(`SELECT * FROM sys_snapshots WHERE id=$1`, id) as any[];

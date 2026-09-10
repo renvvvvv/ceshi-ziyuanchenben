@@ -109,7 +109,7 @@ router.post('/upload', requireAuth, requireRole(['管理者', '编辑者']), (re
     `INSERT INTO drawing_jobs (id, title, status, file_count, created_by, username)
      VALUES ($1,$2,'queued',$3,$4,$5)`,
     id, title, files.length,
-    (req as any).user?.id ?? '',
+    (req as any).user?.userId ?? '',
     (req as any).user?.username ?? (req as any).user?.name ?? ''
   );
   res.json({ success: true, jobId: id, fileCount: files.length });

@@ -8,7 +8,7 @@
  *       用于修改单条存档前校验，见 app.js L1022-1087）；平台版暂未提供存档编辑入口，
  *       密码体系简化为与资源库一致的锁定/解锁，后续实现存档编辑时再接入 deliveredPw。
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Alert, Button, Card, Descriptions, Input, Modal, Space, Statistic, Table, Tag, Tooltip, Typography, message } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { InboxOutlined, LockOutlined, UnlockOutlined } from '@ant-design/icons';
@@ -81,6 +81,15 @@ export default function DeliveredPage({ store }: { store: RcStore }) {
   const { canEdit } = useAuth();
   const editable = canEdit('resourceConfig');
   const [lock, setLockState] = useState<LockState>(() => store.getLock(LS_KEYS.deliveredLock));
+  // 跨标签页锁状态同步（其他标签页锁/解锁时本页即时刷新）
+  useEffect(() => {
+    const onLock = (e: Event) => {
+      const k = (e as CustomEvent).detail;
+      if (k === LS_KEYS.deliveredLock) setLockState(store.getLock(LS_KEYS.deliveredLock));
+    };
+    window.addEventListener('rc-lock-changed', onLock);
+    return () => window.removeEventListener('rc-lock-changed', onLock);
+  }, []);
   const [pwOpen, setPwOpen] = useState(false);
   const [pw1, setPw1] = useState('');
   const [pw2, setPw2] = useState('');
@@ -104,8 +113,9 @@ export default function DeliveredPage({ store }: { store: RcStore }) {
         </div>
       ),
       onOk: async () => {
-        const ok = await store.unlockLib(LS_KEYS.deliveredLock, pw.trim());
-        if (!ok) { message.error('密码错误'); return Promise.reject(new Error('密码错误')); }
+        const rv = await store.unlockLib(LS_KEYS.deliveredLock, pw.trim());
+        if (rv === 'wrong') { message.error('密码错误'); return Promise.reject(new Error('密码错误')); }
+        if (rv === 'error') { message.error('服务不可用，请稍后重试'); return Promise.reject(new Error('服务不可用')); }
         setLockState({ locked: false, password: '' });
         message.success('已解锁，可修改存档库');
       },

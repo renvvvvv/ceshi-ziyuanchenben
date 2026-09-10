@@ -120,7 +120,7 @@ app.get('/api/health/deep', async (_req, res) => {
 // 捕获所有路由漏出来的异常，统一返回 JSON（避免前端 fetch 拿到 HTML）
 // ============================================================
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  if (res.headersSent) return;
+  if (res.headersSent) { _next(err); return; } // 已发头：交 Express 默认处理销毁连接，防悬挂
   console.error('[Server] Unhandled error:', err);
   // PG 错误码 → 友好状态码
   if (err?.code === '23505') {

@@ -109,10 +109,9 @@ def run_job(job):
             pct = min(done_n / n_dwgs, 0.98)
             elapsed = time.time() - t0
             eta = max(0, int(elapsed * (1 - pct) / pct / 60)) + 1
-            if done_n == 0:
-                detail = 'ODA 批量转换中（该阶段无逐张进度，%d 张预计 %d 分钟）' % (n_dwgs, max(1, n_dwgs // 3))
-            else:
-                detail = '已完成 %d/%d 张（%d%%），预计还需约 %d 分钟' % (done_n, n_dwgs, int(pct*100), eta)
+            detail = '已完成 %d/%d 张（%d%%），预计还需约 %d 分钟' % (done_n, n_dwgs, int(pct * 100), eta)
+        elif n_dwgs:
+            detail = 'ODA 批量转换中（该阶段无逐张进度，%d 张预计约 %d 分钟）' % (n_dwgs, max(1, n_dwgs // 3))
         write_status(job, stage_from_log(out_dir), detail, tail(out_dir + '/pipeline.log'))
         time.sleep(5)
     dur = int((time.time() - t0) / 60)
