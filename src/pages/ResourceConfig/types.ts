@@ -60,5 +60,9 @@ export const LS_KEYS = {
   deliveredPw: 'testDeliveredEditPw_v1',
 } as const;
 
-export const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+export const uid = (): string => {
+  // crypto.randomUUID（122 bit）消除项目键碰撞覆盖风险；旧环境回退加长随机段
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID().replace(/-/g, '').slice(0, 20);
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 14);
+};
 export const num = (v: unknown): number => { const n = Number(v); return Number.isFinite(n) ? n : 0; };

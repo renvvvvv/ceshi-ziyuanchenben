@@ -89,7 +89,7 @@ export default function EditableTable<T extends Record<string, any>>({
       <Table
         size={size} bordered
         columns={cols} dataSource={rows}
-        rowKey={(_, i) => String(i)}
+        rowKey={(r: any, i) => String(r?.id ?? i)}
         pagination={false}
         scroll={{ x: minWidth }}
         footer={footer ? () => footer : undefined}

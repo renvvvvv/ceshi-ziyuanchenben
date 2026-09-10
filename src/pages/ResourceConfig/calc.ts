@@ -16,7 +16,7 @@ export function parseKw(s: unknown): number {
 /** 假负载自有/需租赁分配：总需求 = 数量 + 备用台数，load 按功率匹配、pdu 按名称匹配 */
 export function computeLoadAllocation(loads: RcLoad[], assets: RcAsset[]) {
   const stock = assets
-    .filter(a => (a.cat === 'load' || a.cat === 'pdu') && num(a.count) > 0)
+    .filter(a => (a.cat === 'load' || a.cat === 'pdu') && num(a.count) > 0 && String(a.name || '').trim())
     .map(a => ({ cat: a.cat, name: String(a.name || ''), kw: parseKw(a.spec), remain: num(a.count) }));
   return loads.map(r => {
     const need = num(r.count) + num(r.ratio);   // ratio 复用为「备用台数」
@@ -74,7 +74,8 @@ export function laborCalc(r: Partial<RcLabor> & { mode?: string; workers?: numbe
     return { workers, manDays: Math.round(workers * days * 10) / 10, daily: num(r.daily), qty };
   }
   // auto：强度（人/天产能）驱动 → 人数 = 数量 ÷ (强度×天数)
-  const daily = Math.max(0.0001, num(r.daily));
+  const daily = num(r.daily);
+  if (daily <= 0) return { workers: 0, manDays: 0, daily: 0, qty };  // 人效未填返回 0 而非天文数字
   const manDaysF = qty / daily;
   const workers = Math.max(0, Math.round(manDaysF / days));
   const manDays = Math.round(workers * days * 10) / 10;

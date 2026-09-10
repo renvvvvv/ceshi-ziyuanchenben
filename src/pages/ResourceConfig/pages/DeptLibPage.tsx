@@ -41,19 +41,10 @@ export default function DeptLibPage({ store }: { store: RcStore }) {
   const members = store.dept.members;
   const readonly = !editable || lock.locked;
 
-  const applyLock = (next: LockState) => {
-    store.setLock(LS_KEYS.deptLock, next);
-    setLockState(next);
-  };
 
-  /** 解锁：有密码则弹窗校验；密码为空直接解锁（原 unlockDeptLib 口径） */
+  /** 解锁：服务端比对密码（密码已不下发前端） */
   const doUnlock = () => {
     if (!lock.locked) return;
-    if (!lock.password) {
-      applyLock({ locked: false, password: '' });
-      message.success('已解锁，可修改部门人员库');
-      return;
-    }
     let pw = '';
     Modal.confirm({
       title: '解锁部门人员库',
@@ -63,23 +54,23 @@ export default function DeptLibPage({ store }: { store: RcStore }) {
           <Input.Password autoFocus placeholder="解锁密码" onChange={e => { pw = e.target.value; }} />
         </div>
       ),
-      onOk: () => {
-        if (pw.trim() !== lock.password) {
-          message.error('密码错误');
-          return Promise.reject(new Error('密码错误'));
-        }
-        applyLock({ locked: false, password: '' });
+      onOk: async () => {
+        const ok = await store.unlockLib(LS_KEYS.deptLock, pw.trim());
+        if (!ok) { message.error('密码错误'); return Promise.reject(new Error('密码错误')); }
+        setLockState({ locked: false, password: '' });
         message.success('已解锁，可修改部门人员库');
       },
     });
   };
 
-  /** 上锁：弹窗设置密码（至少 4 位，两次一致，原 lockDeptLib 口径） */
-  const confirmLock = () => {
+  /** 上锁：密码经服务端接口存储（本地与接口均不再暴露明文） */
+  const confirmLock = async () => {
     const p = pw1.trim();
     if (p.length < 4) { message.warning('密码至少 4 位'); return; }
     if (pw1 !== pw2) { message.warning('两次输入的密码不一致'); return; }
-    applyLock({ locked: true, password: p });
+    const ok = await store.lockLib(LS_KEYS.deptLock, p);
+    if (!ok) { message.error('锁定失败（云端不可达或无权限）'); return; }
+    setLockState({ locked: true, password: '' });
     setPwOpen(false);
     message.success('部门人员库已锁定，仅可查看');
   };

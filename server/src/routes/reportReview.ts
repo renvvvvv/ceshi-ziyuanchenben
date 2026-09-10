@@ -231,12 +231,19 @@ async function callAiReview(apiKey: string, text: string): Promise<Array<{origin
     const results = await Promise.allSettled(
       batch.map((chunk) => callMiniMaxOnce(apiKey, chunk))
     );
+    let okN = 0;
     for (const r of results) {
       if (r.status === 'fulfilled') {
+        okN++;
         out.push(...r.value);
       } else {
         console.warn('[ReportReview] 某段审核失败:', r.reason?.message || r.reason);
       }
+    }
+    // 全部段失败：抛错而非静默返回空（否则前端看到"审核完成、0 错误"的误导）
+    if (okN === 0 && results.length > 0) {
+      const why = (results.find(r => r.status === 'rejected') as PromiseRejectedResult)?.reason;
+      throw new Error(`AI 审核 ${results.length} 段全部失败：${why?.message || why || '未知错误'}`);
     }
   }
   return out;

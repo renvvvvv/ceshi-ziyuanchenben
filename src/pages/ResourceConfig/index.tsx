@@ -75,7 +75,7 @@ export default function ResourceConfig() {
           personnel: [], staff: [], subsidy: [], external: [],
           loads: [], instruments: [], consumables: [], labor: [], safety: [],
         };
-        store.updateConfig({ projects: { ...projects, [id]: p }, currentId: id });
+        store.updateConfig({ projects: { ...store.config.projects, [id]: p }, currentId: id });
         message.success('已创建项目：' + finalName);
       },
     });
@@ -89,7 +89,7 @@ export default function ResourceConfig() {
       onOk: () => {
         const id = uid();
         const p = { ...JSON.parse(JSON.stringify(cur)), id, name: name.trim() || cur.name + '（副本）' } as RcProject;
-        store.updateConfig({ projects: { ...projects, [id]: p }, currentId: id });
+        store.updateConfig({ projects: { ...store.config.projects, [id]: p }, currentId: id });
         message.success('已复制');
       },
     });

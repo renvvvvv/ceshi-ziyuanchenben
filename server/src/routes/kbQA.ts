@@ -422,6 +422,7 @@ async function callGLMChatStream(
   messages: ChatMessage[],
   onChunk: (data: { content?: string; reasoning?: string; done?: boolean }) => void,
   mode: QaMode = 'deep',
+  shouldAbort?: () => boolean,   // 客户端断开时提前中止上游流（防关页后继续烧 token）
 ): Promise<{ reasoning: string; webSearch: any[] | null; usage: { input: number; output: number } }> {
   const controller = new AbortController();
   // fast 模式通常 10s 内出全量结果，给 60s 余量；deep 含思考+联网搜索最长 150s
@@ -466,12 +467,14 @@ async function callGLMChatStream(
     let buffer = '';
     let fullReasoning = '';
     let webSearch: any[] | null = null;
+    let clientGone = false; // 客户端断开：停止消费上游流并中止请求
     // 用量统计：message_start 带输入 token，message_delta 末次带累计输出 token
     let usageIn = 0;
     let usageOut = 0;
     const narration = new ToolNarrationFilter();
 
     while (true) {
+      if (shouldAbort?.()) { clientGone = true; controller.abort(); break; }
       const { done, value } = await reader.read();
       if (done) break;
       buffer += decoder.decode(value, { stream: true });
@@ -791,6 +794,9 @@ router.post('/', requireAuth, async (req, res) => {
     res.flushHeaders?.();
 
     let streamEnded = false;
+    let clientGone = false;
+    // 客户端断开（关页/取消）：置位后 GLM 上游流提前中止，不再空烧 token
+    res.on('close', () => { clientGone = true; });
     const safeWrite = (payload: string): boolean => {
       if (streamEnded) return false;
       try {
@@ -831,6 +837,7 @@ router.post('/', requireAuth, async (req, res) => {
           // 注意：这里不再处理 chunk.done —— 改为 await 返回后统一处理
         },
         qaMode,
+        () => clientGone,
       );
 
       // 兜底：若 GLM 没产出 content（例如被内容安全拦截），给前端一个可见提示

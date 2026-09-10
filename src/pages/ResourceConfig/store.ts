@@ -70,6 +70,7 @@ export function useRcStore() {
           console.warn(`[rc-store] 本地 ${localN} 项目 > 云端 ${remoteN}，保留本地（下次编辑合并上云）`);
         }
         pulledRef.current = true;
+        versionsRef.current = (map._versions as Record<string, number>) || {};
         setCloud('ok');
       } else {
         setCloud('off');
@@ -82,6 +83,8 @@ export function useRcStore() {
   // P0 防护：pull 从未成功（off）期间挂起推送——新设备/清缓存场景下本地为空，
   // 贸然全量推送会把云端清空；此期间编辑仅存本地，待 pull 成功后恢复推送
   const pulledRef = useRef(false);
+  /** 乐观锁基线：pull 拿到各键云端版本，push 携带；版本不匹配服务端拒写（conflicts）后自动重拉合并 */
+  const versionsRef = useRef<Record<string, number>>({});
   const pushCloud = useCallback(() => {
     if (pushTimer.current) clearTimeout(pushTimer.current);
     pushTimer.current = window.setTimeout(async () => {
@@ -96,18 +99,33 @@ export function useRcStore() {
           [LS_KEYS.assets]: assetsRef.current,
           [LS_KEYS.dept]: deptRef.current,
           [LS_KEYS.delivered]: delivRef.current,
+          _baseVersion: versionsRef.current, // 乐观锁基线（服务端版本前进则拒写返 conflicts）
         };
-        // 锁定/密码键随主数据一并上云（多端锁定状态一致）
-        for (const k of [LS_KEYS.assetsLock, LS_KEYS.deptLock, LS_KEYS.deliveredLock, LS_KEYS.deliveredPw]) {
-          const raw = localStorage.getItem(k);
-          if (raw != null) { try { body[k] = JSON.parse(raw); } catch { body[k] = raw; } }
-        }
+        // 锁键不再随 bulk 上云：锁状态由服务端专用 lock/unlock 接口权威管理（防他端回滚）
         const r = await fetch('/api/rc/store/bulk', {
           method: 'POST', credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
         });
         if (r.status === 403) { setCloud('forbid'); return; }
+        // 乐观锁冲突：他人已先推送（版本前进）→ 重拉合并（多者为准），本地仍多则再推一轮收敛
+        if (r.ok) {
+          const data = await r.json().catch(() => ({}));
+          if (data?._versions) versionsRef.current = { ...versionsRef.current, ...data._versions };
+          if (Array.isArray(data?.conflicts) && data.conflicts.length) {
+            console.warn('[rc-store] 版本冲突，自动重拉合并:', data.conflicts);
+            const map2 = await cloudPull();
+            if (map2) {
+              versionsRef.current = (map2._versions as Record<string, number>) || versionsRef.current;
+              const rc = map2[LS_KEYS.config] as ProjectConfig | undefined;
+              const localN = Object.keys(cfgRef.current.projects || {}).length;
+              const remoteN = rc ? Object.keys(rc.projects || {}).length : 0;
+              if (remoteN > localN && rc) { setConfig(rc); lsSet(LS_KEYS.config, rc); }
+            }
+          }
+          setCloud('ok');
+          return;
+        }
         if (r.status === 409) {
           // 服务端空覆盖防护拦截（本地为空集而云端有数据）：禁止覆盖，提示刷新
           console.warn('[rc-store] 云端拒绝覆盖（409）：云端数据较新，请刷新页面获取');
@@ -163,12 +181,40 @@ export function useRcStore() {
   }, [updateConfig]);
 
   const getLock = useCallback((key: string): LockState => lsGet(key, { locked: false, password: '' }), []);
-  const setLock = useCallback((key: string, v: LockState) => { lsSet(key, v); pushCloud(); }, [pushCloud]);
+  /** 锁定：密码经专用接口存服务端（GET 脱敏不下发），本地只记 locked 状态 */
+  const lockLib = useCallback(async (key: string, password: string): Promise<boolean> => {
+    try {
+      const r = await fetch('/api/rc/store/lock', {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key, password }),
+      });
+      if (!r.ok) { console.warn('[rc-store] 锁定失败 HTTP', r.status); return false; }
+      const local: LockState = { locked: true, password: '' };
+      lsSet(key, local);
+      return true;
+    } catch { return false; }
+  }, []);
+  /** 解锁：服务端比对密码（云端未设密码则直接成功），成功后本地同步 */
+  const unlockLib = useCallback(async (key: string, password: string): Promise<boolean> => {
+    try {
+      const r = await fetch('/api/rc/store/unlock', {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key, password }),
+      });
+      if (r.status === 401) return false;
+      if (!r.ok) return false;
+      const local: LockState = { locked: false, password: '' };
+      lsSet(key, local);
+      return true;
+    } catch { return false; }
+  }, []);
 
   return {
     ready, cloud, config, assets, dept, delivered, currentProject,
     updateConfig, updateAssets, updateDept, updateDelivered, patchProject,
-    getLock, setLock, pushCloud,
+    getLock, lockLib, unlockLib, pushCloud,
   };
 }
 
