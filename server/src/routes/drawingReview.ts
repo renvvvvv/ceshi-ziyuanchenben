@@ -24,7 +24,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import db from '../database.js';
-import { requireAuth } from './auth.js';
+import { requireAuth, requireRole } from './auth.js';
 
 const router = Router();
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -64,8 +64,10 @@ interface Finding {
   evidence: string;
   suggestion: string;
   confidence: string;      // 高 | 中 | 低
-  status: string;          // 待复核 | AI已复核 | 人工已反馈 | 已解决 | 无需处理
+  status: string;          // 待复核 | AI已复核 | 人工已反馈 | 已修正 | 已解决 | 无需处理
   learning_ids?: string[]; // 本条引用了哪些历史经验（自学习记账）
+  /** 人工修正值（结构化）：复核时直接填写正确值，入学习库供管线回写 */
+  corrected_value?: string;
 }
 
 interface ReviewState {
@@ -103,13 +105,15 @@ function saveReview(id: string, review: ReviewState, history: any[]) {
 
 interface Learning {
   id: string;              // L1, L2…
-  kind: string;            // 映射确认 | 容量确认 | 版式说明 | 其他
+  kind: string;            // 映射确认 | 容量确认 | 版式说明 | 修正值 | 优化建议 | 其他
   content: string;         // 可复用的事实结论
   buildings: string[];     // 关联楼栋/项目标识（从任务标题提取，用于匹配后续任务）
   source_job: string;
   created_by: string;
   at: string;
   applied: number;         // 被后续复核引用次数
+  /** 结构化修正值（人工复核时逐条填写，管线回写消费）：如 {pattern:'F3-P3-T06', field:'ah', value:'1AH5'} */
+  correction?: { finding_id: string; sheet: string; row: string; problem: string; value: string };
 }
 
 const DATA_DIR = join(__dirname, '..', '..', '..', 'data');
@@ -554,5 +558,88 @@ async function runFeedback(id: string, req: Request, msg: string): Promise<{
   saveReview(id, updated, history);
   return { review: updated, responses: json.responses || [] };
 }
+
+// ============== 人工修正值 + 优化建议（精度闭环的生产端） ==============
+
+/** POST /api/drawing/jobs/:id/review/correct
+ *  人工复核逐条修正：直接填写正确值（如缺失的中压柜号、推定的容量）。
+ *  结构化入学习库（kind=修正值，confidence=高），管线回写按楼栋匹配自动应用。
+ */
+router.post('/jobs/:id/review/correct', requireAuth, requireRole(['管理者', '编辑者']), async (req, res) => {
+  const { id } = req.params;
+  if (!validId(id)) { res.status(400).json({ success: false }); return; }
+  const findingId = String(req.body?.findingId || '');
+  const value = String(req.body?.value || '').trim();
+  if (!findingId || !value || value.length > 200) {
+    res.status(400).json({ success: false, message: '需要 findingId 和修正值（≤200字）' }); return;
+  }
+  const { review, history } = loadReview(id);
+  if (!review) { res.status(400).json({ success: false, message: '请先发起一次 AI 复核' }); return; }
+  const f = review.findings.find(x => x.id === findingId);
+  if (!f) { res.status(404).json({ success: false, message: '疑点不存在' }); return; }
+
+  const username = (req as any).user?.username || '';
+  const at = new Date().toISOString();
+  // 更新疑点：修正值 + 状态
+  f.corrected_value = value;
+  f.status = '已修正';
+  // 学习库结构化条目（高置信：人工确认值）
+  const jobRows = await db.allAsync(`SELECT title FROM drawing_jobs WHERE id=$1`, id) as any[];
+  const jobTitle: string = jobRows[0]?.title || '';
+  const list = await withJobLock('__learnings__', async () => {
+    const l = loadLearnings();
+    l.push({
+      id: `L${l.length + 1}`, kind: '修正值',
+      content: `${f.sheet} ${f.row}：${f.problem.slice(0, 60)} → 正确值 ${value}`,
+      buildings: buildingKeys(jobTitle),
+      source_job: id, created_by: username, at, applied: 0,
+      correction: { finding_id: findingId, sheet: f.sheet, row: f.row, problem: f.problem.slice(0, 200), value },
+    });
+    saveLearnings(l);
+    return l;
+  });
+  history.push({ role: 'human', kind: 'correct', at, by: username, finding: findingId, value });
+  saveReview(id, review, history);
+  res.json({ success: true, review, learnings: list.slice(-200) });
+});
+
+/** POST /api/drawing/jobs/:id/review/suggest
+ *  管线优化建议：版式问题/识别缺陷/改进想法，进建议库供规则迭代消费。
+ */
+router.post('/jobs/:id/review/suggest', requireAuth, async (req, res) => {
+  const { id } = req.params;
+  if (!validId(id)) { res.status(400).json({ success: false }); return; }
+  const msg = String(req.body?.message || '').trim();
+  if (!msg || msg.length > 1000) { res.status(400).json({ success: false, message: '建议内容不能为空（≤1000字）' }); return; }
+  const username = (req as any).user?.username || '';
+  const jobRows = await db.allAsync(`SELECT title FROM drawing_jobs WHERE id=$1`, id) as any[];
+  const jobTitle: string = jobRows[0]?.title || '';
+  const SUG_FILE = join(DATA_DIR, 'drawing-suggestions.json');
+  const list = await withJobLock('__suggestions__', async () => {
+    let arr: any[] = [];
+    try { arr = JSON.parse(readFileSync(SUG_FILE, 'utf8')); } catch {}
+    arr.push({
+      id: `G${arr.length + 1}`, message: msg, job: id, title: jobTitle,
+      buildings: buildingKeys(jobTitle), by: username, at: new Date().toISOString(),
+      status: '待处理', // 待处理 | 已采纳 | 已解决
+    });
+    try { writeFileSync(SUG_FILE, JSON.stringify(arr, null, 2)); } catch (e: any) { console.warn('[drawingReview] 建议库写入失败:', e?.message); }
+    return arr;
+  });
+  // 历史也记一笔
+  const { review, history } = loadReview(id);
+  history.push({ role: 'human', kind: 'suggest', at: new Date().toISOString(), by: username, message: msg });
+  if (review) saveReview(id, review, history);
+  res.json({ success: true, suggestions: list });
+});
+
+/** GET /api/drawing/jobs/:id/review/suggestions 本任务建议（列表页用） */
+
+/** GET /api/drawing/suggestions 全局建议库汇总（精度迭代看板） */
+router.get('/suggestions', requireAuth, async (_req, res) => {
+  const SUG_FILE = join(DATA_DIR, 'drawing-suggestions.json');
+  try { res.json({ success: true, suggestions: JSON.parse(readFileSync(SUG_FILE, 'utf8')) }); }
+  catch { res.json({ success: true, suggestions: [] }); }
+});
 
 export default router;

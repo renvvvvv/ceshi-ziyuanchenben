@@ -31,6 +31,7 @@ interface ReviewFinding {
   sheet: string; row: string; problem: string; evidence: string;
   suggestion: string; confidence: string; status: string;
   learning_ids?: string[];
+  corrected_value?: string;  // 人工修正值（结构化，入学习库供管线回写）
 }
 interface ReviewState {
   model: string; updated_at: string; findings: ReviewFinding[];
@@ -85,6 +86,12 @@ export default function DrawingPipeline() {
   const [reviewing, setReviewing] = useState(false);       // AI 复核进行中
   const [feedbackText, setFeedbackText] = useState('');
   const [feedbackSending, setFeedbackSending] = useState(false);
+  // 人工修正值（findingId → value）与优化建议
+  const [corrections, setCorrections] = useState<Record<string, string>>({});
+  const [correctingId, setCorrectingId] = useState<string | null>(null);
+  const [suggestText, setSuggestText] = useState('');
+  const [suggestSending, setSuggestSending] = useState(false);
+  const [suggestions, setSuggestions] = useState<any[]>([]);
   const pollRef = useRef<number | null>(null);
 
   const loadJobs = useCallback(async () => {
@@ -161,7 +168,7 @@ export default function DrawingPipeline() {
 
   const openDetail = async (id: string) => {
     setSheetData(null);
-    setReview(null); setReviewHistory([]); setLearnings([]); setFeedbackText('');
+    setReview(null); setReviewHistory([]); setLearnings([]); setFeedbackText(''); setCorrections({}); setSuggestText(''); setSuggestions([]);
     setDetailOpen(true);
     try {
       const r = await request<any>(`/drawing/jobs/${id}`);
@@ -237,6 +244,46 @@ export default function DrawingPipeline() {
       } else { message.error(r?.message || '反馈失败'); }
     } catch (e: any) { message.error(e?.message || '反馈失败（可能超时，请重试）'); }
     finally { setFeedbackSending(false); }
+  };
+
+  /** 逐条修正：缺失/推定疑点直接填正确值，结构化入学习库（管线回写消费） */
+  const submitCorrection = async (findingId: string) => {
+    const value = (corrections[findingId] || '').trim();
+    if (!value) { message.warning('请先填写修正值'); return; }
+    setCorrectingId(findingId);
+    try {
+      const r = await request<any>(`/drawing/jobs/${detail.id}/review/correct`, {
+        method: 'POST', body: JSON.stringify({ findingId, value }), timeout: 60000,
+      });
+      if (r?.review) {
+        setReview(r.review);
+        if (r.learnings) setLearnings(r.learnings);
+        setCorrections(prev => { const n = { ...prev }; delete n[findingId]; return n; });
+        message.success('修正已记录（高置信入学习库，下次同楼栋自动应用）');
+        try {
+          const rv = await request<any>(`/drawing/jobs/${detail.id}/review`);
+          if (rv?.history) setReviewHistory(rv.history);
+        } catch { /* */ }
+      } else message.error(r?.message || '提交修正失败');
+    } catch (e: any) { message.error(e?.message || '提交修正失败'); }
+    finally { setCorrectingId(null); }
+  };
+
+  /** 优化建议：给管线迭代的线索（版式问题/识别缺陷/改进想法） */
+  const submitSuggestion = async () => {
+    if (!suggestText.trim()) { message.warning('请先填写建议内容'); return; }
+    setSuggestSending(true);
+    try {
+      const r = await request<any>(`/drawing/jobs/${detail.id}/review/suggest`, {
+        method: 'POST', body: JSON.stringify({ message: suggestText.trim() }), timeout: 60000,
+      });
+      if (r?.suggestions) {
+        setSuggestions(r.suggestions);
+        setSuggestText('');
+        message.success('建议已入库（供规则迭代参考）');
+      } else message.error(r?.message || '提交失败');
+    } catch (e: any) { message.error(e?.message || '提交失败'); }
+    finally { setSuggestSending(false); }
   };
 
   const handleDelete = async (id: string) => {
@@ -499,6 +546,28 @@ export default function DrawingPipeline() {
                                   <span style={{ color: '#6b6892', fontSize: 12 }}>（来自自学习库的人工反馈结论）</span>
                                 </div>
                               ) : null}
+                              {/* 人工修正值输入：缺失/推定类疑点有明确正确值可填，高置信入学习库 */}
+                              {(f.type === '缺失' || f.type === '推定') && f.status !== '已修正' && (
+                                <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                                  <Input
+                                    size="small" style={{ width: 260 }} placeholder="填写正确值（如 1AH5 / 500kVA）"
+                                    value={corrections[f.id] || ''}
+                                    onChange={e => setCorrections(prev => ({ ...prev, [f.id]: e.target.value }))}
+                                    onPressEnter={() => submitCorrection(f.id)}
+                                  />
+                                  <Button size="small" type="primary" loading={correctingId === f.id}
+                                    disabled={!(corrections[f.id] || '').trim()}
+                                    onClick={() => submitCorrection(f.id)}>提交修正</Button>
+                                  <span style={{ color: '#16a34a', fontSize: 12 }}>一次确认，同楼栋终身自动应用</span>
+                                </div>
+                              )}
+                              {f.status === '已修正' && f.corrected_value && (
+                                <div style={{ marginTop: 6 }}>
+                                  <Tag color="success" style={{ margin: 0 }}>已修正</Tag>
+                                  {' '}<b style={{ color: '#16a34a' }}>{f.corrected_value}</b>
+                                  <span style={{ color: '#6b6892', fontSize: 12 }}>（已入学习库，管线将自动应用）</span>
+                                </div>
+                              )}
                             </div>
                           ),
                         }}
@@ -517,7 +586,7 @@ export default function DrawingPipeline() {
                             render: (v: string) => <Tag style={{ margin: 0 }}>{v === 'scan' ? '预扫描' : 'AI'}</Tag> },
                           { title: '状态', dataIndex: 'status', width: 96,
                             render: (v: string) => <Tag style={{ margin: 0 }}
-                              color={v === '已解决' ? 'success' : v === '人工已反馈' ? 'purple' : 'default'}>{v}</Tag> },
+                              color={v === '已修正' ? 'success' : v === '已解决' ? 'success' : v === '人工已反馈' ? 'purple' : 'default'}>{v}</Tag> },
                         ]}
                       />
                       {/* 人工反馈 → AI 重核 */}
@@ -536,6 +605,22 @@ export default function DrawingPipeline() {
                           loading={feedbackSending} onClick={sendFeedback}
                           disabled={!feedbackText.trim()}>
                           提交反馈并让 AI 重新复核
+                        </Button>
+                      </div>
+                      {/* 优化建议通道：给管线迭代的线索（区别于上面的纠错反馈） */}
+                      <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px dashed #e8e6f0' }}>
+                        <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 6 }}>
+                          💡 管线优化建议（版式问题 / 识别缺陷 / 改进想法——供规则迭代参考，与上面的纠错反馈互补）
+                        </Typography.Text>
+                        <Input.TextArea
+                          value={suggestText} onChange={e => setSuggestText(e.target.value)}
+                          placeholder="例：这种版式的柴发标签是竖排的，识别不到；变压器容量应优先看设备表；建议增加 XX 表的识别…"
+                          autoSize={{ minRows: 1, maxRows: 3 }} maxLength={1000}
+                        />
+                        <Button size="small" icon={<BulbOutlined />} style={{ marginTop: 8 }}
+                          loading={suggestSending} onClick={submitSuggestion}
+                          disabled={!suggestText.trim()}>
+                          提交优化建议
                         </Button>
                       </div>
                       {/* 复核历史 */}
@@ -586,6 +671,9 @@ export default function DrawingPipeline() {
                               <Space size={6}>
                                 <BulbOutlined style={{ color: '#f59e0b' }} />
                                 <span>自学习库（{learnings.length} 条经验，复核时自动复用）</span>
+                                {learnings.filter(l => l.kind === '修正值').length > 0 && (
+                                  <Tag color="success" style={{ margin: 0 }}>人工修正 {learnings.filter(l => l.kind === '修正值').length} 条</Tag>
+                                )}
                               </Space>
                             ),
                             children: (
