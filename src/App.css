@@ -1614,13 +1614,11 @@ body {
 }
 /* 英雄位画布铺满整个页面区域：裂变/涟漪不再被旧 640x420 画布矩形裁切。
    球体尺寸与位置由引擎 maxRadius/anchorY 钉在原英雄位几何（视觉与既版一致） */
+/* morph 全部由引擎飞行完成（画布盒子不动画）：hero/corner 切换瞬时、零画布重分配 */
 .orb-hero {
   left: 0; top: 0;
   width: 100%; height: 100%;
   transform: none;
-  transition: left 1.05s cubic-bezier(.4,.06,.14,1), top 1.05s cubic-bezier(.4,.06,.14,1),
-              width 1.05s cubic-bezier(.4,.06,.14,1), height 1.05s cubic-bezier(.4,.06,.14,1),
-              transform 1.05s cubic-bezier(.4,.06,.14,1);
 }
 /* 退位回答模式：球按原版过渡形式缩小飞向左上角常驻（orb-corner），
    对话在右侧毛玻璃卡承接，多轮追问同屏连续 */
@@ -1628,23 +1626,25 @@ body {
   left: 16px; top: 10px;
   width: 56px; height: 56px;
   transform: none;
-  transition: left 1.05s cubic-bezier(.4,.06,.14,1), top 1.05s cubic-bezier(.4,.06,.14,1),
-              width 1.05s cubic-bezier(.4,.06,.14,1), height 1.05s cubic-bezier(.4,.06,.14,1),
-              transform 1.05s cubic-bezier(.4,.06,.14,1);
 }
-/* 退位对话卡：整屏毛玻璃卡（左上角小球浮于卡上，同原版视觉），多轮追问同屏连续 */
+/* 退位对话卡：多轮追问同屏连续。基础态不启用 backdrop-filter（球体飞行期间
+   全屏 blur 叠加动画画布会拖垮合成器），落地稳定后 .glassed 渐入毛玻璃 */
 .retreat-card {
   position: absolute;
   top: 8px; left: 16px; right: 16px; bottom: 8px;
   z-index: 3; /* 低于 orb-layer(4)：角落小球压在卡上 */
   display: flex; flex-direction: column;
-  background: rgba(255,255,255,.78);
-  backdrop-filter: blur(18px) saturate(1.35);
-  -webkit-backdrop-filter: blur(18px) saturate(1.35);
+  background: rgba(255,255,255,.93);
   border: 1px solid rgba(228,224,247,.9);
   border-radius: 18px;
   box-shadow: 0 24px 64px rgba(80,70,170,.16);
   overflow: hidden;
+  transition: background .6s ease;
+}
+.retreat-card.glassed {
+  background: rgba(255,255,255,.78);
+  backdrop-filter: blur(18px) saturate(1.35);
+  -webkit-backdrop-filter: blur(18px) saturate(1.35);
 }
 .retreat-list { flex: 1; min-height: 0; overflow-y: auto; padding: 0 8px; }
 .retreat-list::-webkit-scrollbar { width: 6px; }

@@ -26,6 +26,8 @@ export interface ParticleSphereHandle {
   absorbText: (text: string) => void;
   /** 全屏入场用：钉住球心/半径（画布非球体几何时）；null 还原为画布自身居中 */
   setViewBox: (vb: { cx: number; cy: number; r: number } | null) => void;
+  /** 球体飞行（morph 用）：画布盒子不动，几何缓动飞向目标；null 结束飞行 */
+  flyTo: (vb: { cx: number; cy: number; r: number } | null) => void;
 }
 
 export interface ParticleSphereProps {
@@ -231,6 +233,9 @@ class SphereEngine {
   private dCx = 0; private dCy = 0; private dR = 0;
   /** mini 渐变：跨过小尺寸阈值时连线淡出/粒子样式平滑过渡，不再硬切 */
   private miniBlend = 0;
+  /** 飞行目标（morph 用）：画布盒子全程不动，球体几何逐帧缓动飞向目标；
+      与 CSS 盒子动画相比零画布重分配，彻底消除收缩顿挫 */
+  flyT: { cx: number; cy: number; r: number } | null = null;
   private rotY = Math.random() * Math.PI * 2;
   private rotX = 0.3;
   private t = 0;
@@ -419,15 +424,28 @@ class SphereEngine {
 
   setViewBox(vb: { cx: number; cy: number; r: number } | null) { this.vb = vb; }
 
+  /** 球体飞行到指定几何（画布不动，纯引擎动画）；null 结束飞行回归画布几何 */
+  flyTo(vb: { cx: number; cy: number; r: number } | null) {
+    this.flyT = vb;
+    if (!vb) this.fadeConns();
+  }
+
   private project() {
     const { w, h } = this;
-    const Rt = this.vb ? this.vb.r
-      : Math.min(Math.min(w, h) * (this.kbLine ? 0.33 : 0.42), this.mini ? Infinity : this.maxR);
-    const cxT = this.vb ? this.vb.cx : w / 2;
-    const cyT = this.vb ? this.vb.cy : (this.kbLine && !this.mini ? h * this.anchorY : h / 2);
-    // 插帧：morph 期间画布尺寸随 CSS 过渡逐帧变化，球体几何按 rAF 逐帧缓动跟随，
-    // 与量化缓冲重分配解耦，消除步进顿挫；引擎重建等大跳变直接贴齐
-    if (!this.dR || Math.abs(Rt - this.dR) > Rt * 1.6) {
+    const Rt = this.flyT ? this.flyT.r
+      : this.vb ? this.vb.r
+        : Math.min(Math.min(w, h) * (this.kbLine ? 0.33 : 0.42), this.mini ? Infinity : this.maxR);
+    const cxT = this.flyT ? this.flyT.cx : this.vb ? this.vb.cx : w / 2;
+    const cyT = this.flyT ? this.flyT.cy : this.vb ? this.vb.cy : (this.kbLine && !this.mini ? h * this.anchorY : h / 2);
+    // 插帧：morph 期间画布盒子不动（零重分配），球体几何按 rAF 逐帧缓动飞向目标；
+    // 飞行期用更慢的系数（~1.1s 收敛）营造从容滑翔；引擎重建等大跳变直接贴齐；
+    // mini（角落常驻）始终硬贴盒心，落地瞬间无缝
+    if (this.flyT) {
+      const k = this.reduceMotion ? 1 : 0.055;
+      this.dCx += (cxT - this.dCx) * k;
+      this.dCy += (cyT - this.dCy) * k;
+      this.dR += (Rt - this.dR) * k;
+    } else if (!this.dR || Math.abs(Rt - this.dR) > Rt * 1.6 || this.mini) {
       this.dCx = cxT; this.dCy = cyT; this.dR = Rt;
     } else {
       const k = this.reduceMotion ? 1 : 0.2;
@@ -759,7 +777,8 @@ class SphereEngine {
       const a = proj[i], b = proj[j];
       const depth = (a.persp + b.persp) / 2;
       if (depth < 0.9) continue;
-      let alpha = (depth - 0.9) * (dark ? 0.30 : 0.16) * (1 - this.miniBlend);
+      let alpha = (depth - 0.9) * (dark ? 0.30 : 0.16) * (1 - this.miniBlend)
+        * clamp01((R - 30) / 80);
       if (mouseActive) {
         const mx = (a.sx + b.sx) / 2, my = (a.sy + b.sy) / 2;
         const d = Math.hypot(mx - this.mouse.x, my - this.mouse.y);
@@ -981,6 +1000,7 @@ const ParticleSphere = forwardRef<ParticleSphereHandle, ParticleSphereProps>(fun
   useImperativeHandle(ref, () => ({
     absorbText: (text: string) => engineRef.current?.absorbText(text),
     setViewBox: (vb: { cx: number; cy: number; r: number } | null) => engineRef.current?.setViewBox(vb),
+    flyTo: (vb: { cx: number; cy: number; r: number } | null) => engineRef.current?.flyTo(vb),
   }), []);
 
   return (

@@ -107,12 +107,42 @@ function ChatArea() {
   const [introVB, setIntroVB] = useState<{ cx: number; cy: number; r: number } | null>(null);
   // 英雄位画布铺满页面后的球体几何钉位（半径上限；裂变不再被旧 640x420 画布裁切）
   const [heroRCap, setHeroRCap] = useState(140);
+  // 收缩 morph：球体引擎飞行期间画布保持全屏（orb-hero），落地后才切角落盒（orb-corner）
+  const [orbLanded, setOrbLanded] = useState(false);
+  // 对话卡毛玻璃延迟启用：飞行期间禁 blur（全屏 backdrop-filter 叠加动画画布是卡顿大户）
+  const [cardGlass, setCardGlass] = useState(false);
   const introPlayingRef = useRef(true);
   const pageRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight;
   }, [messages, asking]);
+
+  // ===== 收缩/回位 morph 编排（画布盒子不动，球体引擎飞行）=====
+  // 去程：chatOpen 置位 → 球飞向左上角（~1.1s 缓动）→ 落地切 56px 角落盒（几何无缝）
+  // 回程：先钉在角落坐标一帧再解除，球自角落生长飞回英雄位（无跳变）
+  const cornerVB = useCallback(() => {
+    const mob = isMobile;
+    const sz = mob ? 44 : 56;
+    const off = mob ? { x: 10, y: 8 } : { x: 16, y: 10 };
+    return { cx: off.x + sz / 2, cy: off.y + sz / 2, r: sz * 0.33 };
+  }, [isMobile]);
+  const wasChat = useRef(false); // 初始挂载不执行回程钉帧（避免覆盖入场 vb 造成跳变）
+  useEffect(() => {
+    if (chatOpen) {
+      wasChat.current = true;
+      heroRef.current?.flyTo(cornerVB());
+      const t1 = setTimeout(() => { setOrbLanded(true); heroRef.current?.flyTo(null); }, 1250);
+      const t2 = setTimeout(() => setCardGlass(true), 1500);
+      return () => { clearTimeout(t1); clearTimeout(t2); };
+    }
+    setOrbLanded(false);
+    setCardGlass(false);
+    if (!wasChat.current) return;
+    heroRef.current?.flyTo(cornerVB());
+    const raf = requestAnimationFrame(() => requestAnimationFrame(() => heroRef.current?.flyTo(null)));
+    return () => cancelAnimationFrame(raf);
+  }, [chatOpen, cornerVB]);
 
   const handleAsk = useCallback(async (questionText?: string) => {
     const question = (questionText ?? input).trim();
@@ -258,7 +288,7 @@ function ChatArea() {
           → orb-hero 居中 ↔ orb-corner 左上角，CSS morph + 引擎实时自适应 */}
       {(() => {
         const orbNode = (
-          <div className={`orb-layer ${introPlaying ? 'orb-intro' : chatOpen ? 'orb-corner' : 'orb-hero'}`}>
+          <div className={`orb-layer ${introPlaying ? 'orb-intro' : (chatOpen && orbLanded) ? 'orb-corner' : 'orb-hero'}`}>
             <ParticleSphere
               ref={heroRef}
               width="100%" height="100%"
@@ -299,7 +329,7 @@ function ChatArea() {
       ) : (
         /* 退位回答层：球按原版形式缩小至左上角常驻（orb-corner），右侧毛玻璃对话卡承接多轮追问 */
         <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
-          <div className="retreat-card">
+          <div className={`retreat-card${cardGlass ? ' glassed' : ''}`}>
             <div style={{
               display: 'flex', alignItems: 'center', gap: 10,
               /* 左侧留出左上角小球位置（桌面 88px / 移动 66px），同原版头部条 */
