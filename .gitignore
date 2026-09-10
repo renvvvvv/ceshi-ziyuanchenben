@@ -21,3 +21,7 @@ data/platform.db
 
 # 服务器数据备份（手动同步，不入库）
 backups/
+# Playwright E2E 产物
+test-results/
+e2e-report/
+playwright-report/

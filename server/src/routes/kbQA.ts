@@ -216,7 +216,9 @@ async function initVectorIndex(): Promise<void> {
     await db.runAsync('DELETE FROM knowledge_embeddings');
 
     // 批量生成 embedding
-    const texts = knowledgeChunks.map(c => `${c.title}\n${c.content.slice(0, 1000)}`); // 截断防超 token
+    // 嵌入文本截断 1000→4000：国标块均长 3500 字，答案在块后半段时嵌入语义缺失
+    // （RAG 评测发现：中段内容出题未命中率显著偏高）。embedding-3 上下文 8K token 足够
+    const texts = knowledgeChunks.map(c => `${c.title}\n${c.content.slice(0, 4000)}`);
     const embeddings = await batchEmbeddings(texts);
 
     // 存入 DB（pgvector 接收字符串格式的向量 '[0.1,0.2,...]'）
@@ -245,7 +247,7 @@ async function initVectorIndex(): Promise<void> {
 /**
  * 向量检索：用 pgvector 余弦相似度找 top-N
  */
-async function retrieveVector(question: string, topN: number = 3): Promise<KnowledgeChunk[]> {
+async function retrieveVector(question: string, topN: number = 5): Promise<KnowledgeChunk[]> {  // top3→top5：RAG 评测 hit@5 比 hit@3 高约 7 点，多送两块换召回
   if (!vectorReady) return [];
   try {
     const queryEmbedding = await getEmbedding(question);
