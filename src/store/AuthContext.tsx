@@ -228,9 +228,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [authState.user, permissionConfigs]);
 
   // 权限检查函数
+  // 故障日志模块白名单：仅指定账号可见（菜单/路由守卫统一生效），其余账号一律不可见
+  const SYSLOGS_ALLOW = new Set(['admin', 'feishu:ou_7348974a528b91d389705f2b0e849623']);
   const canView = useCallback(
-    (module: AppModule) => !!permissionMap[module]?.view,
-    [permissionMap]
+    (module: AppModule) => {
+      if (module === 'systemLogs' && !SYSLOGS_ALLOW.has(authState.user?.username || '')) return false;
+      return !!permissionMap[module]?.view;
+    },
+    [permissionMap, authState.user?.username]
   );
   const canEdit = useCallback(
     (module: AppModule) => !!permissionMap[module]?.edit,

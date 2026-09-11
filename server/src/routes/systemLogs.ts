@@ -32,6 +32,18 @@ const asyncH = (fn: (req: Request, res: Response, next: NextFunction) => Promise
 const ID_RE = /^[a-z0-9-]+$/;
 function validId(id: string): boolean { return ID_RE.test(id) && id.length >= 6 && id.length <= 64; }
 
+/** 故障日志模块账号白名单：仅 admin 与指定飞书账号（王家晟）可访问，其余一律 403 */
+const SYSLOGS_ALLOW = new Set(['admin', 'feishu:ou_7348974a528b91d389705f2b0e849623']);
+function requireSyslogsUser(req: Request, res: Response, next: NextFunction) {
+  const u = (req as any).user?.username as string | undefined;
+  if (!u || !SYSLOGS_ALLOW.has(u)) {
+    res.status(403).json({ success: false, message: '无权访问故障日志模块' });
+    return;
+  }
+  next();
+}
+router.use(requireSyslogsUser); // 挂在本模块所有路由前
+
 // ============== 后端运行日志 ring buffer（console 拦截） ==============
 
 interface LogLine { t: string; level: string; msg: string }

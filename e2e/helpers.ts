@@ -4,7 +4,7 @@ import { test as base, expect, type Page } from '@playwright/test';
  * 登录辅助：走 API 登录（绕开 UI 登录页的折叠面板交互），
  * cookie 会随 context 自动带到后续页面请求。
  */
-export const TEST_ADMIN = { username: 'admin', password: 'admin123' };
+export const TEST_ADMIN = { username: 'admin', password: 'admin111' };
 
 export async function apiLogin(page: Page) {
   const r = await page.request.post('/api/auth/login', { data: TEST_ADMIN });
