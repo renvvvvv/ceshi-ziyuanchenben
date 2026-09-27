@@ -806,20 +806,34 @@ function TeamPool() {
                 </div>
 
                 <div className="skill-tags" style={{ justifyContent: 'center' }}>
-                  {(member.skills || []).map((skill) => (
+                  {/* 第一项为专业类别（实底徽章），其余为所持证书（浅色标签） */}
+                  {(member.skills || []).map((skill, idx) => (
                     <Tag
                       key={skill}
-                      style={{
-                        background: 'rgba(99,102,241,0.12)',
-                        color: '#818cf8',
-                        border: '1px solid rgba(99,102,241,0.2)',
-                        borderRadius: 4,
-                        fontFamily: 'var(--font-primary)',
-                        fontSize: 11,
-                        margin: '0 2px 2px 0',
-                      }}
+                      style={
+                        idx === 0
+                          ? {
+                              background: 'linear-gradient(135deg, #6366f1, #818cf8)',
+                              color: '#ffffff',
+                              border: 'none',
+                              borderRadius: 4,
+                              fontFamily: 'var(--font-primary)',
+                              fontSize: 11,
+                              fontWeight: 600,
+                              margin: '0 2px 2px 0',
+                            }
+                          : {
+                              background: 'rgba(99,102,241,0.12)',
+                              color: '#818cf8',
+                              border: '1px solid rgba(99,102,241,0.2)',
+                              borderRadius: 4,
+                              fontFamily: 'var(--font-primary)',
+                              fontSize: 11,
+                              margin: '0 2px 2px 0',
+                            }
+                      }
                     >
-                      {skill}
+                      {idx === 0 ? `专业：${skill}` : skill}
                     </Tag>
                   ))}
                 </div>
@@ -880,8 +894,8 @@ function TeamPool() {
               ) : null
             }
           </Form.Item>
-          <Form.Item name="skills" label="技能标签">
-            <Select mode="tags" placeholder="输入技能标签，按回车确认" allowClear />
+          <Form.Item name="skills" label="专业类别与所持证书" tooltip="第一项为专业类别（如：电气/暖通/消防/弱电），其余为所持证书">
+            <Select mode="tags" placeholder="输入专业类别（如：电气），回车后继续输入证书，按回车确认" allowClear />
           </Form.Item>
           <Form.Item name="email" label="邮箱">
             <Input placeholder="请输入邮箱" />
