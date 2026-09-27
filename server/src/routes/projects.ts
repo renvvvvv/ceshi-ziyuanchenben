@@ -283,6 +283,30 @@ router.delete('/members/:id', requireRole(['管理者']), asyncHandler(async (re
   res.json({ success: true });
 }));
 
+// 人员批量管理白名单：仅 admin 与指定飞书账号（王家晟）可一键管理人员信息
+const MEMBER_MGMT_ALLOW = new Set(['admin', 'feishu:ou_7348974a528b91d389705f2b0e849623']);
+
+/** POST /api/projects/members/batch-delete — 批量删除团队成员（仅白名单用户，角色再高也不放行） */
+router.post('/members/batch-delete', requireAuth, (req, res, next) => {
+  const u = (req as any).user?.username as string | undefined;
+  if (!u || !MEMBER_MGMT_ALLOW.has(u)) {
+    res.status(403).json({ success: false, error: '仅授权账号可使用人员批量管理功能' });
+    return;
+  }
+  next();
+}, asyncHandler(async (req, res) => {
+  const raw: unknown[] = Array.isArray(req.body?.ids) ? req.body.ids : [];
+  const ids = [...new Set(raw.map(Number).filter((n: number) => Number.isInteger(n) && n > 0))];
+  if (ids.length === 0) { res.status(400).json({ success: false, error: 'ids 不能为空' }); return; }
+  if (ids.length > 200) { res.status(400).json({ success: false, error: '单次最多删除 200 条' }); return; }
+  let deleted = 0;
+  for (const id of ids) {
+    const r = await db.runAsync('DELETE FROM team_members WHERE id=$1 RETURNING id', id);
+    deleted += r.changes ?? 0;
+  }
+  res.json({ success: true, deleted, requested: ids.length });
+}));
+
 /** PUT /api/projects/history/:id — 更新历史项目（部分更新：只改携带的字段） */
 router.put('/history/:id', requireAuth, requireRole(['管理者', '编辑者']), asyncHandler(async (req, res) => {
   const id = parseIdOrNull(req.params.id);

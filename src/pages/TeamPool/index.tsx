@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import {
   Input, Tag, Avatar, Skeleton, Empty, message,
-  Button, Modal, Form, Select, Transfer, DatePicker, Tooltip,
+  Button, Modal, Form, Select, Transfer, DatePicker, Tooltip, Table, Popconfirm,
 } from 'antd';
 import type { TransferProps } from 'antd';
 import {
@@ -13,11 +13,18 @@ import {
   TeamOutlined,
   ClockCircleOutlined,
   WarningOutlined,
+  DeleteOutlined,
+  ControlOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { useData } from '../../store/DataContext';
+import { useAuth } from '../../store/AuthContext';
 import { useIsMobile } from '../../hooks/useIsMobile';
+import { projectApi } from '../../api';
 import type { TeamMember, MemberStatus, MemberProject, Project } from '../../types';
+
+// 人员批量管理白名单：与后端 MEMBER_MGMT_ALLOW 同源（admin + 王家晟飞书账号）
+const MEMBER_MGMT_ALLOW = new Set(['admin', 'feishu:ou_7348974a528b91d389705f2b0e849623']);
 
 const statusConfig: Record<MemberStatus, { bg: string; color: string; dot: string }> = {
   '空闲': { bg: 'rgba(22, 163, 74,0.12)', color: '#16a34a', dot: '#16a34a' },
@@ -98,6 +105,35 @@ function TeamPool() {
   // 冲突人员查看
   const [conflictModalOpen, setConflictModalOpen] = useState(false);
   const [batchForm] = Form.useForm();
+
+  // ===== 人员批量管理（仅白名单账号可见：admin + 王家晟飞书账号）=====
+  const { user: authUser } = useAuth();
+  const canManageMembers = MEMBER_MGMT_ALLOW.has(authUser?.username || '');
+  const [manageOpen, setManageOpen] = useState(false);
+  const [manageSelectedKeys, setManageSelectedKeys] = useState<string[]>([]);
+  const [manageDeleting, setManageDeleting] = useState(false);
+  const [manageSearch, setManageSearch] = useState('');
+
+  // 批量删除：走后端白名单接口，成功后同步移除本地 state
+  const handleBatchDelete = async (ids: string[]) => {
+    if (ids.length === 0) return;
+    setManageDeleting(true);
+    try {
+      const r = await projectApi.batchDeleteTeamMembers(ids.map(String));
+      if (r.success) {
+        const idSet = new Set(ids.map(String));
+        setMembers((prev) => prev.filter((m) => !idSet.has(m.id)));
+        setManageSelectedKeys([]);
+        message.success(`已删除 ${(r.data as { deleted?: number })?.deleted ?? ids.length} 名人员`);
+      } else {
+        message.error('删除失败，请重试');
+      }
+    } catch {
+      message.error('删除失败：网络或权限错误');
+    } finally {
+      setManageDeleting(false);
+    }
+  };
 
   // 从项目管理中提取未开始/测试中的项目列表
   const allProjects = useMemo(() => {
@@ -577,6 +613,26 @@ function TeamPool() {
         >
           冲突人员查看{stats.conflictCount > 0 ? ` (${stats.conflictCount})` : ''}
         </Button>
+        {canManageMembers && (
+          <Button
+            icon={<ControlOutlined />}
+            onClick={() => {
+              setManageOpen(true);
+              setManageSelectedKeys([]);
+              setManageSearch('');
+            }}
+            style={{
+              background: 'rgba(220,38,38,0.08)',
+              border: '1px solid rgba(220,38,38,0.35)',
+              color: '#dc2626',
+              fontFamily: 'var(--font-primary)',
+              fontWeight: 500,
+              borderRadius: 8,
+            }}
+          >
+            人员管理
+          </Button>
+        )}
       </div>
 
       {loading ? (
@@ -985,6 +1041,113 @@ function TeamPool() {
             </div>
           )}
         </Form>
+      </Modal>
+
+      {/* 人员批量管理 Modal（仅白名单账号可见入口） */}
+      <Modal
+        title={
+          <span style={{ fontFamily: 'var(--font-primary)' }}>
+            <ControlOutlined style={{ color: '#dc2626', marginRight: 8 }} />
+            人员信息管理（共 {members.length} 人）
+          </span>
+        }
+        open={manageOpen}
+        onCancel={() => setManageOpen(false)}
+        width={isMobile ? '95%' : 760}
+        footer={null}
+        bodyStyle={{ background: '#ffffff' }}
+        style={{ top: 60 }}
+      >
+        <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+          <Input
+            placeholder="搜索姓名或工号"
+            prefix={<SearchOutlined />}
+            value={manageSearch}
+            onChange={(e) => setManageSearch(e.target.value)}
+            style={{ width: 200, fontFamily: 'var(--font-primary)' }}
+            allowClear
+          />
+          <Popconfirm
+            title={`确认删除选中的 ${manageSelectedKeys.length} 名人员？`}
+            description="删除后不可恢复，进行中的项目指派不会自动解除"
+            okText="删除"
+            cancelText="取消"
+            okButtonProps={{ danger: true, loading: manageDeleting }}
+            onConfirm={() => handleBatchDelete(manageSelectedKeys)}
+            disabled={manageSelectedKeys.length === 0}
+          >
+            <Button
+              danger
+              icon={<DeleteOutlined />}
+              disabled={manageSelectedKeys.length === 0}
+              loading={manageDeleting}
+            >
+              删除选中（{manageSelectedKeys.length}）
+            </Button>
+          </Popconfirm>
+          <span style={{ color: '#9d9ab8', fontSize: 12, fontFamily: 'var(--font-primary)', marginLeft: 'auto' }}>
+            勾选后可批量删除；单行可删除或编辑
+          </span>
+        </div>
+        <Table
+          size="small"
+          rowKey="id"
+          dataSource={members.filter((m) => {
+            if (!manageSearch) return true;
+            const kw = manageSearch.toLowerCase();
+            return m.name.toLowerCase().includes(kw) || m.employeeId.toLowerCase().includes(kw);
+          })}
+          rowSelection={{
+            selectedRowKeys: manageSelectedKeys,
+            onChange: (keys) => setManageSelectedKeys(keys as string[]),
+          }}
+          pagination={{ pageSize: 10, showSizeChanger: false, showTotal: (t) => `共 ${t} 人` }}
+          scroll={{ x: isMobile ? 640 : undefined }}
+          columns={[
+            { title: '姓名', dataIndex: 'name', width: 90, render: (v: string) => <span style={{ fontWeight: 500 }}>{v}</span> },
+            { title: '工号', dataIndex: 'employeeId', width: 90 },
+            {
+              title: '状态', dataIndex: 'status', width: 80,
+              render: (v: string) => {
+                const cfg = getStatusConfig(v);
+                return <Tag style={{ background: cfg.bg, color: cfg.color, border: 'none' }}>{v}</Tag>;
+              },
+            },
+            {
+              title: '专业类别', width: 90,
+              render: (_: unknown, r: TeamMember) => (r.skills || [])[0] || '-',
+            },
+            {
+              title: '所持证书', ellipsis: true,
+              render: (_: unknown, r: TeamMember) => {
+                const certs = (r.skills || []).slice(1);
+                return certs.length ? certs.join('、') : '-';
+              },
+            },
+            {
+              title: '操作', width: 130,
+              render: (_: unknown, r: TeamMember) => (
+                <>
+                  <Button type="link" size="small" icon={<EditOutlined />} onClick={() => openEdit(r)} style={{ padding: 0, marginRight: 12 }}>
+                    编辑
+                  </Button>
+                  <Popconfirm
+                    title={`确认删除「${r.name}」？`}
+                    description="删除后不可恢复"
+                    okText="删除"
+                    cancelText="取消"
+                    okButtonProps={{ danger: true }}
+                    onConfirm={() => handleBatchDelete([r.id])}
+                  >
+                    <Button type="link" size="small" danger icon={<DeleteOutlined />} style={{ padding: 0 }}>
+                      删除
+                    </Button>
+                  </Popconfirm>
+                </>
+              ),
+            },
+          ]}
+        />
       </Modal>
 
       {/* 冲突人员查看 Modal */}

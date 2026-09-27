@@ -290,6 +290,14 @@ export const projectApi = {
   deleteTeamMember: (id: number | string): Promise<ApiResponse<void>> => {
     return request('/projects/members/' + id, { method: 'DELETE' });
   },
+
+  /** 批量删除团队成员（后端白名单硬校验，仅授权账号可用） */
+  batchDeleteTeamMembers: (ids: Array<number | string>): Promise<ApiResponse<{ deleted: number }>> => {
+    return request('/projects/members/batch-delete', {
+      method: 'POST',
+      body: JSON.stringify({ ids }),
+    });
+  },
 };
 
 /**
