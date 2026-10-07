@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import {
   Input, Tag, Avatar, Skeleton, Empty, message,
-  Button, Modal, Form, Select, Transfer, DatePicker, Tooltip, Table, Popconfirm,
+  Button, Modal, Form, Select, Transfer, DatePicker, Tooltip, Table, Popconfirm, Checkbox,
 } from 'antd';
 import type { TransferProps } from 'antd';
 import {
@@ -15,13 +15,14 @@ import {
   WarningOutlined,
   DeleteOutlined,
   ControlOutlined,
+  CheckSquareOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { useData } from '../../store/DataContext';
 import { useAuth } from '../../store/AuthContext';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import { projectApi } from '../../api';
-import type { TeamMember, MemberStatus, MemberProject, Project } from '../../types';
+import type { TeamMember, MemberStatus, MemberProject } from '../../types';
 
 // 人员批量管理白名单：与后端 MEMBER_MGMT_ALLOW 同源（admin + 王家晟飞书账号）
 const MEMBER_MGMT_ALLOW = new Set(['admin', 'feishu:ou_7348974a528b91d389705f2b0e849623']);
@@ -98,9 +99,40 @@ function TeamPool() {
   const [editingMember, setEditingMember] = useState<TeamMember | null>(null);
   const [form] = Form.useForm();
 
-  // 批量指派
+  // 批量指派（穿梭框）
   const [batchModalOpen, setBatchModalOpen] = useState(false);
   const [batchTargetKeys, setBatchTargetKeys] = useState<string[]>([]);
+
+  // 批量指派（卡片勾选模式）：selectMode 下点卡片勾选，底部浮动条发起指派
+  const [selectMode, setSelectMode] = useState(false);
+  const [cardSelected, setCardSelected] = useState<string[]>([]);
+  const [assignModalOpen, setAssignModalOpen] = useState(false);
+  const [assignForm] = Form.useForm();
+
+  const toggleCardSelected = (id: string) => {
+    setCardSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  };
+
+  const exitSelectMode = () => {
+    setSelectMode(false);
+    setCardSelected([]);
+  };
+
+  // 勾选模式确认指派：项目选择 Modal 的 onOk
+  const handleCardAssign = () => {
+    assignForm.validateFields().then((values) => {
+      const project = values.project as string;
+      if (cardSelected.length === 0) {
+        message.warning('请至少勾选一名人员');
+        return;
+      }
+      if (executeAssign(cardSelected, project)) {
+        setAssignModalOpen(false);
+        assignForm.resetFields();
+        exitSelectMode();
+      }
+    });
+  };
 
   // 冲突人员查看
   const [conflictModalOpen, setConflictModalOpen] = useState(false);
@@ -284,6 +316,101 @@ function TeamPool() {
     return rows;
   }, [members]);
 
+  // 指派执行体：穿梭框批量指派与卡片勾选指派共用
+  // 返回 true=指派成功（含时间冲突警示时仍执行）
+  const executeAssign = (ids: string[], project: string): boolean => {
+    const projectInfo = projects.find((p) => p.name === project);
+    if (!projectInfo) {
+      message.error('未找到对应项目信息，请重试');
+      return false;
+    }
+    const startDate = projectInfo.startDate;
+    const endDate = projectInfo.endDate;
+    if (!startDate || !endDate) {
+      message.error('项目时间信息缺失，无法指派');
+      return false;
+    }
+    const now = dayjs();
+    const isStarted = !dayjs(startDate).isAfter(now, 'day'); // startDate <= today
+    const isEnded = dayjs(endDate).isBefore(now, 'day'); // endDate < today
+    const isActive = isStarted && !isEnded; // 进行中
+    const isUpcoming = !isStarted; // 未开始
+
+    // 项目已结束：直接拒绝，避免无效的状态更新
+    if (!isActive && !isUpcoming) {
+      message.error('该项目已结束，无法指派人员');
+      return false;
+    }
+
+    // 检测时间冲突：新增项目与被指派人员的现有项目时间重叠
+    const conflictNames: string[] = [];
+    ids.forEach((id) => {
+      const m = members.find((x) => x.id === id);
+      if (!m) return;
+      const existing = [...(m.projects || []), ...(m.upcomingProjects || [])];
+      for (const p of existing) {
+        if (p.projectName === project) continue;
+        const s = dayjs(p.startDate).isAfter(startDate) ? p.startDate : startDate;
+        const e = dayjs(p.endDate).isBefore(endDate) ? p.endDate : endDate;
+        if (!dayjs(s).isAfter(e)) {
+          conflictNames.push(m.name);
+          break;
+        }
+      }
+    });
+    if (conflictNames.length > 0) {
+      message.warning(`⚠ ${conflictNames.join('、')} 与现有项目时间冲突，请及时调整`);
+    }
+
+    // 用 DataContext 的 updateTeamMember/updateProject（确保写入后端）
+    members.forEach((m) => {
+      if (!ids.includes(m.id)) return;
+      const newProject: MemberProject = { projectName: project, startDate, endDate };
+      const safeCurrent = m.currentProjects || [];
+      const safeProjects = m.projects || [];
+      const safeUpcoming = m.upcomingProjects || [];
+
+      if (isActive) {
+        const projectExists = safeProjects.find((p) => p.projectName === project);
+        const updatedProjects = projectExists
+          ? safeProjects.map((p) => (p.projectName === project ? newProject : p))
+          : [...safeProjects, newProject];
+        const newCurrentProjects = safeCurrent.includes(project)
+          ? safeCurrent
+          : [...safeCurrent, project];
+        const cleanedUpcoming = safeUpcoming.filter((p) => p.projectName !== project);
+        updateTeamMember(m.id, {
+          status: '测试中',
+          currentProjects: newCurrentProjects,
+          projects: updatedProjects,
+          upcomingProjects: cleanedUpcoming,
+        });
+      } else if (isUpcoming) {
+        const upcomingExists = safeUpcoming.find((p) => p.projectName === project);
+        const updatedUpcoming = upcomingExists
+          ? safeUpcoming.map((p) => (p.projectName === project ? newProject : p))
+          : [...safeUpcoming, newProject];
+        updateTeamMember(m.id, {
+          upcomingProjects: updatedUpcoming,
+        });
+      }
+    });
+
+    // 同步更新项目的 assignedMemberIds
+    const targetProj = projects.find((p) => p.name === project);
+    if (targetProj) {
+      const existing = targetProj.assignedMemberIds || [];
+      const merged = Array.from(new Set([...existing, ...ids]));
+      updateProject(targetProj.id, { assignedMemberIds: merged });
+    }
+
+    const statusHint = isActive
+      ? '，项目进行中已自动转为测试中'
+      : '，项目未开始已加入即将参与';
+    message.success(`已成功指派 ${ids.length} 人到项目「${project}」${statusHint}`);
+    return true;
+  };
+
   const handleBatchAssign = () => {
     batchForm.validateFields().then((values) => {
       const project = values.project as string;
@@ -292,103 +419,11 @@ function TeamPool() {
         message.warning('请至少选择一名人员');
         return;
       }
-      // 从项目管理中自动同步项目时间，无需手动选择
-      const projectInfo = projects.find((p) => p.name === project);
-      if (!projectInfo) {
-        message.error('未找到对应项目信息，请重试');
-        return;
+      if (executeAssign(ids, project)) {
+        setBatchModalOpen(false);
+        batchForm.resetFields();
+        setBatchTargetKeys([]);
       }
-      const startDate = projectInfo.startDate;
-      const endDate = projectInfo.endDate;
-      if (!startDate || !endDate) {
-        message.error('项目时间信息缺失，无法指派');
-        return;
-      }
-      const now = dayjs();
-      const isStarted = !dayjs(startDate).isAfter(now, 'day'); // startDate <= today
-      const isEnded = dayjs(endDate).isBefore(now, 'day'); // endDate < today
-      const isActive = isStarted && !isEnded; // 进行中
-      const isUpcoming = !isStarted; // 未开始
-
-      // 项目已结束：直接拒绝，不执行指派（提前判断，避免无效的状态更新）
-      if (!isActive && !isUpcoming) {
-        message.error('该项目已结束，无法指派人员');
-        return;
-      }
-
-      // 检测时间冲突：新增项目与被指派人员的现有项目时间重叠
-      const conflictNames: string[] = [];
-      ids.forEach((id) => {
-        const m = members.find((x) => x.id === id);
-        if (!m) return;
-        const existing = [...(m.projects || []), ...(m.upcomingProjects || [])];
-        for (const p of existing) {
-          if (p.projectName === project) continue;
-          const s = dayjs(p.startDate).isAfter(startDate) ? p.startDate : startDate;
-          const e = dayjs(p.endDate).isBefore(endDate) ? p.endDate : endDate;
-          if (!dayjs(s).isAfter(e)) {
-            conflictNames.push(m.name);
-            break;
-          }
-        }
-      });
-      if (conflictNames.length > 0) {
-        message.warning(`⚠ ${conflictNames.join('、')} 与现有项目时间冲突，请及时调整`);
-      }
-
-      // 用 DataContext 的 updateTeamMember/updateProject（确保写入后端）
-      let firstAffectedProject: Project | undefined;
-      members.forEach((m) => {
-        if (!ids.includes(m.id)) return;
-        const newProject: MemberProject = { projectName: project, startDate, endDate };
-        const safeCurrent = m.currentProjects || [];
-        const safeProjects = m.projects || [];
-        const safeUpcoming = m.upcomingProjects || [];
-
-        if (isActive) {
-          const projectExists = safeProjects.find((p) => p.projectName === project);
-          const updatedProjects = projectExists
-            ? safeProjects.map((p) => (p.projectName === project ? newProject : p))
-            : [...safeProjects, newProject];
-          const newCurrentProjects = safeCurrent.includes(project)
-            ? safeCurrent
-            : [...safeCurrent, project];
-          const cleanedUpcoming = safeUpcoming.filter((p) => p.projectName !== project);
-          updateTeamMember(m.id, {
-            status: '测试中',
-            currentProjects: newCurrentProjects,
-            projects: updatedProjects,
-            upcomingProjects: cleanedUpcoming,
-          });
-        } else if (isUpcoming) {
-          const upcomingExists = safeUpcoming.find((p) => p.projectName === project);
-          const updatedUpcoming = upcomingExists
-            ? safeUpcoming.map((p) => (p.projectName === project ? newProject : p))
-            : [...safeUpcoming, newProject];
-          updateTeamMember(m.id, {
-            upcomingProjects: updatedUpcoming,
-          });
-        }
-      });
-
-      // 同步更新项目的 assignedMemberIds
-      const targetProj = projects.find((p) => p.name === project);
-      if (targetProj) {
-        firstAffectedProject = targetProj;
-        const existing = targetProj.assignedMemberIds || [];
-        const merged = Array.from(new Set([...existing, ...ids]));
-        updateProject(targetProj.id, { assignedMemberIds: merged });
-      }
-      // suppress unused warning
-      void firstAffectedProject;
-
-      const statusHint = isActive
-        ? '，项目进行中已自动转为测试中'
-        : '，项目未开始已加入即将参与';
-      message.success(`已成功指派 ${ids.length} 人到项目「${project}」${statusHint}`);
-      setBatchModalOpen(false);
-      batchForm.resetFields();
-      setBatchTargetKeys([]);
     });
   };
 
@@ -600,6 +635,32 @@ function TeamPool() {
           批量指派
         </Button>
         <Button
+          icon={<CheckSquareOutlined />}
+          type={selectMode ? 'primary' : 'default'}
+          onClick={() => (selectMode ? exitSelectMode() : setSelectMode(true))}
+          style={
+            selectMode
+              ? {
+                  background: 'linear-gradient(135deg, #6366f1, #818cf8)',
+                  border: 'none',
+                  fontFamily: 'var(--font-primary)',
+                  fontWeight: 500,
+                  borderRadius: 8,
+                  boxShadow: '0 4px 14px rgba(99,102,241,0.35)',
+                }
+              : {
+                  background: 'rgba(99,102,241,0.12)',
+                  border: '1px solid rgba(99,102,241,0.3)',
+                  color: '#818cf8',
+                  fontFamily: 'var(--font-primary)',
+                  fontWeight: 500,
+                  borderRadius: 8,
+                }
+          }
+        >
+          {selectMode ? '退出勾选' : '勾选指派'}
+        </Button>
+        <Button
           icon={<WarningOutlined />}
           onClick={() => setConflictModalOpen(true)}
           style={{
@@ -657,13 +718,38 @@ function TeamPool() {
               (p) => !dayjs(p.startDate).isAfter(now, 'day') && !dayjs(p.endDate).isBefore(now, 'day')
             );
             return (
-              <div key={member.id} className="member-card" style={{ position: 'relative' }}>
-                {/* 左上角状态圆点 */}
+              <div
+                key={member.id}
+                className="member-card"
+                style={{
+                  position: 'relative',
+                  cursor: selectMode ? 'pointer' : undefined,
+                  outline: selectMode && cardSelected.includes(member.id) ? '2px solid #6366f1' : undefined,
+                  outlineOffset: selectMode ? -2 : undefined,
+                  background: selectMode && cardSelected.includes(member.id) ? 'rgba(99,102,241,0.06)' : undefined,
+                  transition: 'outline 0.15s, background 0.15s',
+                }}
+                onClick={selectMode ? () => toggleCardSelected(member.id) : undefined}
+              >
+                {/* 勾选模式的复选框 */}
+                {selectMode && (
+                  <div
+                    style={{ position: 'absolute', top: 8, left: 8, zIndex: 3 }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleCardSelected(member.id);
+                    }}
+                  >
+                    <Checkbox checked={cardSelected.includes(member.id)} />
+                  </div>
+                )}
+
+                {/* 左上角状态圆点（勾选模式右移避让复选框） */}
                 <div
                   style={{
                     position: 'absolute',
                     top: 12,
-                    left: 12,
+                    left: selectMode ? 40 : 12,
                     width: 10,
                     height: 10,
                     borderRadius: '50%',
@@ -1148,6 +1234,100 @@ function TeamPool() {
             },
           ]}
         />
+      </Modal>
+
+      {/* 勾选模式底部浮动操作条 */}
+      {selectMode && (
+        <div
+          style={{
+            position: 'fixed',
+            bottom: isMobile ? 76 : 24,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 1000,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            padding: '10px 18px',
+            background: 'rgba(30,27,46,0.92)',
+            backdropFilter: 'blur(10px)',
+            borderRadius: 12,
+            boxShadow: '0 8px 30px rgba(30,27,46,0.35)',
+            fontFamily: 'var(--font-primary)',
+            maxWidth: '92vw',
+            flexWrap: 'wrap',
+            justifyContent: 'center',
+          }}
+        >
+          <span style={{ color: '#fff', fontSize: 14 }}>
+            已勾选 <b style={{ color: '#a5b4fc', fontSize: 16 }}>{cardSelected.length}</b> 人
+          </span>
+          <Button
+            size="small"
+            ghost
+            onClick={() => {
+              const ids = filteredMembers.map((m) => m.id);
+              const allSelected = ids.length > 0 && ids.every((id) => cardSelected.includes(id));
+              setCardSelected(allSelected ? [] : ids);
+            }}
+          >
+            {filteredMembers.length > 0 && filteredMembers.every((m) => cardSelected.includes(m.id)) ? '取消全选' : '全选当前筛选'}
+          </Button>
+          <Button
+            size="small"
+            type="primary"
+            disabled={cardSelected.length === 0}
+            onClick={() => setAssignModalOpen(true)}
+            style={{ background: 'linear-gradient(135deg, #6366f1, #818cf8)', border: 'none' }}
+          >
+            指派到项目
+          </Button>
+          <Button size="small" ghost onClick={exitSelectMode}>
+            退出
+          </Button>
+        </div>
+      )}
+
+      {/* 勾选指派的项目选择 Modal */}
+      <Modal
+        title={
+          <span style={{ fontFamily: 'var(--font-primary)' }}>
+            <TeamOutlined style={{ color: '#6366f1', marginRight: 8 }} />
+            指派 {cardSelected.length} 人到项目
+          </span>
+        }
+        open={assignModalOpen}
+        onOk={handleCardAssign}
+        onCancel={() => {
+          setAssignModalOpen(false);
+          assignForm.resetFields();
+        }}
+        okText="确认指派"
+        cancelText="取消"
+        okButtonProps={{ style: { background: 'linear-gradient(135deg, #6366f1, #818cf8)', border: 'none' } }}
+        bodyStyle={{ background: '#ffffff' }}
+        style={{ top: 120 }}
+      >
+        <Form form={assignForm} layout="vertical" style={{ marginTop: 12 }}>
+          <Form.Item
+            name="project"
+            label="目标项目"
+            rules={[{ required: true, message: '请选择要指派到的项目' }]}
+            extra="项目时间自动从项目管理同步；进行中项目会自动把人员转为「测试中」"
+          >
+            <Select placeholder="选择项目（未开始 / 测试中）" showSearch optionFilterProp="children">
+              {allProjects.map((p) => {
+                const info = projects.find((x) => x.name === p);
+                return (
+                  <Select.Option key={p} value={p}>
+                    {p}
+                    {info?.startDate ? `（${fmtShort(info.startDate)} ~ ${info.endDate ? fmtShort(info.endDate) : '未定'}）` : ''}
+                  </Select.Option>
+                );
+              })}
+            </Select>
+          </Form.Item>
+        </Form>
       </Modal>
 
       {/* 冲突人员查看 Modal */}
