@@ -227,8 +227,8 @@ router.post('/members', requireAuth, requireRole(['管理者', '编辑者']), as
   }
   try {
     const result = await db.runAsync(
-      `INSERT INTO team_members (name, employee_id, status, skills, current_projects, email, phone, position, projects, upcoming_projects, leave_start_date, leave_end_date)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id`,
+      `INSERT INTO team_members (name, employee_id, status, skills, current_projects, email, phone, position, projects, upcoming_projects, leave_start_date, leave_end_date, title, profile)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id`,
       name,
       employee_id,
       status || '空闲',
@@ -241,6 +241,8 @@ router.post('/members', requireAuth, requireRole(['管理者', '编辑者']), as
       JSON.stringify(req.body.upcoming_projects || []),
       req.body.leave_start_date ?? null,
       req.body.leave_end_date ?? null,
+      req.body.title ?? null,
+      req.body.profile ?? null,
     );
     res.json({ success: true, id: result.lastInsertRowid });
   } catch (err: any) {
@@ -261,7 +263,7 @@ router.put('/members/:id', requireAuth, requireRole(['管理者', '编辑者']),
   const partial = partialSetSql(req.body || {}, [
     'name', 'employee_id', 'status', 'skills', 'current_projects',
     'email', 'phone', 'position', 'projects', 'upcoming_projects',
-    'leave_start_date', 'leave_end_date',
+    'leave_start_date', 'leave_end_date', 'title', 'profile',
   ]);
   if (!partial) { res.status(400).json({ error: '没有可更新的字段' }); return; }
   partial.values.push(id);

@@ -119,15 +119,10 @@ ALTER TABLE team_members ADD COLUMN IF NOT EXISTS projects TEXT NOT NULL DEFAULT
 ALTER TABLE team_members ADD COLUMN IF NOT EXISTS upcoming_projects TEXT NOT NULL DEFAULT '[]';
 ALTER TABLE team_members ADD COLUMN IF NOT EXISTS leave_start_date TEXT;
 ALTER TABLE team_members ADD COLUMN IF NOT EXISTS leave_end_date TEXT;
+ALTER TABLE team_members ADD COLUMN IF NOT EXISTS title TEXT;      -- 职级（人员画像，2026-10-07 新增）
+ALTER TABLE team_members ADD COLUMN IF NOT EXISTS profile TEXT;    -- 画像评语（2026-10-07 新增）
 
--- 插入默认数据（仅首次初始化）
-INSERT INTO team_members (name, employee_id, status, skills, current_projects, email, phone)
-SELECT '张家晟', 'EMP001', '空闲', '["电力系统","项目管理","UPS测试"]', '["乌兰D5数据中心测试验证"]', 'zhangjs@example.com', '13800001001'
-WHERE NOT EXISTS (SELECT 1 FROM team_members WHERE employee_id = 'EMP001');
-
-INSERT INTO team_members (name, employee_id, status, skills, current_projects, email, phone)
-SELECT '李铭', 'EMP002', '空闲', '["暖通系统","节能测试","BA系统"]', '["乌兰D3扩容测试","广州天河数据中心测试"]', 'liming@example.com', '13800001002'
-WHERE NOT EXISTS (SELECT 1 FROM team_members WHERE employee_id = 'EMP002');
+-- 2026-10-07：移除演示种子 EMP001/EMP002（生产为真实人员数据，重启反复种回已删除的演示行会造成数据污染）
 
 -- 知识库文档表（树形结构 + markdown + 可选外部链接）
 -- 2026-07-19 新增：支持本地 KB 系统，可作为飞书 iframe 的替代/补充

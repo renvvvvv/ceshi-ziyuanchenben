@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import {
   Input, Tag, Avatar, Skeleton, Empty, message,
-  Button, Modal, Form, Select, Transfer, DatePicker, Tooltip, Table, Popconfirm, Checkbox,
+  Button, Modal, Form, Select, Transfer, DatePicker, Tooltip, Table, Popconfirm, Checkbox, Drawer, AutoComplete,
 } from 'antd';
 import type { TransferProps } from 'antd';
 import {
@@ -138,6 +138,9 @@ function TeamPool() {
   const [conflictModalOpen, setConflictModalOpen] = useState(false);
   const [batchForm] = Form.useForm();
 
+  // 人员画像详情（点卡片姓名/头像打开）
+  const [profileMember, setProfileMember] = useState<TeamMember | null>(null);
+
   // ===== 人员批量管理（仅白名单账号可见：admin + 王家晟飞书账号）=====
   const { user: authUser } = useAuth();
   const canManageMembers = MEMBER_MGMT_ALLOW.has(authUser?.username || '');
@@ -208,6 +211,8 @@ function TeamPool() {
       name: member.name,
       employeeId: member.employeeId,
       status: member.status,
+      title: member.title || '',
+      profile: member.profile || '',
       skills: member.skills,
       email: member.email || '',
       phone: member.phone || '',
@@ -228,6 +233,8 @@ function TeamPool() {
           name: values.name,
           employeeId: values.employeeId,
           status: values.status,
+          title: values.title || '',
+          profile: values.profile || '',
           skills: values.skills || [],
           email: values.email || '',
           phone: values.phone || '',
@@ -256,6 +263,8 @@ function TeamPool() {
           name: values.name,
           employeeId: values.employeeId,
           status: values.status,
+          title: values.title || '',
+          profile: values.profile || '',
           skills: values.skills || [],
           currentProjects: [],
           email: values.email || '',
@@ -824,14 +833,42 @@ function TeamPool() {
                       fontSize: 20,
                       fontWeight: 600,
                       fontFamily: 'var(--font-primary)',
+                      cursor: selectMode ? undefined : 'pointer',
                     }}
+                    onClick={selectMode ? undefined : () => setProfileMember(member)}
                   >
                     {getAvatarText(member.name)}
                   </Avatar>
-                  <span className="member-name">{member.name}</span>
+                  <span
+                    className="member-name"
+                    style={selectMode ? undefined : { cursor: 'pointer' }}
+                    onClick={selectMode ? undefined : () => setProfileMember(member)}
+                  >
+                    {member.name}
+                  </span>
                   <span style={{ color: '#9d9ab8', fontSize: 11, fontFamily: 'var(--font-primary)', marginTop: 2 }}>
                     {member.employeeId}
                   </span>
+                  {member.title && (
+                    <Tooltip title="点击查看人员画像">
+                      <Tag
+                        style={{
+                          marginTop: 6,
+                          background: member.title.includes('实习') ? 'rgba(22,163,74,0.12)' : 'rgba(217,119,6,0.12)',
+                          color: member.title.includes('实习') ? '#16a34a' : '#d97706',
+                          border: 'none',
+                          borderRadius: 4,
+                          fontSize: 11,
+                          cursor: selectMode ? undefined : 'pointer',
+                          lineHeight: '18px',
+                          padding: '0 6px',
+                        }}
+                        onClick={selectMode ? undefined : () => setProfileMember(member)}
+                      >
+                        {member.title}
+                      </Tag>
+                    </Tooltip>
+                  )}
                 </div>
 
                 <div
@@ -1007,6 +1044,21 @@ function TeamPool() {
           </Form.Item>
           <Form.Item name="employeeId" label="工号" rules={[{ required: true, message: '请输入工号' }]}>
             <Input placeholder="请输入工号" />
+          </Form.Item>
+          <Form.Item name="title" label="职级" tooltip="人员画像职级：测试总监/项目经理/各专业主测/测试工程师/助理测试工程师/实习生">
+            <AutoComplete
+              placeholder="选择或输入职级"
+              allowClear
+              filterOption={(input, opt) => String(opt?.value ?? '').includes(input)}
+              options={[
+                '测试总监', '部门负责人 / 项目经理', '项目经理（电气主测）', '项目经理（暖通主测）',
+                '电气主测', '暖通主测', '暖通主管', '弱电主管', '弱电主测', '消防主测', '消防主测 / CQC 负责人',
+                '测试工程师', '助理测试工程师', '实习生', '实习生（待入编）',
+              ].map((t) => ({ value: t }))}
+            />
+          </Form.Item>
+          <Form.Item name="profile" label="画像评语">
+            <Input.TextArea placeholder="一句话画像（基于项目分工与现场事实）" autoSize={{ minRows: 2, maxRows: 4 }} maxLength={200} showCount />
           </Form.Item>
           <Form.Item
             name="status"
@@ -1188,10 +1240,14 @@ function TeamPool() {
             onChange: (keys) => setManageSelectedKeys(keys as string[]),
           }}
           pagination={{ pageSize: 10, showSizeChanger: false, showTotal: (t) => `共 ${t} 人` }}
-          scroll={{ x: isMobile ? 640 : undefined }}
+          scroll={{ x: isMobile ? 780 : undefined }}
           columns={[
             { title: '姓名', dataIndex: 'name', width: 90, render: (v: string) => <span style={{ fontWeight: 500 }}>{v}</span> },
             { title: '工号', dataIndex: 'employeeId', width: 90 },
+            {
+              title: '职级', dataIndex: 'title', width: 130, ellipsis: true,
+              render: (v: string) => v || '-',
+            },
             {
               title: '状态', dataIndex: 'status', width: 80,
               render: (v: string) => {
@@ -1329,6 +1385,123 @@ function TeamPool() {
           </Form.Item>
         </Form>
       </Modal>
+
+      {/* 人员画像详情 Drawer */}
+      <Drawer
+        open={!!profileMember}
+        onClose={() => setProfileMember(null)}
+        width={isMobile ? '92%' : 460}
+        title={
+          profileMember && (
+            <span style={{ fontFamily: 'var(--font-primary)' }}>
+              <Avatar
+                size={32}
+                style={{ background: 'linear-gradient(135deg, #6366f1, #818cf8)', marginRight: 10, fontSize: 13, verticalAlign: -10 }}
+              >
+                {getAvatarText(profileMember.name)}
+              </Avatar>
+              {profileMember.name} · 人员画像
+            </span>
+          )
+        }
+      >
+        {profileMember && (
+          <div style={{ fontFamily: 'var(--font-primary)' }}>
+            {/* 基本信息行 */}
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
+              <Tag color="geekblue">{profileMember.title || '未定职级'}</Tag>
+              <Tag style={{ ...getStatusConfig(profileMember.status), border: 'none' }}>{profileMember.status}</Tag>
+              {(profileMember.skills || [])[0] && (
+                <Tag style={{ background: 'rgba(99,102,241,0.12)', color: '#818cf8', border: 'none' }}>
+                  专业：{(profileMember.skills)[0]}
+                </Tag>
+              )}
+              <Tag style={{ background: '#f6f5fc', color: '#6b6892', border: 'none' }}>工号 {profileMember.employeeId}</Tag>
+            </div>
+
+            {/* 画像评语 */}
+            {profileMember.profile && (
+              <div
+                style={{
+                  background: 'rgba(99,102,241,0.06)',
+                  border: '1px solid rgba(99,102,241,0.15)',
+                  borderRadius: 10,
+                  padding: '12px 14px',
+                  marginBottom: 16,
+                  fontSize: 13,
+                  lineHeight: 1.9,
+                  color: '#46436a',
+                }}
+              >
+                <div style={{ fontWeight: 600, marginBottom: 4, color: '#6366f1' }}>画像评语</div>
+                {profileMember.profile}
+              </div>
+            )}
+
+            {/* 所持证书 */}
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontWeight: 600, marginBottom: 8, color: '#1e1b2e' }}>所持证书</div>
+              {(profileMember.skills || []).slice(1).length > 0 ? (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {(profileMember.skills).slice(1).map((c) => (
+                    <Tag key={c} style={{ background: 'rgba(99,102,241,0.12)', color: '#818cf8', border: '1px solid rgba(99,102,241,0.2)', borderRadius: 4 }}>
+                      {c}
+                    </Tag>
+                  ))}
+                </div>
+              ) : (
+                <span style={{ color: '#9d9ab8', fontSize: 12 }}>暂无证书记录</span>
+              )}
+            </div>
+
+            {/* 项目安排 */}
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontWeight: 600, marginBottom: 8, color: '#1e1b2e' }}>项目安排</div>
+              {(profileMember.projects || []).map((p) => {
+                const active = !dayjs().isBefore(dayjs(p.startDate), 'day') && !dayjs().isAfter(dayjs(p.endDate), 'day');
+                return (
+                  <div key={p.projectName} style={{ background: active ? 'rgba(217,119,6,0.08)' : '#f8f7fd', border: '1px solid #eeedf8', borderRadius: 8, padding: '8px 12px', marginBottom: 6, fontSize: 12 }}>
+                    <div style={{ fontWeight: 500, color: active ? '#d97706' : '#46436a' }}>
+                      {p.projectName} {active && <Tag style={{ fontSize: 10, lineHeight: '14px', padding: '0 4px', marginLeft: 4 }}>进行中</Tag>}
+                    </div>
+                    <div style={{ color: '#6b6892', marginTop: 2 }}>{p.startDate} ~ {p.endDate}</div>
+                  </div>
+                );
+              })}
+              {(profileMember.upcomingProjects || []).map((p) => (
+                <div key={p.projectName} style={{ background: 'rgba(22,163,74,0.06)', border: '1px solid rgba(22,163,74,0.15)', borderRadius: 8, padding: '8px 12px', marginBottom: 6, fontSize: 12 }}>
+                  <div style={{ fontWeight: 500, color: '#16a34a' }}>{p.projectName} <Tag style={{ fontSize: 10, lineHeight: '14px', padding: '0 4px', marginLeft: 4 }}>即将参与</Tag></div>
+                  <div style={{ color: '#6b6892', marginTop: 2 }}>{p.startDate} ~ {p.endDate}</div>
+                </div>
+              ))}
+              {(profileMember.projects || []).length + (profileMember.upcomingProjects || []).length === 0 && (
+                <span style={{ color: '#9d9ab8', fontSize: 12 }}>暂无项目安排</span>
+              )}
+            </div>
+
+            {/* 联系方式 */}
+            {(profileMember.email || profileMember.phone) && (
+              <div style={{ fontSize: 12, color: '#6b6892' }}>
+                {profileMember.email && <div style={{ marginBottom: 4 }}><MailOutlined style={{ marginRight: 6 }} />{profileMember.email}</div>}
+                {profileMember.phone && <div><PhoneOutlined style={{ marginRight: 6 }} />{profileMember.phone}</div>}
+              </div>
+            )}
+
+            <Button
+              block
+              icon={<EditOutlined />}
+              onClick={() => {
+                const fresh = members.find((m) => m.id === profileMember.id) || profileMember;
+                setProfileMember(null);
+                openEdit(fresh);
+              }}
+              style={{ marginTop: 16, background: 'rgba(99,102,241,0.12)', border: '1px solid rgba(99,102,241,0.3)', color: '#818cf8', fontWeight: 500, borderRadius: 8 }}
+            >
+              编辑此人
+            </Button>
+          </div>
+        )}
+      </Drawer>
 
       {/* 冲突人员查看 Modal */}
       <Modal

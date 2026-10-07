@@ -481,6 +481,8 @@ export function dbRowToTeamMember(row: Record<string, unknown>): TeamMember {
     projects,
     upcomingProjects,
     position: c.position ? String(c.position) : undefined,
+    title: c.title ? String(c.title) : undefined,
+    profile: c.profile ? String(c.profile) : undefined,
     leaveStartDate: c.leaveStartDate ? String(c.leaveStartDate) : undefined,
     leaveEndDate: c.leaveEndDate ? String(c.leaveEndDate) : undefined,
     email: c.email ? String(c.email) : undefined,
@@ -505,6 +507,8 @@ export function teamMemberToDbBody(m: Partial<TeamMember>): Record<string, unkno
     leave_end_date: m.leaveEndDate ?? null,
     email: m.email || null,
     phone: m.phone || null,
+    title: m.title ?? null,
+    profile: m.profile ?? null,
   };
   for (const k of Object.keys(body)) {
     if (body[k] === undefined) delete body[k];

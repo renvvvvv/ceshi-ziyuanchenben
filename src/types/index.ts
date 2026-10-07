@@ -97,6 +97,8 @@ export interface TeamMember {
   employeeId: string;
   status: MemberStatus;
   position?: string;          // 岗位：助理测试工程师/测试工程师/项目主测/项目经理
+  title?: string;             // 职级（人员画像）：测试总监/项目经理/xx主测/测试工程师/助理测试工程师/实习生
+  profile?: string;           // 画像评语（一句，基于项目事实）
   avatar?: string;
   skills: string[];
   currentProjects: string[];
