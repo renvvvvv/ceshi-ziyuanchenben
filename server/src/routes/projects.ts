@@ -301,10 +301,34 @@ router.post('/members/batch-delete', requireAuth, (req, res, next) => {
   const ids = [...new Set(raw.map(Number).filter((n: number) => Number.isInteger(n) && n > 0))];
   if (ids.length === 0) { res.status(400).json({ success: false, error: 'ids 不能为空' }); return; }
   if (ids.length > 200) { res.status(400).json({ success: false, error: '单次最多删除 200 条' }); return; }
+  // 事务：任一行失败整体回滚，避免"删一半"造成前后端数据分叉
+  const client = await db.connect();
   let deleted = 0;
-  for (const id of ids) {
-    const r = await db.runAsync('DELETE FROM team_members WHERE id=$1 RETURNING id', id);
-    deleted += r.changes ?? 0;
+  try {
+    await client.query('BEGIN');
+    for (const id of ids) {
+      const r = await client.query('DELETE FROM team_members WHERE id=$1 RETURNING id', [id]);
+      deleted += r.rowCount ?? 0;
+    }
+    // 顺带清理项目指派里的悬空引用（assignedMemberIds 存 JSON 数组文本）
+    const projRows = await client.query(
+      `SELECT id, assigned_member_ids FROM test_projects WHERE assigned_member_ids LIKE '%[%' AND jsonb_typeof(assigned_member_ids::jsonb) = 'array'`
+    );
+    const idSet = new Set(ids.map(String));
+    for (const row of projRows.rows as Array<{ id: number; assigned_member_ids: string }>) {
+      try {
+        const arr = JSON.parse(row.assigned_member_ids || '[]') as string[];
+        if (!arr.some((x) => idSet.has(String(x)))) continue;
+        const cleaned = arr.filter((x) => !idSet.has(String(x)));
+        await client.query('UPDATE test_projects SET assigned_member_ids=$1 WHERE id=$2', [JSON.stringify(cleaned), row.id]);
+      } catch { /* 行内 JSON 异常跳过，不阻塞删除 */ }
+    }
+    await client.query('COMMIT');
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
   }
   res.json({ success: true, deleted, requested: ids.length });
 }));

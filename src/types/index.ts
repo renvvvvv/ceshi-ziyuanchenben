@@ -106,8 +106,8 @@ export interface TeamMember {
   phone?: string;
   projects?: MemberProject[]; // 进行中的项目详情
   upcomingProjects?: MemberProject[]; // 未来指派的项目
-  leaveStartDate?: string;    // 休假开始日期
-  leaveEndDate?: string;      // 休假结束日期
+  leaveStartDate?: string | null;    // 休假开始日期（非休假状态显式置 null 清库）
+  leaveEndDate?: string | null;      // 休假结束日期
 }
 
 // -------------------- 测试文档 --------------------

@@ -110,6 +110,8 @@ CREATE TABLE IF NOT EXISTS team_members (
     upcoming_projects TEXT  NOT NULL DEFAULT '[]', -- 即将开始的项目（2026-07-19 新增）
     leave_start_date TEXT,                         -- 休假开始日期（2026-07-19 新增）
     leave_end_date  TEXT,                          -- 休假结束日期（2026-07-19 新增）
+    title           TEXT,                          -- 职级（人员画像，2026-10-07 新增）
+    profile         TEXT,                          -- 画像评语（2026-10-07 新增）
     created_at      TIMESTAMP NOT NULL DEFAULT NOW()
 );
 

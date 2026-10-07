@@ -492,27 +492,26 @@ export function dbRowToTeamMember(row: Record<string, unknown>): TeamMember {
 
 /**
  * 前端 TeamMember → 后端 body
+ * 2026-10-07 修复：改为只序列化显式传入的字段。
+ * 旧实现把未传字段补默认值（skills→'[]'、email→null），导致部分更新
+ * （如状态机只改 status）意外清空证书/联系方式——按 employee_id 对照已复现多次。
  */
 export function teamMemberToDbBody(m: Partial<TeamMember>): Record<string, unknown> {
-  const body: Record<string, unknown> = {
-    name: m.name,
-    employee_id: m.employeeId,
-    status: m.status || '空闲',
-    skills: JSON.stringify(m.skills || []),
-    current_projects: JSON.stringify(m.currentProjects || []),
-    projects: JSON.stringify(m.projects || []),
-    upcoming_projects: JSON.stringify(m.upcomingProjects || []),
-    position: m.position ?? null,
-    leave_start_date: m.leaveStartDate ?? null,
-    leave_end_date: m.leaveEndDate ?? null,
-    email: m.email || null,
-    phone: m.phone || null,
-    title: m.title ?? null,
-    profile: m.profile ?? null,
-  };
-  for (const k of Object.keys(body)) {
-    if (body[k] === undefined) delete body[k];
-  }
+  const body: Record<string, unknown> = {};
+  if (m.name !== undefined) body.name = m.name;
+  if (m.employeeId !== undefined) body.employee_id = m.employeeId;
+  if (m.status !== undefined) body.status = m.status;
+  if (m.skills !== undefined) body.skills = JSON.stringify(m.skills);
+  if (m.currentProjects !== undefined) body.current_projects = JSON.stringify(m.currentProjects);
+  if (m.projects !== undefined) body.projects = JSON.stringify(m.projects);
+  if (m.upcomingProjects !== undefined) body.upcoming_projects = JSON.stringify(m.upcomingProjects);
+  if (m.position !== undefined) body.position = m.position;
+  if (m.leaveStartDate !== undefined) body.leave_start_date = m.leaveStartDate;
+  if (m.leaveEndDate !== undefined) body.leave_end_date = m.leaveEndDate;
+  if (m.email !== undefined) body.email = m.email;
+  if (m.phone !== undefined) body.phone = m.phone;
+  if (m.title !== undefined) body.title = m.title;
+  if (m.profile !== undefined) body.profile = m.profile;
   return body;
 }
 
@@ -544,24 +543,26 @@ export function dbRowToHistoryProject(row: Record<string, unknown>): HistoricalP
 /**
  * 前端 HistoricalProject → 后端 body
  * 2026-07-19 修复：补全 city/manager/plannedDeliveryDate/actualDeliveryDate/status/plannedManpower/businessType/description
+ * 2026-10-07 修复：改为只序列化显式传入的字段（与 teamMemberToDbBody 同模式）——
+ * 旧实现每键恒存在，部分更新会把 it_output 归零、日期/客户清空，属潜伏的全量覆盖 bug
  */
 export function historyProjectToDbBody(p: Partial<HistoricalProject>): Record<string, unknown> {
-  return {
-    name: p.name,
-    it_output: p.itOutput ?? 0,
-    start_date: p.startDate || '',
-    end_date: p.endDate || '',
-    customer: p.customer || '',
-    city: p.city || null,
-    manager: p.manager || null,
-    status: p.status || '已完成',
-    planned_delivery_date: p.plannedDeliveryDate || null,
-    actual_delivery_date: p.actualDeliveryDate || null,
-    planned_manpower: p.plannedManpower ?? null,
-    business_type: p.businessType || null,
-    description: p.description || null,
-    doc_link: p.docLink || null,
-  };
+  const body: Record<string, unknown> = {};
+  if (p.name !== undefined) body.name = p.name;
+  if (p.itOutput !== undefined) body.it_output = p.itOutput;
+  if (p.startDate !== undefined) body.start_date = p.startDate;
+  if (p.endDate !== undefined) body.end_date = p.endDate;
+  if (p.customer !== undefined) body.customer = p.customer;
+  if (p.city !== undefined) body.city = p.city || null;
+  if (p.manager !== undefined) body.manager = p.manager || null;
+  if (p.status !== undefined) body.status = p.status;
+  if (p.plannedDeliveryDate !== undefined) body.planned_delivery_date = p.plannedDeliveryDate || null;
+  if (p.actualDeliveryDate !== undefined) body.actual_delivery_date = p.actualDeliveryDate || null;
+  if (p.plannedManpower !== undefined) body.planned_manpower = p.plannedManpower;
+  if (p.businessType !== undefined) body.business_type = p.businessType || null;
+  if (p.description !== undefined) body.description = p.description || null;
+  if (p.docLink !== undefined) body.doc_link = p.docLink || null;
+  return body;
 }
 
 // ============================================================

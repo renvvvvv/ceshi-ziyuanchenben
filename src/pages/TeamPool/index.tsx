@@ -155,16 +155,20 @@ function TeamPool() {
     setManageDeleting(true);
     try {
       const r = await projectApi.batchDeleteTeamMembers(ids.map(String));
-      if (r.success) {
-        const idSet = new Set(ids.map(String));
-        setMembers((prev) => prev.filter((m) => !idSet.has(m.id)));
-        setManageSelectedKeys([]);
-        message.success(`已删除 ${(r.data as { deleted?: number })?.deleted ?? ids.length} 名人员`);
+      const deleted = (r.data as { deleted?: number } | undefined)?.deleted ?? ids.length;
+      // 与后端结果对账：临时 id（尚未落库）会被后端忽略，删除数可能少于请求数
+      if (deleted < ids.length) {
+        message.warning(`已删除 ${deleted}/${ids.length} 人（其余可能已被其他操作删除或尚未保存到服务器）`);
       } else {
-        message.error('删除失败，请重试');
+        message.success(`已删除 ${deleted} 名人员`);
       }
-    } catch {
-      message.error('删除失败：网络或权限错误');
+      const idSet = new Set(ids.map(String));
+      setMembers((prev) => prev.filter((m) => !idSet.has(m.id)));
+      // 已删成员的 id 从勾选集合里清掉，防止悬空 id 混入后续指派
+      setCardSelected((prev) => prev.filter((id) => !idSet.has(id)));
+      setManageSelectedKeys([]);
+    } catch (e: any) {
+      message.error(e?.message || e?.error || '删除失败，请重试');
     } finally {
       setManageDeleting(false);
     }
@@ -226,6 +230,11 @@ function TeamPool() {
     form.validateFields().then((values) => {
       const leaveStartDate = values.leaveStartDate ? dayjs(values.leaveStartDate).format('YYYY-MM-DD') : undefined;
       const leaveEndDate = values.leaveEndDate ? dayjs(values.leaveEndDate).format('YYYY-MM-DD') : undefined;
+      // 非休假状态必须显式清空休假日期（传 null 而非 undefined），
+      // 否则部分更新语义下 DB 残留旧日期
+      const leaveClear = values.status !== '休假'
+        ? { leaveStartDate: null, leaveEndDate: null }
+        : {};
 
       if (editingMember) {
         const becameIdle = editingMember.status === '测试中' && values.status === '空闲';
@@ -238,8 +247,7 @@ function TeamPool() {
           skills: values.skills || [],
           email: values.email || '',
           phone: values.phone || '',
-          leaveStartDate,
-          leaveEndDate,
+          ...(values.status === '休假' ? { leaveStartDate, leaveEndDate } : leaveClear),
           // 转为空闲时清除所有项目关联（包括 upcomingProjects）
           ...(becameIdle ? { projects: [], currentProjects: [], upcomingProjects: [] } : {}),
         };
@@ -1049,7 +1057,7 @@ function TeamPool() {
             <AutoComplete
               placeholder="选择或输入职级"
               allowClear
-              filterOption={(input, opt) => String(opt?.value ?? '').includes(input)}
+              filterOption={(input, opt) => String(opt?.value ?? '').toLowerCase().includes(input.toLowerCase())}
               options={[
                 '测试总监', '部门负责人 / 项目经理', '项目经理（电气主测）', '项目经理（暖通主测）',
                 '电气主测', '暖通主测', '暖通主管', '弱电主管', '弱电主测', '消防主测', '消防主测 / CQC 负责人',

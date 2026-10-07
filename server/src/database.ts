@@ -38,6 +38,11 @@ class PgDbWrapper {
     });
   }
 
+  /** 取独立 client（事务用：BEGIN/COMMIT 必须在同一 client 上执行） */
+  connect(): Promise<import('pg').PoolClient> {
+    return this.pool.connect();
+  }
+
   async ready(): Promise<void> {
     const client = await this.pool.connect();
     try {
