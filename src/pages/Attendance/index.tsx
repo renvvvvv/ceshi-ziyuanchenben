@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { Table, Select, DatePicker, Button, Modal, Tag, Empty, Radio, message, InputNumber, Form, Tabs, Input, Space, Tooltip } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { DownloadOutlined, EyeOutlined, CalendarOutlined, PrinterOutlined, FolderOutlined, UserOutlined, EditOutlined, ThunderboltOutlined, ToolOutlined, PlusOutlined, SyncOutlined } from '@ant-design/icons';
@@ -69,6 +69,21 @@ function Attendance() {
   const [memberFilter, setMemberFilter] = useState('全部');
   const [projectFilter, setProjectFilter] = useState('全部');
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState('statistics');
+  // 切到"项目考勤录入"时自动静默同步一次（手动按钮仍保留）
+  const syncingRef = useRef(false);
+  const lastAutoSyncRef = useRef(0);
+  const handleTabChange = (key: string) => {
+    setActiveTab(key);
+    if (key !== 'entry' || syncingRef.current) return;
+    // 15 秒内已同步过则跳过，避免频繁切 tab 反复拉取
+    if (Date.now() - lastAutoSyncRef.current < 15000) return;
+    syncingRef.current = true;
+    Promise.resolve(reload())
+      .then(() => { lastAutoSyncRef.current = Date.now(); })
+      .catch(() => message.warning('自动同步指派数据失败，可点「同步指派」手动重试'))
+      .finally(() => { syncingRef.current = false; });
+  };
   const [manualOpen, setManualOpen] = useState(false);
   const [manualForm] = Form.useForm();
   const [manualMember, setManualMember] = useState<string | undefined>();
@@ -505,7 +520,8 @@ function Attendance() {
       </div>
 
       <Tabs
-        defaultActiveKey="statistics"
+        activeKey={activeTab}
+        onChange={handleTabChange}
         items={[
           {
             key: 'statistics',
