@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Table, Select, DatePicker, Button, Modal, Tag, Empty, Radio, message, InputNumber, Form, Tabs, Input, Space } from 'antd';
+import { Table, Select, DatePicker, Button, Modal, Tag, Empty, Radio, message, InputNumber, Form, Tabs, Input, Space, Tooltip } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { DownloadOutlined, EyeOutlined, CalendarOutlined, PrinterOutlined, FolderOutlined, UserOutlined, EditOutlined, ThunderboltOutlined, ToolOutlined, PlusOutlined } from '@ant-design/icons';
+import { DownloadOutlined, EyeOutlined, CalendarOutlined, PrinterOutlined, FolderOutlined, UserOutlined, EditOutlined, ThunderboltOutlined, ToolOutlined, PlusOutlined, SyncOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import * as XLSX from 'xlsx';
 import { useData } from '../../store/DataContext';
@@ -50,7 +50,7 @@ function dutyRange(pStart: string, pEnd: string, cStart: string, cEnd: string, t
 }
 
 function Attendance() {
-  const { teamMembers, projects, historyProjects, attendanceAdjustments, setAttendanceAdjustments, updateTeamMember } = useData();
+  const { teamMembers, projects, historyProjects, attendanceAdjustments, setAttendanceAdjustments, updateTeamMember, reload } = useData();
   const isMobile = useIsMobile();
   const [monthFilter, setMonthFilter] = useState(() => {
     // 反推今天属于哪个"19日~次月18日"的考勤周期
@@ -534,6 +534,7 @@ function Attendance() {
               monthFilter={monthFilter} setMonthFilter={setMonthFilter}
               cycleStart={cycleStart} cycleEnd={cycleEnd} cycleLabel={cycleLabel}
               projectOptions={projectOptions}
+              onSync={reload}
             />,
           },
         ]}
@@ -860,12 +861,14 @@ function ProjectEntryView(props: {
   monthFilter: dayjs.Dayjs; setMonthFilter: (v: dayjs.Dayjs) => void;
   cycleStart: string; cycleEnd: string; cycleLabel: string;
   projectOptions: string[];
+  onSync?: () => void | Promise<unknown>;
 }) {
   const { teamMembers, projects, historyProjects, attendanceAdjustments, setAttendanceAdjustments, cycleStart, cycleEnd, cycleLabel, projectOptions } = props;
   const isMobile = useIsMobile();
   const [selectedProject, setSelectedProject] = useState<string>('');
   const [editing, setEditing] = useState<Record<string, { projectStart?: string; projectEnd?: string; leaveDays?: number; position?: string; attendDays?: number }>>({});
   const [saving, setSaving] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [savedKeys, setSavedKeys] = useState<Set<string>>(new Set());
   // 手动添加到该项目的人员 ID（不在系统关联里、但实际参与了的人）
   const [manualMemberIds, setManualMemberIds] = useState<string[]>([]);
@@ -991,6 +994,21 @@ function ProjectEntryView(props: {
     else message.success(`已保存 ${count} 人的考勤数据`);
   };
 
+  // 一键同步：重拉后端最新的人员/项目/指派数据（本页数据仅加载时拉取，
+  // 其他页面（人员池/项目管理）做的指派不会自动出现，需手动同步）
+  const handleSync = async () => {
+    if (!props.onSync) return;
+    setSyncing(true);
+    try {
+      await props.onSync();
+      message.success('已同步最新的人员与项目指派');
+    } catch {
+      message.error('同步失败，请重试');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   return (
     <div style={{ marginTop: 16 }}>
       {/* 选择器条 */}
@@ -1011,6 +1029,17 @@ function ProjectEntryView(props: {
             添加人员
           </Button>
         )}
+        <Tooltip title="重新拉取最新的人员、项目与指派关系（人员池里新指派的人不会自动出现在本表）">
+          <Button
+            icon={<SyncOutlined spin={syncing} />}
+            loading={syncing}
+            onClick={handleSync}
+            disabled={!props.onSync}
+            style={{ borderRadius: 8, borderColor: 'rgba(99,102,241,0.3)', color: '#6366f1', background: 'rgba(99,102,241,0.06)', fontWeight: 500 }}
+          >
+            同步指派
+          </Button>
+        </Tooltip>
         <Radio.Group value={props.cycleType} onChange={(e) => props.setCycleType(e.target.value)} optionType="button" buttonStyle="solid" size="small">
           <Radio.Button value="cycle19">19日周期</Radio.Button>
           <Radio.Button value="month">自然月</Radio.Button>
