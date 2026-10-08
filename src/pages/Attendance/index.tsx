@@ -1087,7 +1087,7 @@ function ProjectEntryView(props: {
           </div>
           <div style={{ background: '#f6f5fc', border: '1px solid #e9e7f4', borderRadius: 12, overflow: 'hidden' }}>
             <Table
-              size="small" pagination={{ pageSize: 20, showSizeChanger: false, showTotal: (t) => `共 ${t} 人` }}
+              size="small" pagination={{ pageSize: 50, showSizeChanger: true, pageSizeOptions: ['20', '50', '100'], showTotal: (t) => `共 ${t} 人参与` }}
               dataSource={projectRows} rowKey="memberId"
               columns={[
                 { title: '人员', dataIndex: 'memberName', width: 100,
