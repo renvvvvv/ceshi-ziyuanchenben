@@ -128,13 +128,43 @@ router.put('/:id', requireAuth, requireRole(['管理者', '编辑者']), asyncHa
   ]);
   if (!partial) { res.status(400).json({ error: '没有可更新的字段' }); return; }
   partial.values.push(id);
+
+  // 项目完成自动归档：状态在本次请求中从非"已完成"转为"已完成"的瞬间，
+  // 自动插入 historical_projects（同名防重，幂等；原 test_projects 行保留）。
+  // 覆盖所有触发路径：autoProcessProjects 状态机 / 手动编辑 / 批量操作。
+  let prevStatus: string | null = null;
+  const completing = String(b.status ?? '') === '已完成';
+  if (completing) {
+    const prev = await db.getAsync('SELECT status FROM test_projects WHERE id=$1', id) as { status?: string } | undefined;
+    prevStatus = prev?.status ?? null;
+  }
+
   const result = await db.runAsync(
     `UPDATE test_projects SET ${partial.setSql}, updated_at=NOW()
      WHERE id=$${partial.values.length} RETURNING id`,
     ...partial.values,
   );
   if (result.changes === 0) { res.status(404).json({ error: '项目不存在' }); return; }
-  res.json({ success: true, id: result.lastInsertRowid });
+
+  let archived = false;
+  if (completing && prevStatus !== null && prevStatus !== '已完成') {
+    const ins = await db.runAsync(
+      `INSERT INTO historical_projects
+         (name, it_output, start_date, end_date, customer, doc_link, city, manager,
+          planned_delivery_date, actual_delivery_date, planned_manpower, business_type, description, status)
+       SELECT name, it_output, start_date, end_date, customer, doc_link, city, manager,
+              planned_delivery_date, actual_delivery_date, planned_manpower, business_type, description, '已完成'
+       FROM test_projects t
+       WHERE t.id = $1
+         AND NOT EXISTS (SELECT 1 FROM historical_projects h WHERE h.name = t.name)
+       RETURNING id`,
+      id,
+    );
+    archived = (ins.changes ?? 0) > 0;
+    if (archived) console.log(`[projects] 项目完成自动归档到历史项目: id=${id}`);
+  }
+
+  res.json({ success: true, id: result.lastInsertRowid, ...(archived ? { archived: true } : {}) });
 }));
 
 /** DELETE /api/projects/:id — 删除项目 */
