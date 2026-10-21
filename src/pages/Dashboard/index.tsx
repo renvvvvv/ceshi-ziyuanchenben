@@ -142,7 +142,10 @@ function Dashboard() {
   // 口径修正（2026-08-27）：2026-07-19 起"已完成"项目保留在 projects（手动归档才进历史），
   // 已完成数/总IT产出/平均人力必须合并 projects + historyProjects 统计，否则全为 0
   const kpiData = useMemo(() => {
-    const notStartedProjects = projects.filter((p) => p.status === '未开始').length;
+    const notStarted = projects.filter((p) => p.status === '未开始');
+    const notStartedProjects = notStarted.length;
+    // 待测试 IT 兆瓦数：所有未开始项目的 IT 产出总和（保留 1 位小数避免浮点和尾差）
+    const pendingTestMW = +notStarted.reduce((sum, p) => sum + (p.itOutput || 0), 0).toFixed(1);
     const completed = [
       ...projects.filter((p) => p.status === '已完成'),
       ...historyProjects.filter((p) => p.status === '已完成'),
@@ -156,7 +159,7 @@ function Dashboard() {
       ? Math.round(completedWithManpower.reduce((sum, p) => sum + (p.plannedManpower || 0), 0) / completedWithManpower.length)
       : 0;
 
-    return { notStartedProjects, completedProjects, totalItOutput, avgManpower };
+    return { notStartedProjects, pendingTestMW, completedProjects, totalItOutput, avgManpower };
   }, [projects, historyProjects]);
 
   // 动态计算状态分布（与筛选状态关联）
@@ -650,10 +653,11 @@ function Dashboard() {
 
       <div className="kpi-cards-row">
         <KpiCard
-          title="未开始项目数"
-          value={kpiData.notStartedProjects}
-          icon={<ProjectOutlined style={{ color: '#ea580c' }} />}
-          tooltip="所有未开始的项目总数"
+          title="待测试 IT 兆瓦数"
+          value={kpiData.pendingTestMW}
+          suffix="MW"
+          icon={<ThunderboltOutlined style={{ color: '#ea580c' }} />}
+          tooltip={`未开始项目的 IT 产出总和（待测试容量），共 ${kpiData.notStartedProjects} 个未开始项目`}
         />
         <KpiCard
           title="已完成项目数"
