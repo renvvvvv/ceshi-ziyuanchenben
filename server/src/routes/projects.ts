@@ -168,7 +168,7 @@ router.put('/:id', requireAuth, requireRole(['管理者', '编辑者']), asyncHa
 }));
 
 /** DELETE /api/projects/:id — 删除项目 */
-router.delete('/:id', requireRole(['管理者']), asyncHandler(async (req, res) => {
+router.delete('/:id', requireAuth, requireProjectDeleteUser, asyncHandler(async (req, res) => {
   const id = parseIdOrNull(req.params.id);
   if (id === null) { res.status(400).json({ error: 'id 必须为正整数' }); return; }
   const result = await db.runAsync('DELETE FROM test_projects WHERE id=$1 RETURNING id', id);
@@ -315,6 +315,18 @@ router.delete('/members/:id', requireRole(['管理者']), asyncHandler(async (re
   res.json({ success: true });
 }));
 
+// 项目删除白名单：仅 admin 与指定飞书账号（王家晟）可删除项目/历史项目，
+// 其他账号（含管理者角色）一律 403，防止项目数据被误删或恶意删除
+const PROJECT_DELETE_ALLOW = new Set(['admin', 'feishu:ou_7348974a528b91d389705f2b0e849623']);
+function requireProjectDeleteUser(req: Request, res: Response, next: NextFunction) {
+  const u = (req as any).user?.username as string | undefined;
+  if (!u || !PROJECT_DELETE_ALLOW.has(u)) {
+    res.status(403).json({ success: false, error: '仅授权账号可删除项目数据' });
+    return;
+  }
+  next();
+}
+
 // 人员批量管理白名单：仅 admin 与指定飞书账号（王家晟）可一键管理人员信息
 const MEMBER_MGMT_ALLOW = new Set(['admin', 'feishu:ou_7348974a528b91d389705f2b0e849623']);
 
@@ -384,7 +396,7 @@ router.put('/history/:id', requireAuth, requireRole(['管理者', '编辑者']),
 }));
 
 /** DELETE /api/projects/history/:id — 删除历史项目 */
-router.delete('/history/:id', requireRole(['管理者']), asyncHandler(async (req, res) => {
+router.delete('/history/:id', requireAuth, requireProjectDeleteUser, asyncHandler(async (req, res) => {
   const id = parseIdOrNull(req.params.id);
   if (id === null) { res.status(400).json({ error: 'id 必须为正整数' }); return; }
   const result = await db.runAsync('DELETE FROM historical_projects WHERE id=$1 RETURNING id', id);

@@ -8,6 +8,7 @@ import { PlusOutlined, LinkOutlined, SearchOutlined, EditOutlined, DeleteOutline
 import dayjs from 'dayjs';
 import StatusTag from '../../components/StatusTag';
 import { useData } from '../../store/DataContext';
+import { useAuth, PRIVILEGED_ACCOUNTS } from '../../store/AuthContext';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import type { HistoricalProject } from '../../types';
 
@@ -15,6 +16,9 @@ function History() {
   const navigate = useNavigate();
   const isMobile = useIsMobile();
   const { historyProjects, setHistoryProjects, addHistoryProject, updateHistoryProject, deleteHistoryProject } = useData();
+  // 删除按钮仅特权账号可见（admin + 王家晟飞书账号），其余账号一律不渲染
+  const { user: authUser } = useAuth();
+  const canDeleteProject = PRIVILEGED_ACCOUNTS.has(authUser?.username || '');
   const [yearFilter, setYearFilter] = useState<string>('全部');
   const [cityFilter, setCityFilter] = useState<string>('全部');
   const [customerFilter, setCustomerFilter] = useState<string>('全部');
@@ -323,17 +327,19 @@ function History() {
             <Tooltip title="编辑项目">
               <Button type="text" size="small" icon={<EditOutlined />} onClick={() => handleEdit(record)} style={{ color: '#d97706', width: 32, height: 28 }} />
             </Tooltip>
-            <Popconfirm
-              title="确认删除"
-              description={`确定要删除历史项目"${record.name}"吗？`}
-              onConfirm={() => handleDelete(record.id)}
-              okText="确认"
-              cancelText="取消"
-            >
-              <Tooltip title="删除记录">
-                <Button type="text" size="small" danger icon={<DeleteOutlined />} style={{ width: 32, height: 28 }} />
-              </Tooltip>
-            </Popconfirm>
+            {canDeleteProject && (
+              <Popconfirm
+                title="确认删除"
+                description={`确定要删除历史项目"${record.name}"吗？`}
+                onConfirm={() => handleDelete(record.id)}
+                okText="确认"
+                cancelText="取消"
+              >
+                <Tooltip title="删除记录">
+                  <Button type="text" size="small" danger icon={<DeleteOutlined />} style={{ width: 32, height: 28 }} />
+                </Tooltip>
+              </Popconfirm>
+            )}
           </Space>
         ),
       },

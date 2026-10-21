@@ -8,11 +8,15 @@ import StatusTag from '../../components/StatusTag';
 import ProjectModal from '../../components/ProjectModal';
 import ComparisonReportModal from '../../components/ComparisonReportModal';
 import { useData } from '../../store/DataContext';
+import { useAuth, PRIVILEGED_ACCOUNTS } from '../../store/AuthContext';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import type { Project, HistoricalProject, TeamMember } from '../../types';
 
 function Projects() {
   const { projects, setProjects, historyProjects, setHistoryProjects, teamMembers, setTeamMembers, autoProcessProjects, autoProcessMembers, addProject, updateProject, deleteProject, addHistoryProject, updateTeamMember, archiveProject } = useData();
+  // 删除按钮仅特权账号可见（admin + 王家晟飞书账号），其余账号一律不渲染
+  const { user: authUser } = useAuth();
+  const canDeleteProject = PRIVILEGED_ACCOUNTS.has(authUser?.username || '');
 
   // ===== 自动化流程：进入项目管理页时也自动处理项目状态 =====
   useEffect(() => {
@@ -284,17 +288,19 @@ function Projects() {
               </Tooltip>
             </Popconfirm>
           )}
-          <Popconfirm
-            title="确认删除"
-            description={`确定要删除项目"${record.name}"吗？`}
-            onConfirm={() => handleDelete(record.id)}
-            okText="确认"
-            cancelText="取消"
-          >
-            <Tooltip title="删除项目">
-              <Button type="text" size="small" danger icon={<DeleteOutlined />} style={{ width: 32, height: 28 }} />
-            </Tooltip>
-          </Popconfirm>
+          {canDeleteProject && (
+            <Popconfirm
+              title="确认删除"
+              description={`确定要删除项目"${record.name}"吗？`}
+              onConfirm={() => handleDelete(record.id)}
+              okText="确认"
+              cancelText="取消"
+            >
+              <Tooltip title="删除项目">
+                <Button type="text" size="small" danger icon={<DeleteOutlined />} style={{ width: 32, height: 28 }} />
+              </Tooltip>
+            </Popconfirm>
+          )}
         </Space>
       ),
     },

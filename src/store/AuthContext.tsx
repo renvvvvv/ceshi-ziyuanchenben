@@ -318,6 +318,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
+// 特权账号白名单：删除项目/历史项目、批量管理人员等高危操作的统一白名单
+// （admin 管理员 + 王家晟飞书账号），与后端各路由白名单保持同源同步
+export const PRIVILEGED_ACCOUNTS = new Set(['admin', 'feishu:ou_7348974a528b91d389705f2b0e849623']);
+
 export function useAuth(): AuthContextValue {
   const ctx = useContext(AuthContext);
   if (!ctx) {
