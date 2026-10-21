@@ -5,7 +5,13 @@
  */
 import { Router, Request, Response } from 'express';
 import crypto from 'crypto';
+import { readFileSync } from 'fs';
+import { createRequire } from 'module';
 import db from '../database.js';
+import { getTrackingSnapshot } from './tracking.js';
+
+const require_ = createRequire(import.meta.url);
+const VERSION = require_('../../../package.json').version as string;
 
 const router = Router();
 const STATUS_TOKEN = process.env.STATUS_TOKEN || '';
@@ -42,11 +48,42 @@ router.get('/', async (req, res) => {
     const auditToday = await db.getAsync(
       `SELECT COUNT(*)::int AS c FROM audit_log WHERE created_at >= date_trunc('day', now())`
     );
+    // 在线会话（data/sessions.json 中未过期的 distinct 用户）
+    let onlineSessions = 0;
+    try {
+      const raw = JSON.parse(readFileSync('data/sessions.json', 'utf8')) as Record<string, { expiresAt?: number; username?: string }>;
+      const alive = new Set<string>();
+      for (const s of Object.values(raw)) {
+        if (s?.expiresAt && s.expiresAt > Date.now() && s.username) alive.add(s.username);
+      }
+      onlineSessions = alive.size;
+    } catch { /* 文件缺失忽略 */ }
+
+    // 最近审计详情（默认 10 条）
+    const auditRows = await db.allAsync(
+      `SELECT created_at, username, action, target_type, target_name, detail
+       FROM audit_log ORDER BY id DESC LIMIT 10`) as any[];
+
     const mem = process.memoryUsage();
+    const track = getTrackingSnapshot();
     res.json({
       success: true,
       status: 'ok',
       server_time: new Date().toISOString(),
+      version: VERSION,
+      started_at: new Date(Date.now() - process.uptime() * 1000).toISOString(),
+      users: {
+        online_sessions: onlineSessions,
+        active_5min: track.users.active_5min,
+        active_today: Math.max(track.users.active_today_tracked, new Set(auditRows.map(r => r.username)).size),
+      },
+      audit_recent: auditRows.map(r => ({
+        time: r.created_at, user: r.username, action: r.action,
+        target: `${r.target_type} ${r.target_name || ''}`.trim(),
+        detail: r.detail ? JSON.parse(r.detail) : null,
+      })),
+      modules_today: track.modules_today,
+      issues: track.issues,
       db: {
         connected: true,
         size_mb: Math.round(Number(dbSize?.s ?? 0) / 1048576),
@@ -57,7 +94,7 @@ router.get('/', async (req, res) => {
         rss_mb: Math.round(mem.rss / 1048576),
         node: process.version,
       },
-      activity: { audit_entries_today: auditToday?.c ?? -1 },
+      audit_entries_today: auditToday?.c ?? -1,
       latency_ms: Date.now() - started,
     });
   } catch (err: any) {

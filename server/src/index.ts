@@ -11,6 +11,7 @@ import drawingRouter from './routes/drawingPipeline.js';
 import drawingReviewRouter from './routes/drawingReview.js';
 import systemLogsRouter, { installLogRing } from './routes/systemLogs.js';
 import statusRouter from './routes/status.js';
+import { trackActivity } from './routes/tracking.js';
 import rcStoreRouter from './routes/rcStore.js';
 import testDocsRouter from './routes/testDocs.js';
 import attendanceRouter from './routes/attendance.js';
@@ -42,6 +43,8 @@ app.use(express.json({ limit: '10mb' })); // 报告审核支持超长文档（~2
 
 // 解析 session token（所有请求都会跑；只是把 user 挂到 req 上，不强制要求登录）
 app.use(authMiddleware);
+// 运营追踪（模块计数/活跃/错误慢请求）——须在 authMiddleware 之后以拿到用户
+app.use(trackActivity);
 
 app.use('/api/auth', authRouter);
 app.use('/api/resource-calc', resourceCalcRouter);
