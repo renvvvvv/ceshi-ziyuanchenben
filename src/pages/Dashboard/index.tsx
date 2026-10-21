@@ -653,11 +653,10 @@ function Dashboard() {
 
       <div className="kpi-cards-row">
         <KpiCard
-          title="待测试 IT 兆瓦数"
-          value={kpiData.pendingTestMW}
-          suffix="MW"
-          icon={<ThunderboltOutlined style={{ color: '#ea580c' }} />}
-          tooltip={`未开始项目的 IT 产出总和（待测试容量），共 ${kpiData.notStartedProjects} 个未开始项目`}
+          title="未开始项目数"
+          value={kpiData.notStartedProjects}
+          icon={<ProjectOutlined style={{ color: '#ea580c' }} />}
+          tooltip="所有未开始的项目总数"
         />
         <KpiCard
           title="已完成项目数"
@@ -673,11 +672,11 @@ function Dashboard() {
           tooltip="累计IT产出量（MW）"
         />
         <KpiCard
-          title="平均投入人力"
-          value={kpiData.avgManpower}
-          suffix="人"
-          icon={<TeamOutlined style={{ color: '#0d9488' }} />}
-          tooltip="已完成项目的平均计划投入人力"
+          title="待测试 IT 兆瓦数"
+          value={kpiData.pendingTestMW}
+          suffix="MW"
+          icon={<ThunderboltOutlined style={{ color: '#0d9488' }} />}
+          tooltip={`未开始项目的 IT 产出总和（待测试容量），共 ${kpiData.notStartedProjects} 个未开始项目`}
         />
       </div>
 
