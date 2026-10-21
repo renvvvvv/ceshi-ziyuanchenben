@@ -78,8 +78,8 @@ export default function SystemLogs() {
   const loadAudit = useCallback(async () => {
     setAuditLoading(true);
     try {
-      const r = await request('/syslogs/audit?limit=200') as { data?: AuditItem[] };
-      setAuditItems(r.data || []);
+      const r = await request('/syslogs/audit?limit=200') as { data?: AuditItem[]; items?: AuditItem[] };
+      setAuditItems(r.items || r.data || []);
     } catch { /* 静默 */ }
     finally { setAuditLoading(false); }
   }, []);

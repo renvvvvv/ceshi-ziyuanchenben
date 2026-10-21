@@ -144,14 +144,11 @@ router.put('/:id', requireAuth, requireRole(['管理者', '编辑者']), asyncHa
   // 项目完成自动归档：状态在本次请求中从非"已完成"转为"已完成"的瞬间，
   // 自动插入 historical_projects（同名防重，幂等；原 test_projects 行保留）。
   // 覆盖所有触发路径：autoProcessProjects 状态机 / 手动编辑 / 批量操作。
-  let prevStatus: string | null = null;
-  let prevName: string | undefined;
   const completing = String(b.status ?? '') === '已完成';
-  if (completing) {
-    const prev = await db.getAsync('SELECT status, name FROM test_projects WHERE id=$1', id) as { status?: string; name?: string } | undefined;
-    prevStatus = prev?.status ?? null;
-    prevName = prev?.name;
-  }
+  // 更新前状态与名称：归档检测 + 审计 target_name（主键查询，微秒级）
+  const prev = await db.getAsync('SELECT status, name FROM test_projects WHERE id=$1', id) as { status?: string; name?: string } | undefined;
+  const prevStatus = prev?.status ?? null;
+  const prevName = prev?.name;
 
   const result = await db.runAsync(
     `UPDATE test_projects SET ${partial.setSql}, updated_at=NOW()
@@ -170,8 +167,7 @@ router.put('/:id', requireAuth, requireRole(['管理者', '编辑者']), asyncHa
               planned_delivery_date, actual_delivery_date, planned_manpower, business_type, description, '已完成'
        FROM test_projects t
        WHERE t.id = $1
-         AND NOT EXISTS (SELECT 1 FROM historical_projects h WHERE h.name = t.name)
-       RETURNING id`,
+       ON CONFLICT (name) DO NOTHING`,
       id,
     );
     archived = (ins.changes ?? 0) > 0;
@@ -227,6 +223,12 @@ router.post('/history', requireAuth, requireRole(['管理者', '编辑者']), as
   } = req.body;
   if (!name || !customer) {
     res.status(400).json({ error: '项目名称和客户必填' });
+    return;
+  }
+  // 同名防重：历史项目名唯一（与自动归档同一口径），重复创建返回冲突而非插入第二行
+  const dup = await db.getAsync('SELECT id FROM historical_projects WHERE name=$1', name);
+  if (dup) {
+    res.status(409).json({ success: false, error: `历史项目「${name}」已存在（项目完成时会自动归档，无需手动重复添加）` });
     return;
   }
   const result = await db.runAsync(
@@ -309,6 +311,7 @@ router.post('/members', requireAuth, requireRole(['管理者', '编辑者']), as
 router.put('/members/:id', requireAuth, requireRole(['管理者', '编辑者']), asyncHandler(async (req, res) => {
   const id = parseIdOrNull(req.params.id);
   if (id === null) { res.status(400).json({ error: 'id 必须为正整数' }); return; }
+  const prevMem = await db.getAsync('SELECT name FROM team_members WHERE id=$1', id) as { name?: string } | undefined;
   // 部分更新：只改携带的字段（如考勤模块只改 position），避免把姓名/状态等意外清空
   const partial = partialSetSql(req.body || {}, [
     'name', 'employee_id', 'status', 'skills', 'current_projects',
@@ -323,7 +326,7 @@ router.put('/members/:id', requireAuth, requireRole(['管理者', '编辑者']),
     ...partial.values,
   );
   if (result.changes === 0) { res.status(404).json({ error: '成员不存在' }); return; }
-  auditLog(req, 'update', 'member', id, req.body?.name ?? '', { fields: Object.keys(req.body || {}) });
+  auditLog(req, 'update', 'member', id, req.body?.name ?? prevMem?.name ?? '', { fields: Object.keys(req.body || {}) });
   res.json({ success: true, id: result.lastInsertRowid, changes: result.changes });
 }));
 
@@ -404,6 +407,7 @@ router.post('/members/batch-delete', requireAuth, (req, res, next) => {
 router.put('/history/:id', requireAuth, requireRole(['管理者', '编辑者']), asyncHandler(async (req, res) => {
   const id = parseIdOrNull(req.params.id);
   if (id === null) { res.status(400).json({ error: 'id 必须为正整数' }); return; }
+  const prevHist = await db.getAsync('SELECT name FROM historical_projects WHERE id=$1', id) as { name?: string } | undefined;
   const partial = partialSetSql(req.body || {}, [
     'name', 'it_output', 'start_date', 'end_date', 'customer', 'doc_link',
     'city', 'manager', 'status', 'planned_delivery_date', 'actual_delivery_date',
@@ -417,7 +421,7 @@ router.put('/history/:id', requireAuth, requireRole(['管理者', '编辑者']),
     ...partial.values,
   );
   if (result.changes === 0) { res.status(404).json({ error: '历史项目不存在' }); return; }
-  auditLog(req, 'update', 'history_project', id, req.body?.name ?? '', { fields: Object.keys(req.body || {}) });
+  auditLog(req, 'update', 'history_project', id, req.body?.name ?? prevHist?.name ?? '', { fields: Object.keys(req.body || {}) });
   res.json({ success: true, id: result.lastInsertRowid, changes: result.changes });
 }));
 

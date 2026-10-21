@@ -160,9 +160,11 @@ test.describe('新功能回归', () => {
     await page.waitForTimeout(2500);
     await expect(page.locator('body')).toContainText('故障快照');
     await page.getByRole('tab', { name: /操作审计/ }).click();
-    await page.waitForTimeout(2000);
-    // 审计表至少含表头（时间/账号/动作）
-    await expect(page.locator('.ant-tabs-tabpane-active')).toContainText('账号');
+    await page.waitForTimeout(2500);
+    // 必须有真实数据行（此前字段名不匹配导致恒空的 bug 曾让表头断言假绿）
+    const rows = await page.locator('.ant-tabs-tabpane-active tbody tr.ant-table-row').count();
+    expect(rows).toBeGreaterThan(0);
+    await expect(page.locator('.ant-tabs-tabpane-active')).toContainText('admin');
   });
 
   test('历史项目：归档记录含 A2 楼', async ({ page }) => {
@@ -172,7 +174,7 @@ test.describe('新功能回归', () => {
     const body = await page.locator('body').innerText();
     // A2 可能不在第一页，用搜索定位
     if (!body.includes('乌兰大三期A2楼')) {
-      await page.locator('input[placeholder*="搜索"], input[type="text"]').first().fill('A2楼');
+      await page.getByPlaceholder(/搜索|项目名/).first().fill('A2楼');
       await page.waitForTimeout(1000);
     }
     await expect(page.locator('body')).toContainText('乌兰大三期A2楼');

@@ -77,11 +77,16 @@ router.get('/', async (req, res) => {
         active_5min: track.users.active_5min,
         active_today: Math.max(track.users.active_today_tracked, new Set(auditRows.map(r => r.username)).size),
       },
-      audit_recent: auditRows.map(r => ({
-        time: r.created_at, user: r.username, action: r.action,
-        target: `${r.target_type} ${r.target_name || ''}`.trim(),
-        detail: r.detail ? JSON.parse(r.detail) : null,
-      })),
+      audit_recent: auditRows.map(r => {
+        // detail 可能被 2000 字符截断为非法 JSON，逐行容错防单条打挂整个状态接口
+        let detail: unknown = null;
+        if (r.detail) { try { detail = JSON.parse(r.detail); } catch { detail = r.detail; } }
+        return {
+          time: r.created_at, user: r.username, action: r.action,
+          target: `${r.target_type} ${r.target_name || ''}`.trim(),
+          detail,
+        };
+      }),
       modules_today: track.modules_today,
       issues: track.issues,
       db: {

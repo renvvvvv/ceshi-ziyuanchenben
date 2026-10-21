@@ -204,10 +204,13 @@ CREATE TABLE IF NOT EXISTS audit_log (
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     username    TEXT NOT NULL,
     user_id     TEXT,
-    action      TEXT NOT NULL,            -- create/update/delete/batch_delete/archive
+    action      TEXT NOT NULL,            -- create/update/delete/batch_delete（归档记为 update + detail.archived）
     target_type TEXT NOT NULL,            -- project/history_project/member/...
     target_id   TEXT,
     target_name TEXT,
     detail      TEXT                      -- 变更摘要 JSON（截断 2000）
 );
 CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log (created_at DESC);
+
+-- 历史项目名唯一：自动归档 ON CONFLICT 防重 + 手动创建防重的库级兜底
+CREATE UNIQUE INDEX IF NOT EXISTS idx_historical_projects_name ON historical_projects (name);

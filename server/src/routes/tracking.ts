@@ -6,6 +6,9 @@
  */
 import { Request, Response, NextFunction } from 'express';
 
+/** 本地日期（容器 TZ=Asia/Shanghai），日切按北京时间而非 UTC */
+const localDate = () => new Date().toLocaleDateString('en-CA');
+
 const MODULE_MAP: Array<[RegExp, string]> = [
   [/^\/api\/kb\/qa/, 'AI测试专家'],
   [/^\/api\/kb/, '知识库'],
@@ -17,21 +20,22 @@ const MODULE_MAP: Array<[RegExp, string]> = [
   [/^\/api\/syslogs/, '故障日志'],
   [/^\/api\/report-review/, '测试报告审核'],
   [/^\/api\/attendance/, '人员考勤'],
-  [/^\/api\/rc/, '资源配置/计算器'],
+  [/^\/api\/resource-calc/, '资源计算器'],
+  [/^\/api\/rc/, '资源配置'],
   [/^\/api\/test-docs/, '测试管理制度'],
 ];
 
 interface Issue { time: string; method: string; url: string; status: number; ms: number; user?: string }
 
 const state = {
-  date: new Date().toISOString().slice(0, 10),
+  date: localDate(),
   moduleHits: new Map<string, number>(),
   userLastSeen: new Map<string, number>(),
   issues: [] as Issue[],
 };
 
 function resetIfNewDay() {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDate();
   if (state.date !== today) {
     state.date = today;
     state.moduleHits.clear();
