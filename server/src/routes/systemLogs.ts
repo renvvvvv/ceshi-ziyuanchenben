@@ -248,6 +248,15 @@ router.post('/snapshot', requireAuth, requireRole(['管理者', '编辑者']), a
 }));
 
 /** GET /api/syslogs 快照列表 */
+/** GET /api/syslogs/audit 操作审计日志（本模块已有账号白名单，直接复用） */
+router.get('/audit', requireAuth, asyncH(async (req, res) => {
+  const limit = Math.min(500, Math.max(1, parseInt(String(req.query.limit ?? '100'), 10) || 100));
+  const rows = await db.allAsync(
+    `SELECT id, created_at, username, action, target_type, target_id, target_name, detail
+     FROM audit_log ORDER BY id DESC LIMIT $1`, limit) as any[];
+  res.json({ success: true, items: rows });
+}));
+
 router.get('/', requireAuth, asyncH(async (_req, res) => {
   const rows = await db.allAsync(
     `SELECT s.id, s.title, s.hours, s.username, s.created_at, s.ai_at,

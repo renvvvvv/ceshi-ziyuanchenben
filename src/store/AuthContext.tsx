@@ -263,6 +263,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const newState = { user: data.user };
         setAuthState(newState);
         saveToStorage(AUTH_KEY, newState);
+        // 广播登录成功：DataContext 监听后重拉后端数据，
+        // 解决"密码登录后页面停留在登录前的旧缓存/离线模式，需 F5"的暗坑
+        window.dispatchEvent(new Event('auth:login'));
         return { success: true, message: '登录成功' };
       } catch (err) {
         return { success: false, message: '网络错误，请检查后端服务' };

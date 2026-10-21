@@ -197,3 +197,17 @@ CREATE TABLE IF NOT EXISTS test_docs (
     created_at  TIMESTAMPTZ DEFAULT NOW(),
     updated_at  TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- 操作审计日志：记录高危写操作（谁/何时/对什么做了什么），数据异常时一分钟定位
+CREATE TABLE IF NOT EXISTS audit_log (
+    id          SERIAL PRIMARY KEY,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    username    TEXT NOT NULL,
+    user_id     TEXT,
+    action      TEXT NOT NULL,            -- create/update/delete/batch_delete/archive
+    target_type TEXT NOT NULL,            -- project/history_project/member/...
+    target_id   TEXT,
+    target_name TEXT,
+    detail      TEXT                      -- 变更摘要 JSON（截断 2000）
+);
+CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log (created_at DESC);

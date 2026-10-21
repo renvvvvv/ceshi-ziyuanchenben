@@ -40,6 +40,17 @@ function partialSetSql(body: Record<string, unknown>, fields: string[]): { setSq
   return { setSql: sets.join(', '), values };
 }
 
+/** 操作审计：记录高危写操作（fire-and-forget，不阻塞响应、失败仅告警） */
+function auditLog(req: Request, action: string, targetType: string, targetId: unknown, targetName: string, detail?: Record<string, unknown>) {
+  const u = (req as any).user;
+  void db.runAsync(
+    `INSERT INTO audit_log (username, user_id, action, target_type, target_id, target_name, detail)
+     VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+    u?.username ?? 'unknown', String(u?.userId ?? ''), action, targetType, String(targetId ?? ''), targetName,
+    detail ? JSON.stringify(detail).slice(0, 2000) : null,
+  ).catch((e: Error) => console.warn('[audit] 写入失败:', e.message));
+}
+
 /** 限制分页参数边界 */
 function clampPageSize(rawPage: unknown, rawSize: unknown): { page: number; size: number; offset: number } {
   const page = Math.max(1, parseInt(String(rawPage ?? '1'), 10) || 1);
@@ -102,6 +113,7 @@ router.post('/', requireAuth, requireRole(['管理者', '编辑者']), asyncHand
     planned_delivery_date || null, actual_delivery_date || null, doc_link || null,
   );
 
+  auditLog(req, 'create', 'project', result.lastInsertRowid, name, { customer, manager, it_output });
   res.json({ success: true, id: result.lastInsertRowid });
 }));
 
@@ -133,10 +145,12 @@ router.put('/:id', requireAuth, requireRole(['管理者', '编辑者']), asyncHa
   // 自动插入 historical_projects（同名防重，幂等；原 test_projects 行保留）。
   // 覆盖所有触发路径：autoProcessProjects 状态机 / 手动编辑 / 批量操作。
   let prevStatus: string | null = null;
+  let prevName: string | undefined;
   const completing = String(b.status ?? '') === '已完成';
   if (completing) {
-    const prev = await db.getAsync('SELECT status FROM test_projects WHERE id=$1', id) as { status?: string } | undefined;
+    const prev = await db.getAsync('SELECT status, name FROM test_projects WHERE id=$1', id) as { status?: string; name?: string } | undefined;
     prevStatus = prev?.status ?? null;
+    prevName = prev?.name;
   }
 
   const result = await db.runAsync(
@@ -164,6 +178,7 @@ router.put('/:id', requireAuth, requireRole(['管理者', '编辑者']), asyncHa
     if (archived) console.log(`[projects] 项目完成自动归档到历史项目: id=${id}`);
   }
 
+  auditLog(req, 'update', 'project', id, req.body?.name ?? prevName ?? '', { fields: Object.keys(req.body || {}), ...(archived ? { archived: true } : {}) });
   res.json({ success: true, id: result.lastInsertRowid, ...(archived ? { archived: true } : {}) });
 }));
 
@@ -171,8 +186,11 @@ router.put('/:id', requireAuth, requireRole(['管理者', '编辑者']), asyncHa
 router.delete('/:id', requireAuth, requireProjectDeleteUser, asyncHandler(async (req, res) => {
   const id = parseIdOrNull(req.params.id);
   if (id === null) { res.status(400).json({ error: 'id 必须为正整数' }); return; }
+  const prev = await db.getAsync('SELECT name FROM test_projects WHERE id=$1', id) as { name?: string } | undefined;
+  const projName = prev?.name;
   const result = await db.runAsync('DELETE FROM test_projects WHERE id=$1 RETURNING id', id);
   if (result.changes === 0) { res.status(404).json({ error: '项目不存在' }); return; }
+  auditLog(req, 'delete', 'project', id, projName ?? '');
   res.json({ success: true });
 }));
 
@@ -232,6 +250,7 @@ router.post('/history', requireAuth, requireRole(['管理者', '编辑者']), as
     business_type || null,
     description || null,
   );
+  auditLog(req, 'create', 'history_project', result.lastInsertRowid, name, { customer, it_output });
   res.json({ success: true, id: result.lastInsertRowid });
 }));
 
@@ -274,6 +293,7 @@ router.post('/members', requireAuth, requireRole(['管理者', '编辑者']), as
       req.body.title ?? null,
       req.body.profile ?? null,
     );
+  auditLog(req, 'create', 'member', result.lastInsertRowid, name, { employee_id, status });
     res.json({ success: true, id: result.lastInsertRowid });
   } catch (err: any) {
     if (err?.code === '23505') {
@@ -303,6 +323,7 @@ router.put('/members/:id', requireAuth, requireRole(['管理者', '编辑者']),
     ...partial.values,
   );
   if (result.changes === 0) { res.status(404).json({ error: '成员不存在' }); return; }
+  auditLog(req, 'update', 'member', id, req.body?.name ?? '', { fields: Object.keys(req.body || {}) });
   res.json({ success: true, id: result.lastInsertRowid, changes: result.changes });
 }));
 
@@ -310,8 +331,11 @@ router.put('/members/:id', requireAuth, requireRole(['管理者', '编辑者']),
 router.delete('/members/:id', requireRole(['管理者']), asyncHandler(async (req, res) => {
   const id = parseIdOrNull(req.params.id);
   if (id === null) { res.status(400).json({ error: 'id 必须为正整数' }); return; }
+  const prev = await db.getAsync('SELECT name FROM team_members WHERE id=$1', id) as { name?: string } | undefined;
+  const memName = prev?.name;
   const result = await db.runAsync('DELETE FROM team_members WHERE id=$1 RETURNING id', id);
   if (result.changes === 0) { res.status(404).json({ error: '成员不存在' }); return; }
+  auditLog(req, 'delete', 'member', id, memName ?? '');
   res.json({ success: true });
 }));
 
@@ -372,6 +396,7 @@ router.post('/members/batch-delete', requireAuth, (req, res, next) => {
   } finally {
     client.release();
   }
+  auditLog(req, 'batch_delete', 'member', ids.join(','), `${deleted} 人`, { deleted, requested: ids.length });
   res.json({ success: true, deleted, requested: ids.length });
 }));
 
@@ -392,6 +417,7 @@ router.put('/history/:id', requireAuth, requireRole(['管理者', '编辑者']),
     ...partial.values,
   );
   if (result.changes === 0) { res.status(404).json({ error: '历史项目不存在' }); return; }
+  auditLog(req, 'update', 'history_project', id, req.body?.name ?? '', { fields: Object.keys(req.body || {}) });
   res.json({ success: true, id: result.lastInsertRowid, changes: result.changes });
 }));
 
@@ -399,8 +425,11 @@ router.put('/history/:id', requireAuth, requireRole(['管理者', '编辑者']),
 router.delete('/history/:id', requireAuth, requireProjectDeleteUser, asyncHandler(async (req, res) => {
   const id = parseIdOrNull(req.params.id);
   if (id === null) { res.status(400).json({ error: 'id 必须为正整数' }); return; }
+  const prev = await db.getAsync('SELECT name FROM historical_projects WHERE id=$1', id) as { name?: string } | undefined;
+  const histName = prev?.name;
   const result = await db.runAsync('DELETE FROM historical_projects WHERE id=$1 RETURNING id', id);
   if (result.changes === 0) { res.status(404).json({ error: '历史项目不存在' }); return; }
+  auditLog(req, 'delete', 'history_project', id, histName ?? '');
   res.json({ success: true });
 }));
 

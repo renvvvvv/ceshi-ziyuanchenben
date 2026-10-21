@@ -6,15 +6,20 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   Card, Table, Button, message, Modal, Tag, Space, Select, Input, Tooltip,
-  Typography, Empty, Spin, Timeline, Alert, Descriptions,
+  Typography, Empty, Spin, Timeline, Alert, Descriptions, Tabs,
 } from 'antd';
 import {
   BugOutlined, ReloadOutlined, ThunderboltOutlined, DownloadOutlined,
-  EyeOutlined, WarningOutlined, CheckCircleOutlined,
+  EyeOutlined, WarningOutlined, CheckCircleOutlined, AuditOutlined,
 } from '@ant-design/icons';
 import { request } from '../../api';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import { useAuth } from '../../store/AuthContext';
+
+interface AuditItem {
+  id: number; created_at: string; username: string; action: string;
+  target_type: string; target_id: string; target_name: string; detail: string | null;
+}
 
 interface SnapshotItem {
   id: string; title: string; hours: number; username: string;
@@ -65,6 +70,20 @@ export default function SystemLogs() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  // ===== 操作审计 =====
+  const [activeTab, setActiveTab] = useState('snapshots');
+  const [auditItems, setAuditItems] = useState<AuditItem[]>([]);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const loadAudit = useCallback(async () => {
+    setAuditLoading(true);
+    try {
+      const r = await request('/syslogs/audit?limit=200') as { data?: AuditItem[] };
+      setAuditItems(r.data || []);
+    } catch { /* 静默 */ }
+    finally { setAuditLoading(false); }
+  }, []);
+  useEffect(() => { if (activeTab === 'audit' && auditItems.length === 0) void loadAudit(); }, [activeTab, auditItems.length, loadAudit]);
 
   const capture = async () => {
     setCapturing(true);
@@ -138,8 +157,8 @@ export default function SystemLogs() {
   const sev = ai ? (SEV_TAG[ai.severity] || SEV_TAG['低']) : null;
   const curComp = detail?.components?.find(c => c.name === activeComp);
 
-  return (
-    <div>
+  const snapshotPanel = (
+    <>
       <Card size="small" style={{ marginBottom: 16 }}>
         <Space direction="vertical" style={{ width: '100%' }} size={10}>
           <Space wrap>
@@ -268,6 +287,54 @@ export default function SystemLogs() {
           </div>
         )}
       </Modal>
+    </>
+  );
+
+  const auditPanel = (
+    <Card size="small">
+      <Space style={{ marginBottom: 12 }} wrap>
+        <Typography.Text strong>
+          <AuditOutlined style={{ color: '#6366f1', marginRight: 6 }} />
+          操作审计（删除 / 批量删除 / 建档 / 编辑全量留痕）
+        </Typography.Text>
+        <Button size="small" icon={<ReloadOutlined />} onClick={loadAudit} loading={auditLoading}>刷新</Button>
+      </Space>
+      <Table
+        size="small"
+        rowKey="id"
+        loading={auditLoading}
+        dataSource={auditItems}
+        pagination={{ pageSize: 20, showTotal: (t) => `共 ${t} 条` }}
+        columns={[
+          { title: '时间', dataIndex: 'created_at', width: 160,
+            render: (v: string) => new Date(v).toLocaleString('zh-CN', { hour12: false }) },
+          { title: '账号', dataIndex: 'username', width: 150, ellipsis: true },
+          { title: '动作', dataIndex: 'action', width: 100,
+            render: (v: string) => {
+              const cfg: Record<string, string> = { create: 'green', update: 'blue', delete: 'red', batch_delete: 'red', archive: 'purple' };
+              return <Tag color={cfg[v] || 'default'}>{v}</Tag>;
+            } },
+          { title: '对象', dataIndex: 'target_type', width: 110,
+            render: (v: string, r: AuditItem) => `${v} #${r.target_id}` },
+          { title: '名称', dataIndex: 'target_name', width: 160, ellipsis: true,
+            render: (v: string) => v || '-' },
+          { title: '详情', dataIndex: 'detail', ellipsis: true,
+            render: (v: string | null) => v || '-' },
+        ]}
+      />
+    </Card>
+  );
+
+  return (
+    <div>
+      <Tabs
+        activeKey={activeTab}
+        onChange={setActiveTab}
+        items={[
+          { key: 'snapshots', label: <span><BugOutlined /> 故障快照</span>, children: snapshotPanel },
+          { key: 'audit', label: <span><AuditOutlined /> 操作审计</span>, children: auditPanel },
+        ]}
+      />
     </div>
   );
 }

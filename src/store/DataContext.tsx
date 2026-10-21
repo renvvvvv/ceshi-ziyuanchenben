@@ -310,6 +310,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
     void loadFromBackend();
   }, [loadFromBackend]);
 
+  // 登录成功后重拉后端数据（密码登录是 SPA 页内跳转，不重拉会停留在旧缓存）
+  useEffect(() => {
+    const onLogin = () => { void loadFromBackend(); };
+    window.addEventListener('auth:login', onLogin);
+    return () => window.removeEventListener('auth:login', onLogin);
+  }, [loadFromBackend]);
+
   // ====== 初始化：自动去重 historyProjects（修复历史数据污染） ======
   useEffect(() => {
     const seen = new Set<string>();

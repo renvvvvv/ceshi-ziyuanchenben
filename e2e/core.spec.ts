@@ -1,4 +1,4 @@
-import { test, expect, apiLogin, uiLogin } from './helpers';
+import { test, expect, apiLogin, uiLogin, TEST_ADMIN } from './helpers';
 
 test.describe('登录与权限', () => {
   test('错误密码登录被拒', async ({ page }) => {
@@ -106,5 +106,75 @@ test.describe('核心页面（登录态）', () => {
       const r = await page.request.get(ep);
       expect(r.ok(), ep).toBeTruthy();
     }
+  });
+});
+
+// ============================================================
+// 2026-10-21 新增：本轮功能回归（画像/删除权限/审计/登录刷新/归档）
+// ============================================================
+test.describe('新功能回归', () => {
+  test('登录后自动刷新：无离线横幅且数据即时可见', async ({ page }) => {
+    await page.goto('/login');
+    await page.getByRole('button', { name: /管理员账号登录/ }).click();
+    await page.getByRole('textbox', { name: '账号' }).fill(TEST_ADMIN.username);
+    await page.getByRole('textbox', { name: '密码' }).fill(TEST_ADMIN.password);
+    await page.getByRole('button', { name: '登 录' }).click();
+    await page.waitForURL('**/dashboard', { timeout: 15_000 });
+    await page.waitForTimeout(2500);
+    await expect(page.locator('body')).not.toContainText('离线模式');
+    await expect(page.locator('body')).toContainText('进行中项目');
+  });
+
+  test('人员画像：点开详情 Drawer 显示职级与评语', async ({ page }) => {
+    await apiLogin(page);
+    await page.goto('/team-pool');
+    await page.waitForTimeout(3000);
+    // 搜索一个有名册画像的人（王家晟：助理测试工程师）
+    await page.getByRole('textbox', { name: '搜索姓名或工号' }).fill('王家晟');
+    await page.waitForTimeout(800);
+    await page.locator('.member-card .member-name').first().click();
+    await page.waitForTimeout(1200);
+    await expect(page.locator('.ant-drawer')).toContainText('人员画像');
+    await expect(page.locator('.ant-drawer')).toContainText('助理测试工程师');
+    await expect(page.locator('.ant-drawer')).toContainText('画像评语');
+  });
+
+  test('删除权限：editor 账号看不到项目删除按钮', async ({ page }) => {
+    await page.goto('/login');
+    await page.getByRole('button', { name: /管理员账号登录/ }).click();
+    await page.getByRole('textbox', { name: '账号' }).fill('editor');
+    await page.getByRole('textbox', { name: '密码' }).fill('editor123');
+    await page.getByRole('button', { name: '登 录' }).click();
+    await page.waitForURL('**/dashboard', { timeout: 15_000 });
+    await page.goto('/projects');
+    await page.waitForTimeout(3000);
+    expect(await page.locator('button.ant-btn-dangerous').count()).toBe(0);
+    await page.goto('/history');
+    await page.waitForTimeout(3000);
+    expect(await page.locator('button.ant-btn-dangerous').count()).toBe(0);
+  });
+
+  test('操作审计：故障日志页含审计标签且表格加载', async ({ page }) => {
+    await apiLogin(page);
+    await page.goto('/system-logs');
+    await page.waitForTimeout(2500);
+    await expect(page.locator('body')).toContainText('故障快照');
+    await page.getByRole('tab', { name: /操作审计/ }).click();
+    await page.waitForTimeout(2000);
+    // 审计表至少含表头（时间/账号/动作）
+    await expect(page.locator('.ant-tabs-tabpane-active')).toContainText('账号');
+  });
+
+  test('历史项目：归档记录含 A2 楼', async ({ page }) => {
+    await apiLogin(page);
+    await page.goto('/history');
+    await page.waitForTimeout(3000);
+    const body = await page.locator('body').innerText();
+    // A2 可能不在第一页，用搜索定位
+    if (!body.includes('乌兰大三期A2楼')) {
+      await page.locator('input[placeholder*="搜索"], input[type="text"]').first().fill('A2楼');
+      await page.waitForTimeout(1000);
+    }
+    await expect(page.locator('body')).toContainText('乌兰大三期A2楼');
   });
 });
