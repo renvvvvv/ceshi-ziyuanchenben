@@ -39,7 +39,7 @@ function Dashboard() {
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>(['未开始', '测试中']);
   // 甘特图时间单位：天/周/月/季/年
   const [ganttUnit, setGanttUnit] = useState<GanttUnit>('day');
-  const { projects, historyProjects, regionMwOutput, autoProcessProjects, autoProcessMembers, dataSource, reload } = useData();
+  const { projects, historyProjects, autoProcessProjects, autoProcessMembers, dataSource, reload } = useData();
   const navigate = useNavigate();
   const isMobile = useIsMobile();
 
@@ -153,13 +153,23 @@ function Dashboard() {
     const completedProjects = completed.length;
     const totalItOutput = completed.reduce((sum, p) => sum + (p.itOutput || 0), 0);
 
+    // 地区兆瓦分布：与总IT产出同一批项目按城市聚合（此前用 mock 静态数据，总数对不上）
+    const byCity = new Map<string, number>();
+    for (const p of completed) {
+      const city = (p.city || '').trim() || '未分类';
+      byCity.set(city, +( (byCity.get(city) || 0) + (p.itOutput || 0) ).toFixed(1));
+    }
+    const regionMw = [...byCity.entries()]
+      .map(([name, mwOutput]) => ({ name, mwOutput }))
+      .sort((a, b) => b.mwOutput - a.mwOutput);
+
     // 平均投入人力：已完成项目的 plannedManpower 平均值
     const completedWithManpower = completed.filter((p) => (p.plannedManpower || 0) > 0);
     const avgManpower = completedWithManpower.length > 0
       ? Math.round(completedWithManpower.reduce((sum, p) => sum + (p.plannedManpower || 0), 0) / completedWithManpower.length)
       : 0;
 
-    return { notStartedProjects, pendingTestMW, completedProjects, totalItOutput, avgManpower };
+    return { notStartedProjects, pendingTestMW, completedProjects, totalItOutput, avgManpower, regionMw };
   }, [projects, historyProjects]);
 
   // 动态计算状态分布（与筛选状态关联）
@@ -218,7 +228,7 @@ function Dashboard() {
   }), [statusDistribution]);
 
   const regionMwBarOption = useMemo(() => {
-    const sorted = [...regionMwOutput].sort((a, b) => b.mwOutput - a.mwOutput);
+    const sorted = [...kpiData.regionMw].sort((a, b) => b.mwOutput - a.mwOutput);
     return {
       backgroundColor: 'transparent',
       tooltip: {
@@ -279,7 +289,7 @@ function Dashboard() {
         },
       ],
     };
-  }, [regionMwOutput]);
+  }, [kpiData]);
 
   // 甘特图项目：根据筛选状态过滤
   const ganttProjects = useMemo(() => {
