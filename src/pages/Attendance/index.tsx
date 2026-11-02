@@ -1138,10 +1138,10 @@ function ProjectEntryView(props: {
                 },
                 { title: '应出勤(天)', key: 'onduty', width: 90, align: 'center' as const,
                   render: (_: unknown, r: any) => {
-                    // 自动算：结束-开始+1
+                    // 应出勤 = 项目周期 ∩ 考勤周期（与顶部提示及统计页口径一致）
                     const s = editing[r.memberId]?.projectStart ?? r.projectStart;
                     const e = editing[r.memberId]?.projectEnd ?? r.projectEnd;
-                    const duty = (s && e) ? daysBetween(s, e) : 0;
+                    const dutyR = dutyRange(s || cycleStart, e || cycleEnd, cycleStart, cycleEnd, today); const duty = dutyR ? daysBetween(dutyR.start, dutyR.end) : 0;
                     return <span style={{ color: '#46436a' }}>{duty}</span>;
                   },
                 },
@@ -1149,7 +1149,7 @@ function ProjectEntryView(props: {
                   render: (_: unknown, r: any) => {
                     const s = editing[r.memberId]?.projectStart ?? r.projectStart;
                     const e = editing[r.memberId]?.projectEnd ?? r.projectEnd;
-                    const duty = (s && e) ? daysBetween(s, e) : 0;
+                    const dutyR = dutyRange(s || cycleStart, e || cycleEnd, cycleStart, cycleEnd, today); const duty = dutyR ? daysBetween(dutyR.start, dutyR.end) : 0;
                     // 有录入值用录入值，否则按 应出勤-请假 推算
                     const leave = editing[r.memberId]?.leaveDays ?? r.leaveDays ?? 0;
                     const fallback = Math.max(duty - leave, 0);
@@ -1168,7 +1168,7 @@ function ProjectEntryView(props: {
                   render: (_: unknown, r: any) => {
                     const s = editing[r.memberId]?.projectStart ?? r.projectStart;
                     const e = editing[r.memberId]?.projectEnd ?? r.projectEnd;
-                    const duty = (s && e) ? daysBetween(s, e) : 0;
+                    const dutyR = dutyRange(s || cycleStart, e || cycleEnd, cycleStart, cycleEnd, today); const duty = dutyR ? daysBetween(dutyR.start, dutyR.end) : 0;
                     const leave = editing[r.memberId]?.leaveDays ?? r.leaveDays ?? 0;
                     const entered = editing[r.memberId]?.attendDays ?? r.attendDays;
                     const attend = entered != null ? Math.min(entered, duty) : Math.max(duty - leave, 0);
