@@ -53,7 +53,7 @@ function Attendance() {
   const { teamMembers, projects, historyProjects, attendanceAdjustments, setAttendanceAdjustments, updateTeamMember, reload } = useData();
   const isMobile = useIsMobile();
   // 自然月口径：默认当月（原 19 日周期反推逻辑随周期统一移除）
-  const [monthFilter, setMonthFilter] = useState(() => dayjs().startOf('month'));
+  const [monthFilter, setMonthFilter] = useState<dayjs.Dayjs | null>(() => dayjs().startOf('month'));
   const [cycleType, setCycleType] = useState<CycleType>('month');
   const [memberFilter, setMemberFilter] = useState('全部');
   const [projectFilter, setProjectFilter] = useState('全部');
@@ -87,6 +87,10 @@ function Attendance() {
   const [batchPos, setBatchPos] = useState<Record<string, string>>({});
 
   const { cycleStart, cycleEnd, cycleLabel } = useMemo(() => {
+    // 全部模式：周期不设限（应出勤=项目周期全跨度），跨月聚合展示
+    if (!monthFilter) {
+      return { cycleStart: '2000-01-01', cycleEnd: '2099-12-31', cycleLabel: '全部月份（项目全周期）' };
+    }
     // 考勤周期统一为自然月（2026-11 移除 19 日周期选项）
     const s = monthFilter.startOf('month');
     const e = monthFilter.endOf('month');
@@ -271,19 +275,40 @@ function Attendance() {
     if (dayjs(cycleStart).isAfter(today)) return [];
 
     const result: AttendanceRow[] = [];
+    const isAll = cycleStart === '2000-01-01'; // 全部模式：跨月聚合
     teamMembers.forEach((m) => {
       const memberPosition = m.position || POSITION_MAP[m.id] || '测试工程师';
-      for (const p of m.projects || []) {
+      // 全部模式：聚合该人所有月份的考勤记录（按项目归并）
+      const aggByProject = new Map<string, { attend: number | null; leave: number; start: string; end: string }>();
+      if (isAll) {
+        for (const [k, v] of Object.entries(attendanceAdjustments)) {
+          const mm = k.match(/^(\d+)-(.+)-\d{4}-\d{2}-\d{2}$/);
+          if (!mm || mm[1] !== m.id) continue;
+          const cur = aggByProject.get(mm[2]) || { attend: 0, leave: 0, start: '9999-12-31', end: '0000-01-01' };
+          if (v.attendDays != null) cur.attend = (cur.attend ?? 0) + v.attendDays;
+          cur.leave += v.leaveDays || 0;
+          if (v.projectStart && v.projectStart < cur.start) cur.start = v.projectStart;
+          if (v.projectEnd && v.projectEnd > cur.end) cur.end = v.projectEnd;
+          aggByProject.set(mm[2], cur);
+        }
+      }
+      // 项目来源：当前指派 + （全部模式）有考勤记录的历史项目
+      const projNames: string[] = [];
+      for (const p of m.projects || []) projNames.push(p.projectName);
+      if (isAll) for (const pn of aggByProject.keys()) if (!projNames.includes(pn)) projNames.push(pn);
+      for (const pn of projNames) {
+        const p = (m.projects || []).find((x) => x.projectName === pn);
         // 缺日期的条目算出的应出勤/项目总天数不可靠（dayjs('') 无效、dayjs(undefined)=当下），
         // 跳过统计；有该周期的人工校准（补录了起止日期）则照常参与
-        const adjKeyPre = `${m.id}-${p.projectName}-${cycleStart}`;
-        const hasAdjDates = attendanceAdjustments[adjKeyPre]?.projectStart && attendanceAdjustments[adjKeyPre]?.projectEnd;
-        if (!hasAdjDates && (!p.startDate || !p.endDate)) continue;
-        // 应用人工校准（覆盖项目时间、请假天数、项目级岗位、实际出勤）
-        const key = `${m.id}-${p.projectName}-${cycleStart}`;
-        const adj = attendanceAdjustments[key];
-        const projStart = adj?.projectStart ?? p.startDate;
-        const projEnd = adj?.projectEnd ?? p.endDate;
+        const agg = isAll ? aggByProject.get(pn) : null;
+        const adj = isAll
+          ? (agg && agg.start < '9999' && agg.end > '0000' ? { projectStart: agg.start, projectEnd: agg.end, leaveDays: agg.leave, attendDays: agg.attend, position: null as string | null } : null)
+          : attendanceAdjustments[`${m.id}-${pn}-${cycleStart}`];
+        const hasAdjDates = adj?.projectStart && adj?.projectEnd;
+        if (!hasAdjDates && (!p?.startDate || !p?.endDate)) continue;
+        const projStart = adj?.projectStart ?? p?.startDate;
+        const projEnd = adj?.projectEnd ?? p?.endDate;
+        if (!projStart || !projEnd) continue; // 类型收窄（上面已保证非空）
         const duty = dutyRange(projStart, projEnd, cycleStart, cycleEnd, today);
         if (!duty) continue;
         const onDutyDays = daysBetween(duty.start, duty.end);
@@ -299,9 +324,9 @@ function Attendance() {
         const rate = onDutyDays > 0 ? attendDays / onDutyDays : 0;
 
         result.push({
-          key: `${m.id}-${p.projectName}`,
+          key: `${m.id}-${pn}`,
           memberId: m.id, memberName: m.name, position,
-          projectName: p.projectName, projectStart: projStart, projectEnd: projEnd,
+          projectName: pn, projectStart: projStart, projectEnd: projEnd,
           projectTotalDays: daysBetween(projStart, projEnd),
           onDutyDays, leaveDays, attendDays, rate,
           // 标记是否被人工校准 / 录入
@@ -485,14 +510,14 @@ function Attendance() {
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <Button icon={<EditOutlined />} onClick={openManualAdjust}
+          {monthFilter && <Button icon={<EditOutlined />} onClick={openManualAdjust}
             style={{ background: 'rgba(217,119,6,0.1)', border: '1px solid rgba(217,119,6,0.4)', color: '#d97706', borderRadius: 8 }}>
             人工校准
-          </Button>
-          <Button icon={<ThunderboltOutlined />} onClick={openBatchAdjust}
+          </Button>}
+          {monthFilter && <Button icon={<ThunderboltOutlined />} onClick={openBatchAdjust}
             style={{ background: 'rgba(22,163,74,0.1)', border: '1px solid rgba(22,163,74,0.4)', color: '#16a34a', borderRadius: 8 }}>
             批量人工校准
-          </Button>
+          </Button>}
           <Button icon={<EyeOutlined />} onClick={() => setPreviewOpen(true)}
             style={{ background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.3)', color: '#818cf8', borderRadius: 8 }}>预览</Button>
           <Button type="primary" icon={<DownloadOutlined />} onClick={handleExport}
@@ -529,7 +554,9 @@ function Attendance() {
               setAttendanceAdjustments={setAttendanceAdjustments}
               cycleType={cycleType} setCycleType={setCycleType}
               monthFilter={monthFilter} setMonthFilter={setMonthFilter}
-              cycleStart={cycleStart} cycleEnd={cycleEnd} cycleLabel={cycleLabel}
+              cycleStart={monthFilter ? cycleStart : dayjs().startOf('month').format('YYYY-MM-DD')}
+              cycleEnd={monthFilter ? cycleEnd : dayjs().endOf('month').format('YYYY-MM-DD')}
+              cycleLabel={monthFilter ? cycleLabel : `${dayjs().format('YYYY年M月')}（自然月）`}
               projectOptions={projectOptions}
               onSync={reload}
             />,
@@ -777,7 +804,7 @@ function Attendance() {
 // ============== 统计视图组件（原视图封装）==============
 function StatisticsView(props: {
   cycleType: CycleType; setCycleType: (v: CycleType) => void;
-  monthFilter: dayjs.Dayjs; setMonthFilter: (v: dayjs.Dayjs) => void;
+  monthFilter: dayjs.Dayjs | null; setMonthFilter: (v: dayjs.Dayjs | null) => void;
   projectFilter: string; setProjectFilter: (v: string) => void;
   memberFilter: string; setMemberFilter: (v: string) => void;
   cycleLabel: string; cycleStart: string;
@@ -805,10 +832,11 @@ function StatisticsView(props: {
       </div>
 
       <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
-        <Radio.Group value={cycleType} onChange={(e) => setCycleType(e.target.value)} optionType="button" buttonStyle="solid" size="small">
-          <Radio.Button value="month">自然月</Radio.Button>
+        <Radio.Group value={monthFilter ? 'month' : 'all'} onChange={(e) => setMonthFilter(e.target.value === 'all' ? null : dayjs().startOf('month'))} optionType="button" buttonStyle="solid" size="small">
+          <Radio.Button value="month">按月</Radio.Button>
+          <Radio.Button value="all">全部</Radio.Button>
         </Radio.Group>
-        <DatePicker picker="month" value={monthFilter} onChange={(v) => v && setMonthFilter(v)} allowClear={false} style={{ width: 140 }} />
+        {monthFilter && <DatePicker picker="month" value={monthFilter} onChange={(v) => v && setMonthFilter(v)} allowClear={false} style={{ width: 140 }} />}
         <Select value={projectFilter} onChange={setProjectFilter} style={{ width: 200 }}
           showSearch optionFilterProp="label"
           options={projectOptions.map((v) => ({ value: v, label: v }))} />
@@ -854,7 +882,7 @@ function ProjectEntryView(props: {
   attendanceAdjustments: Record<string, { projectStart?: string; projectEnd?: string; leaveDays?: number; position?: string; attendDays?: number }>;
   setAttendanceAdjustments: (updater: Record<string, any> | ((prev: Record<string, any>) => Record<string, any>)) => void;
   cycleType: CycleType; setCycleType: (v: CycleType) => void;
-  monthFilter: dayjs.Dayjs; setMonthFilter: (v: dayjs.Dayjs) => void;
+  monthFilter: dayjs.Dayjs | null; setMonthFilter: (v: dayjs.Dayjs | null) => void;
   cycleStart: string; cycleEnd: string; cycleLabel: string;
   projectOptions: string[];
   onSync?: () => void | Promise<unknown>;
