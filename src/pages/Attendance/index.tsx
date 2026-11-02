@@ -29,7 +29,7 @@ interface AttendanceRow {
   projectTotalDays: number; onDutyDays: number; leaveDays: number; attendDays: number; rate: number;
 }
 interface AttendanceNode extends AttendanceRow { children?: AttendanceRow[]; }
-type CycleType = 'month' | 'cycle19';
+type CycleType = 'month';
 
 function daysBetween(s: string, e: string) {
   if (!s || !e) return 0;
@@ -52,20 +52,9 @@ function dutyRange(pStart: string, pEnd: string, cStart: string, cEnd: string, t
 function Attendance() {
   const { teamMembers, projects, historyProjects, attendanceAdjustments, setAttendanceAdjustments, updateTeamMember, reload } = useData();
   const isMobile = useIsMobile();
-  const [monthFilter, setMonthFilter] = useState(() => {
-    // 反推今天属于哪个"19日~次月18日"的考勤周期
-    // 周期定义：[上月19日, 本月18日]，monthFilter 应为"本月"（cycleEnd 所在月）
-    // 公式：把今天往前推 18 天，再加 1 月再取月初
-    // 验证：
-    //   - 6.18 → 5.31 → +1月 → 6.30 → startOf=6.1 → cycleEnd=6.18 ✓
-    //   - 6.19 → 6.01 → +1月 → 7.01 → startOf=7.1 → cycleEnd=7.18 ✓
-    //   - 7.05 → 6.17 → +1月 → 7.17 → startOf=7.1 → cycleEnd=7.18 ✓
-    //   - 7.20 → 7.02 → +1月 → 8.02 → startOf=8.1 → cycleEnd=8.18 ✓
-    //   - 8.05 → 7.18 → +1月 → 8.18 → startOf=8.1 → cycleEnd=8.18 ✓
-    //   - 8.19 → 8.01 → +1月 → 9.01 → startOf=9.1 → cycleEnd=9.18 ✓
-    return dayjs().subtract(18, 'day').add(1, 'month').startOf('month');
-  });
-  const [cycleType, setCycleType] = useState<CycleType>('cycle19');
+  // 自然月口径：默认当月（原 19 日周期反推逻辑随周期统一移除）
+  const [monthFilter, setMonthFilter] = useState(() => dayjs().startOf('month'));
+  const [cycleType, setCycleType] = useState<CycleType>('month');
   const [memberFilter, setMemberFilter] = useState('全部');
   const [projectFilter, setProjectFilter] = useState('全部');
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -98,15 +87,7 @@ function Attendance() {
   const [batchPos, setBatchPos] = useState<Record<string, string>>({});
 
   const { cycleStart, cycleEnd, cycleLabel } = useMemo(() => {
-    if (cycleType === 'cycle19') {
-      const s = monthFilter.subtract(1, 'month').date(19);
-      const e = monthFilter.date(18);
-      return {
-        cycleStart: s.format('YYYY-MM-DD'),
-        cycleEnd: e.format('YYYY-MM-DD'),
-        cycleLabel: `${s.format('YYYY.MM.DD')} - ${e.format('MM.DD')} 考勤周期`,
-      };
-    }
+    // 考勤周期统一为自然月（2026-11 移除 19 日周期选项）
     const s = monthFilter.startOf('month');
     const e = monthFilter.endOf('month');
     return {
@@ -825,7 +806,6 @@ function StatisticsView(props: {
 
       <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
         <Radio.Group value={cycleType} onChange={(e) => setCycleType(e.target.value)} optionType="button" buttonStyle="solid" size="small">
-          <Radio.Button value="cycle19">19日考勤周期</Radio.Button>
           <Radio.Button value="month">自然月</Radio.Button>
         </Radio.Group>
         <DatePicker picker="month" value={monthFilter} onChange={(v) => v && setMonthFilter(v)} allowClear={false} style={{ width: 140 }} />
@@ -918,7 +898,10 @@ function ProjectEntryView(props: {
       const isAssigned = proj?.assignedMemberIds?.includes(m.id);
       // 手动添加的人员也列出
       const isManual = manualMemberIds.includes(m.id);
-      if (!p && !isAssigned && !isManual) return;
+      // 本周期有考勤录入记录的人员也列出（历史项目指派关系已变更，
+      // 但导入/历史考勤数据仍需可见可维护）
+      const hasAdj = attendanceAdjustments[`${m.id}-${selectedProject}-${cycleStart}`] != null;
+      if (!p && !isAssigned && !isManual && !hasAdj) return;
 
       const projStart = p?.startDate || fallbackStart || cycleStart;
       const projEnd = p?.endDate || fallbackEnd || cycleEnd;
@@ -1057,7 +1040,6 @@ function ProjectEntryView(props: {
           </Button>
         </Tooltip>
         <Radio.Group value={props.cycleType} onChange={(e) => props.setCycleType(e.target.value)} optionType="button" buttonStyle="solid" size="small">
-          <Radio.Button value="cycle19">19日周期</Radio.Button>
           <Radio.Button value="month">自然月</Radio.Button>
         </Radio.Group>
         <DatePicker picker="month" value={props.monthFilter} onChange={(v) => v && props.setMonthFilter(v)} allowClear={false} style={{ width: 140 }} />
