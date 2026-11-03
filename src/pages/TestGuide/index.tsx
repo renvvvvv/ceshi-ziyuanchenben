@@ -13,7 +13,7 @@ import {
   Popconfirm,
 } from 'antd';
 import type { UploadFile } from 'antd/es/upload/interface';
-import {
+import { EyeOutlined,
   SearchOutlined,
   FileTextOutlined,
   ClockCircleOutlined,
@@ -415,6 +415,22 @@ function TestGuide() {
                   更新于 {doc.lastUpdated}
                 </span>
                 <div style={{ display: 'flex', gap: 8 }}>
+                  <Button
+                    type="text"
+                    size="small"
+                    icon={<EyeOutlined />}
+                    onClick={() => {
+                      if (doc.fileUrl) window.open(doc.fileUrl.replace('/download', '/preview'), '_blank');
+                      else message.info('该文件无预览链接');
+                    }}
+                    style={{
+                      color: '#16a34a',
+                      fontSize: 12,
+                      fontFamily: 'var(--font-primary)',
+                    }}
+                  >
+                    预览
+                  </Button>
                   <Button
                     type="text"
                     size="small"

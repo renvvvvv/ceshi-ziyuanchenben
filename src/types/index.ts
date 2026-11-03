@@ -65,6 +65,7 @@ export interface ProjectPhaseFile {
   fileType?: string;
   uploadedAt: string;
   link?: string;             // 链接地址（有值即链接项，可点击跳转）
+  fileUrl?: string;          // 文件服务器地址（有值即可点击预览/下载）
 }
 
 export interface ProjectPhase {

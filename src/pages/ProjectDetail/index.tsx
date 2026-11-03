@@ -107,11 +107,21 @@ function ProjectDetail() {
     message.success('测试管理链接已更新');
   };
 
-  /** 文件上传处理 */
-  const handleUpload = (phaseKey: string, fileList: UploadFile[]) => {
+  /** 文件上传处理（真上传到服务器，fileUrl 供全团队预览） */
+  const handleUpload = async (phaseKey: string, fileList: UploadFile[]) => {
     if (!project) return;
     const lastFile = fileList[fileList.length - 1];
     if (!lastFile?.originFileObj) return;
+
+    // 上传文件本体到服务器
+    let fileUrl: string | undefined;
+    try {
+      const fd = new FormData();
+      fd.append('file', lastFile.originFileObj);
+      const r = await fetch('/api/projects/files/upload', { method: 'POST', body: fd, credentials: 'include' }).then((x) => x.json());
+      if (r?.success) fileUrl = r.fileUrl;
+      else message.warning(`「${lastFile.name}」文件本体上传失败，仅记录了文件信息`);
+    } catch { message.warning('网络异常，文件本体未上传（仅记录文件信息）'); }
 
     const newFile: ProjectPhaseFile = {
       id: `file_${Date.now()}`,
@@ -119,6 +129,7 @@ function ProjectDetail() {
       fileSize: lastFile.originFileObj.size ? formatFileSize(lastFile.originFileObj.size) : '-',
       fileType: lastFile.name.split('.').pop(),
       uploadedAt: new Date().toLocaleString('zh-CN'),
+      fileUrl,
     };
 
     setProjectPhases((prev) => {
@@ -294,6 +305,23 @@ function ProjectDetail() {
                             textDecoration: 'none',
                           }}
                           title={`${file.fileName}（点击打开：${file.link}）`}
+                        >
+                          {file.fileName}
+                        </a>
+                      ) : file.fileUrl ? (
+                        <a
+                          href={file.fileUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{
+                            color: '#4f46e5',
+                            fontSize: 12,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                            textDecoration: 'none',
+                          }}
+                          title={`${file.fileName}（点击预览）`}
                         >
                           {file.fileName}
                         </a>

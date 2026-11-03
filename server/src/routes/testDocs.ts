@@ -6,6 +6,7 @@
  */
 import { Router } from 'express';
 import multer from 'multer';
+import { sendPreview } from '../utils/preview.js';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { existsSync, mkdirSync, unlinkSync } from 'fs';
@@ -107,6 +108,26 @@ router.post('/upload', requireAuth, requireRole(['管理者', '编辑者']), upl
     if (req.file) { try { unlinkSync(req.file.path); } catch {} }
     console.error('[TestDocs] 上传失败:', err.message);
     res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+/**
+ * GET /api/test-docs/:id/preview — 在线预览（图片/PDF/文本原生；Office 转 PDF）
+ */
+router.get('/:id/preview', requireAuth, async (req, res) => {
+  try {
+    const rows = await db.allAsync('SELECT file_path, file_name, title FROM test_docs WHERE id = $1', req.params.id) as any[];
+    const doc = rows[0];
+    if (!doc || !doc.file_path) { res.status(404).json({ error: '文件不存在' }); return; }
+    const absPath = join(UPLOAD_DIR, doc.file_path);
+    if (!existsSync(absPath)) { res.status(404).json({ error: '文件已丢失' }); return; }
+    const shown = await sendPreview(res, absPath, doc.file_name || doc.title || 'preview');
+    if (!shown) {
+      // 不支持预览的类型降级为下载
+      res.download(absPath, doc.file_name || doc.title);
+    }
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || '预览失败' });
   }
 });
 

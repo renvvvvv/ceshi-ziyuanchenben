@@ -1,4 +1,10 @@
 import { Router, Request, Response, NextFunction } from 'express';
+import multer from 'multer';
+import { randomUUID } from 'crypto';
+import { existsSync, mkdirSync } from 'fs';
+import { join, extname } from 'path';
+import { fileURLToPath } from 'url';
+import { sendPreview } from '../utils/preview.js';
 import db from '../database.js';
 import { requireAuth, requireRole } from './auth.js';
 
@@ -118,6 +124,49 @@ router.post('/', requireAuth, requireRole(['管理者', '编辑者']), asyncHand
 }));
 
 /** PUT /api/projects/:id — 更新项目（部分更新：只改携带的字段，缺省保持原值） */
+// ===== 项目阶段附件（文件本体）：上传与预览 =====
+const PROJECT_FILES_DIR = join(fileURLToPath(import.meta.url), '..', '..', '..', '..', 'uploads', 'project-files');
+if (!existsSync(PROJECT_FILES_DIR)) { try { mkdirSync(PROJECT_FILES_DIR, { recursive: true }); } catch { /* 忽略 */ } }
+const projFileStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, PROJECT_FILES_DIR),
+  filename: (_req, file, cb) => {
+    const ext = extname(Buffer.from(file.originalname, 'latin1').toString('utf8'));
+    cb(null, `${Date.now().toString(36)}-${randomUUID().slice(0, 8)}${ext}`);
+  },
+});
+const projFileUpload = multer({
+  storage: projFileStorage,
+  limits: { fileSize: 100 * 1024 * 1024 },
+});
+
+/** POST /api/projects/files/upload — 上传项目阶段附件文件本体（返回 fileUrl 供预览/下载） */
+router.post('/files/upload', requireAuth, requireRole(['管理者', '编辑者']), (req, res, next) => {
+  projFileUpload.single('file')(req, res, (err: any) => {
+    if (err) { res.status(400).json({ success: false, error: `上传失败：${err.message}` }); return; }
+    next();
+  });
+}, asyncHandler(async (req, res) => {
+  const f = (req as any).file as Express.Multer.File | undefined;
+  if (!f) { res.status(400).json({ success: false, error: '未收到文件' }); return; }
+  auditLog(req, 'create', 'project_file', f.filename, Buffer.from(f.originalname, 'latin1').toString('utf8'), { size: f.size });
+  res.json({
+    success: true,
+    fileUrl: `/api/projects/files/${f.filename}`,
+    fileName: Buffer.from(f.originalname, 'latin1').toString('utf8'),
+    size: f.size,
+  });
+}));
+
+/** GET /api/projects/files/:name — 项目阶段附件预览（不支持类型降级下载） */
+router.get('/files/:name', requireAuth, asyncHandler(async (req, res) => {
+  const name = String(req.params.name || '');
+  if (!/^[A-Za-z0-9._-]+$/.test(name)) { res.status(400).json({ error: '非法文件名' }); return; }
+  const absPath = join(PROJECT_FILES_DIR, name);
+  if (!existsSync(absPath)) { res.status(404).json({ error: '文件不存在' }); return; }
+  const shown = await sendPreview(res, absPath, name);
+  if (!shown) res.download(absPath);
+}));
+
 // 项目阶段时间线（含文件/链接附件）：全量 JSON 存储，多账号共享
 db.exec(`CREATE TABLE IF NOT EXISTS project_phases (
   project_id TEXT PRIMARY KEY,
