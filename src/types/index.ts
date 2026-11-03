@@ -60,10 +60,11 @@ export interface CustomerContract {
 // -------------------- 项目阶段（时间线） --------------------
 export interface ProjectPhaseFile {
   id: string;
-  fileName: string;
+  fileName: string;          // 文件名或链接名称
   fileSize?: string;
   fileType?: string;
   uploadedAt: string;
+  link?: string;             // 链接地址（有值即链接项，可点击跳转）
 }
 
 export interface ProjectPhase {

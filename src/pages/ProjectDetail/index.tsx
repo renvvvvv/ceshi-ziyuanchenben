@@ -53,6 +53,11 @@ function ProjectDetail() {
   const { projects, setProjects, projectPhases, setProjectPhases, teamMembers, updateProject } = useData();
   const [modalOpen, setModalOpen] = useState(false);
   const [docLinkInput, setDocLinkInput] = useState('');
+  // 添加链接弹窗（所属阶段 + 名称 + 地址）
+  const [linkModalOpen, setLinkModalOpen] = useState(false);
+  const [linkPhaseKey, setLinkPhaseKey] = useState('');
+  const [linkName, setLinkName] = useState('');
+  const [linkUrl, setLinkUrl] = useState('');
   const isMobile = useIsMobile();
 
   const project = projects.find((p) => String(p.id) === String(id));
@@ -135,6 +140,42 @@ function ProjectDetail() {
       };
     });
     message.success(`文件「${lastFile.name}」上传成功`);
+  };
+
+  /** 添加链接 */
+  const handleAddLink = () => {
+    if (!project) return;
+    const name = linkName.trim();
+    const url = linkUrl.trim();
+    if (!name) { message.warning('请输入链接名称'); return; }
+    if (!/^https?:\/\/.+/.test(url)) { message.warning('请输入合法链接地址（以 http:// 或 https:// 开头）'); return; }
+    const newFile: ProjectPhaseFile = {
+      id: `link_${Date.now()}`,
+      fileName: name,
+      fileType: 'link',
+      uploadedAt: new Date().toLocaleString('zh-CN'),
+      link: url,
+    };
+    setProjectPhases((prev) => {
+      const current = prev[project.id] ?? ALL_PHASE_TEMPLATES.map((t) => ({
+        ...t,
+        status: 'pending' as const,
+        files: [],
+        allowUpload: true,
+      }));
+      return {
+        ...prev,
+        [project.id]: current.map((phase) =>
+          phase.key === linkPhaseKey
+            ? { ...phase, files: [...phase.files, newFile], status: phase.status === 'pending' ? 'in_progress' : phase.status }
+            : phase
+        ),
+      };
+    });
+    message.success(`链接「${name}」添加成功`);
+    setLinkModalOpen(false);
+    setLinkName('');
+    setLinkUrl('');
   };
 
   /** 删除文件 */
@@ -234,21 +275,44 @@ function ProjectDetail() {
                     }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                      <FileOutlined style={{ color: getFileIcon(file.fileType), fontSize: 14, flexShrink: 0 }} />
-                      <span
-                        style={{
-                          color: '#46436a',
-                          fontSize: 12,
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                        }}
-                        title={`${file.fileName} (${file.fileSize})`}
-                      >
-                        {file.fileName}
-                      </span>
+                      {file.link ? (
+                        <LinkOutlined style={{ color: '#6366f1', fontSize: 14, flexShrink: 0 }} />
+                      ) : (
+                        <FileOutlined style={{ color: getFileIcon(file.fileType), fontSize: 14, flexShrink: 0 }} />
+                      )}
+                      {file.link ? (
+                        <a
+                          href={file.link}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{
+                            color: '#4f46e5',
+                            fontSize: 12,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                            textDecoration: 'none',
+                          }}
+                          title={`${file.fileName}（点击打开：${file.link}）`}
+                        >
+                          {file.fileName}
+                        </a>
+                      ) : (
+                        <span
+                          style={{
+                            color: '#46436a',
+                            fontSize: 12,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          }}
+                          title={`${file.fileName} (${file.fileSize})`}
+                        >
+                          {file.fileName}
+                        </span>
+                      )}
                       <span style={{ color: '#9d9ab8', fontSize: 11, flexShrink: 0 }}>
-                        ({file.fileSize})
+                        {file.link ? '链接' : `(${file.fileSize})`}
                       </span>
                     </div>
                     <Button
@@ -264,15 +328,37 @@ function ProjectDetail() {
               </div>
             )}
 
-            {/* 上传按钮 */}
-            <Upload
-              showUploadList={false}
-              beforeUpload={() => false}
-              onChange={({ fileList }) => handleUpload(phase.key, fileList)}
-            >
+            {/* 上传按钮 + 添加链接按钮 */}
+            <div style={{ display: 'flex', gap: 8 }}>
+              <Upload
+                showUploadList={false}
+                beforeUpload={() => false}
+                onChange={({ fileList }) => handleUpload(phase.key, fileList)}
+              >
+                <Button
+                  icon={<UploadOutlined />}
+                  size="small"
+                  style={{
+                    borderColor: 'rgba(99,102,241,0.35)',
+                    color: '#6366f1',
+                    fontFamily: 'var(--font-primary)',
+                    borderRadius: 6,
+                    fontSize: 12,
+                    background: 'transparent',
+                  }}
+                >
+                  上传文件
+                </Button>
+              </Upload>
               <Button
-                icon={<UploadOutlined />}
+                icon={<LinkOutlined />}
                 size="small"
+                onClick={() => {
+                  setLinkPhaseKey(phase.key);
+                  setLinkName('');
+                  setLinkUrl('');
+                  setLinkModalOpen(true);
+                }}
                 style={{
                   borderColor: 'rgba(99,102,241,0.35)',
                   color: '#6366f1',
@@ -282,9 +368,9 @@ function ProjectDetail() {
                   background: 'transparent',
                 }}
               >
-                上传文件
+                添加链接
               </Button>
-            </Upload>
+            </div>
           </div>
         )}
       </div>
@@ -411,6 +497,41 @@ function ProjectDetail() {
         onCancel={() => setModalOpen(false)}
         onSubmit={handleEdit}
       />
+
+      {/* 添加链接弹窗 */}
+      <Modal
+        title={<span style={{ fontFamily: 'var(--font-primary)' }}><LinkOutlined style={{ color: '#6366f1', marginRight: 8 }} />添加链接</span>}
+        open={linkModalOpen}
+        onOk={handleAddLink}
+        onCancel={() => setLinkModalOpen(false)}
+        okText="添加"
+        cancelText="取消"
+        okButtonProps={{ style: { background: 'linear-gradient(135deg, #6366f1, #818cf8)', border: 'none' } }}
+        style={{ top: 160 }}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 12, fontFamily: 'var(--font-primary)' }}>
+          <div>
+            <div style={{ fontSize: 12.5, color: '#46436a', marginBottom: 6, fontWeight: 500 }}>链接名称 <span style={{ color: '#dc2626' }}>*</span></div>
+            <Input
+              placeholder="例如：测试方案飞书文档"
+              value={linkName}
+              onChange={(e) => setLinkName(e.target.value)}
+              maxLength={60}
+            />
+          </div>
+          <div>
+            <div style={{ fontSize: 12.5, color: '#46436a', marginBottom: 6, fontWeight: 500 }}>链接地址 <span style={{ color: '#dc2626' }}>*</span></div>
+            <Input
+              placeholder="http:// 或 https:// 开头的完整地址"
+              value={linkUrl}
+              onChange={(e) => setLinkUrl(e.target.value)}
+            />
+            <div style={{ fontSize: 11, color: '#9d9ab8', marginTop: 4 }}>
+              支持飞书文档、网盘、Git、任意网页链接，保存后点击名称即可跳转
+            </div>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
