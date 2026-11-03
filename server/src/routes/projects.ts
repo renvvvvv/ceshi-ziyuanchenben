@@ -153,15 +153,8 @@ router.post('/files/upload', requireAuth, requireRole(['管理者', '编辑者']
   // Office 文件上传后立即后台预转 PDF（首次点击预览即可秒开）
   const ext = extname(f.originalname).slice(1).toLowerCase();
   if (['doc','docx','xls','xlsx','ppt','pptx'].includes(ext)) {
-    void (async () => {
-      try {
-        const { convertToPdf } = await import('../utils/preview.js');
-        await convertToPdf(join(PROJECT_FILES_DIR, f.filename));
-        console.log(`[preview] 预转换完成: ${f.filename}`);
-      } catch (e) {
-        console.warn(`[preview] 预转换失败(不阻塞): ${f.filename}`, (e as Error).message);
-      }
-    })();
+    const { startBackgroundConvert } = await import('../utils/preview.js');
+    startBackgroundConvert(join(PROJECT_FILES_DIR, f.filename));
   }
 
   res.json({
@@ -178,8 +171,7 @@ router.get('/files/:name', requireAuth, asyncHandler(async (req, res) => {
   if (!/^[A-Za-z0-9._-]+$/.test(name)) { res.status(400).json({ error: '非法文件名' }); return; }
   const absPath = join(PROJECT_FILES_DIR, name);
   if (!existsSync(absPath)) { res.status(404).json({ error: '文件不存在' }); return; }
-  const shown = await sendPreview(res, absPath, name);
-  if (!shown) res.download(absPath);
+  await sendPreview(res, absPath, name, `/api/projects/files/${name}`);
 }));
 
 // 项目阶段时间线（含文件/链接附件）：全量 JSON 存储，多账号共享

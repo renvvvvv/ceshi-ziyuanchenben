@@ -121,11 +121,7 @@ router.get('/:id/preview', requireAuth, async (req, res) => {
     if (!doc || !doc.file_path) { res.status(404).json({ error: '文件不存在' }); return; }
     const absPath = join(UPLOAD_DIR, doc.file_path);
     if (!existsSync(absPath)) { res.status(404).json({ error: '文件已丢失' }); return; }
-    const shown = await sendPreview(res, absPath, doc.file_name || doc.title || 'preview');
-    if (!shown) {
-      // 不支持预览的类型降级为下载
-      res.download(absPath, doc.file_name || doc.title);
-    }
+    await sendPreview(res, absPath, doc.file_name || doc.title || 'preview', `/api/test-docs/${req.params.id}/preview`);
   } catch (err: any) {
     res.status(500).json({ error: err?.message || '预览失败' });
   }
