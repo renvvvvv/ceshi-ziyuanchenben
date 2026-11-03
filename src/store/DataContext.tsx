@@ -179,6 +179,25 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [teamMembers, setTeamMembers] = usePersistentState<TeamMember[]>('teamMembers', mockTeamMembers);
   const [testDocs, setTestDocs] = usePersistentState<TestDoc[]>('testDocs', mockTestDocs);
   const [projectPhases, setProjectPhases] = usePersistentState<Record<string, ProjectPhase[]>>('projectPhases', mockProjectPhases);
+  // phases 后端同步：记录已同步快照，变更防抖 PUT（localStorage 之外实现多账号共享）
+  const phasesSyncedRef = useRef<Record<string, ProjectPhase[]> | null>(null);
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const cur = projectPhases;
+      const synced = phasesSyncedRef.current || {};
+      for (const pid of Object.keys(cur)) {
+        if (JSON.stringify(cur[pid]) === JSON.stringify(synced[pid])) continue;
+        phasesSyncedRef.current = { ...synced, [pid]: cur[pid] };
+        void fetch(`/api/projects/phases/${pid}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ phases: cur[pid] }),
+        }).catch(() => { /* 离线时 localStorage 仍在，下次变更重试 */ });
+      }
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [projectPhases]);
   const [historyPhases, setHistoryPhases] = usePersistentState<Record<string, ProjectPhase[]>>('historyPhases', mergedHistoryPhases);
   const [attendanceAdjustments, setAttendanceAdjustmentsRaw] = usePersistentState<Record<string, AttendanceAdjustment>>('attendanceAdjustments', {});
 
@@ -287,6 +306,15 @@ export function DataProvider({ children }: { children: ReactNode }) {
         if (docsRes?.success && Array.isArray(docsRes.data)) {
           setTestDocs(docsRes.data);
         }
+
+        // ProjectPhases（阶段/附件）：后端有数据则按键合并覆盖（多账号共享）
+        try {
+          const phRes = await fetch('/api/projects/phases', { credentials: 'include' }).then((r) => r.json());
+          if (phRes?.success && phRes.data && Object.keys(phRes.data).length > 0) {
+            setProjectPhases((prev) => ({ ...prev, ...phRes.data }));
+            phasesSyncedRef.current = { ...(phasesSyncedRef.current || {}), ...phRes.data };
+          }
+        } catch { /* phases 接口失败不阻塞主流程 */ }
 
         // 全部成功 → 数据源 = api；任意失败 → cache（用 localStorage 兜底）
         const allOk = projRes && memRes && histRes && attRes;

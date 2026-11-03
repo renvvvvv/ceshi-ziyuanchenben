@@ -118,6 +118,38 @@ router.post('/', requireAuth, requireRole(['管理者', '编辑者']), asyncHand
 }));
 
 /** PUT /api/projects/:id — 更新项目（部分更新：只改携带的字段，缺省保持原值） */
+// 项目阶段时间线（含文件/链接附件）：全量 JSON 存储，多账号共享
+db.exec(`CREATE TABLE IF NOT EXISTS project_phases (
+  project_id TEXT PRIMARY KEY,
+  phases     TEXT NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+)`).catch(() => { /* 启动竞态忽略 */ });
+
+/** GET /api/projects/phases — 全部项目的阶段数据（键: projectId） */
+router.get('/phases', requireAuth, asyncHandler(async (_req, res) => {
+  const rows = await db.allAsync('SELECT project_id, phases FROM project_phases') as any[];
+  const data: Record<string, unknown> = {};
+  for (const r of rows) {
+    try { data[r.project_id] = JSON.parse(r.phases); } catch { /* 脏行跳过 */ }
+  }
+  res.json({ success: true, data });
+}));
+
+/** PUT /api/projects/phases/:id — 保存某项目的阶段数据（UPSERT 全量覆盖） */
+router.put('/phases/:id', requireAuth, requireRole(['管理者', '编辑者']), asyncHandler(async (req, res) => {
+  const { phases } = req.body || {};
+  if (!Array.isArray(phases)) { res.status(400).json({ success: false, error: 'phases 必须为数组' }); return; }
+  const payload = JSON.stringify(phases);
+  if (payload.length > 2_000_000) { res.status(400).json({ success: false, error: '数据过大' }); return; }
+  await db.runAsync(
+    `INSERT INTO project_phases (project_id, phases, updated_at) VALUES ($1, $2, now())
+     ON CONFLICT (project_id) DO UPDATE SET phases = $2, updated_at = now()`,
+    req.params.id, payload,
+  );
+  auditLog(req, 'update', 'project_phases', req.params.id, `阶段数据(${phases.length}段)`, {});
+  res.json({ success: true });
+}));
+
 router.put('/:id', requireAuth, requireRole(['管理者', '编辑者']), asyncHandler(async (req, res) => {
   const id = parseIdOrNull(req.params.id);
   if (id === null) { res.status(400).json({ error: 'id 必须为正整数' }); return; }

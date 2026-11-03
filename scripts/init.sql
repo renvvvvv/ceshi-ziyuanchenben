@@ -214,3 +214,10 @@ CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log (created_at DESC);
 
 -- 历史项目名唯一：自动归档 ON CONFLICT 防重 + 手动创建防重的库级兜底
 CREATE UNIQUE INDEX IF NOT EXISTS idx_historical_projects_name ON historical_projects (name);
+
+-- 项目阶段时间线（文件/链接附件）：全量 JSON，多账号共享（2026-11-03）
+CREATE TABLE IF NOT EXISTS project_phases (
+    project_id TEXT PRIMARY KEY,
+    phases     TEXT NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
