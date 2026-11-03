@@ -20,8 +20,8 @@ const IMG_EXT = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'ico
 const TEXT_EXT = new Set(['txt', 'md', 'csv', 'log', 'json', 'xml', 'yml', 'yaml', 'ini', 'conf']);
 const OFFICE_EXT = new Set(['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'wps', 'et', 'dps']);
 
-/** LibreOffice 转换（首次冷启动约 5-20s，结果按文件内容哈希缓存） */
-function officeToPdf(absPath: string): Promise<string> {
+/** LibreOffice 转换（首次冷启动约 5-20s，结果按文件内容哈希缓存）——导出供上传预转换 */
+export async function convertToPdf(absPath: string): Promise<string> {
   return new Promise((resolve, reject) => {
     mkdirSync(CACHE_DIR, { recursive: true });
     const st = statSync(absPath);
@@ -56,7 +56,7 @@ export async function sendPreview(res: Response, absPath: string, displayName: s
       return true;
     }
     if (OFFICE_EXT.has(ext)) {
-      const pdf = await officeToPdf(absPath);
+      const pdf = await convertToPdf(absPath);
       res.type('application/pdf');
       res.setHeader('Content-Disposition', `inline; filename*=UTF-8''${encodeURIComponent(basename(displayName, extname(displayName)) + '.pdf')}`);
       res.sendFile(pdf, { headers: { 'Cache-Control': 'private, max-age=300' } } as never);

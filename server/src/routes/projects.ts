@@ -149,6 +149,21 @@ router.post('/files/upload', requireAuth, requireRole(['管理者', '编辑者']
   const f = (req as any).file as Express.Multer.File | undefined;
   if (!f) { res.status(400).json({ success: false, error: '未收到文件' }); return; }
   auditLog(req, 'create', 'project_file', f.filename, Buffer.from(f.originalname, 'latin1').toString('utf8'), { size: f.size });
+
+  // Office 文件上传后立即后台预转 PDF（首次点击预览即可秒开）
+  const ext = extname(f.originalname).slice(1).toLowerCase();
+  if (['doc','docx','xls','xlsx','ppt','pptx'].includes(ext)) {
+    void (async () => {
+      try {
+        const { convertToPdf } = await import('../utils/preview.js');
+        await convertToPdf(join(PROJECT_FILES_DIR, f.filename));
+        console.log(`[preview] 预转换完成: ${f.filename}`);
+      } catch (e) {
+        console.warn(`[preview] 预转换失败(不阻塞): ${f.filename}`, (e as Error).message);
+      }
+    })();
+  }
+
   res.json({
     success: true,
     fileUrl: `/api/projects/files/${f.filename}`,

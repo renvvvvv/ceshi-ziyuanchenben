@@ -6,7 +6,7 @@
  */
 import { Router } from 'express';
 import multer from 'multer';
-import { sendPreview } from '../utils/preview.js';
+import { sendPreview, convertToPdf } from '../utils/preview.js';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { existsSync, mkdirSync, unlinkSync } from 'fs';
