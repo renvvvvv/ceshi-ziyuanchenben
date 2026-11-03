@@ -234,21 +234,6 @@ function ProjectDetail() {
               {phase.description}
             </div>
           </div>
-          <Tag
-            style={{
-              background: `${config.color}18`,
-              color: config.color,
-              border: `1px solid ${config.color}35`,
-              borderRadius: 10,
-              fontSize: 11,
-              flexShrink: 0,
-              lineHeight: '20px',
-              padding: '0 10px',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {config.label}
-          </Tag>
         </div>
 
         {/* 完成日期 */}
