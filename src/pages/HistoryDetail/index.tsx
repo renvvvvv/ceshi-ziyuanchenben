@@ -51,6 +51,11 @@ function HistoryDetail() {
   const { historyProjects, historyPhases, setHistoryPhases } = useData();
   const isMobile = useIsMobile();
 
+  const [linkModalOpen, setLinkModalOpen] = useState(false);
+  const [linkPhaseKey, setLinkPhaseKey] = useState('');
+  const [linkName, setLinkName] = useState('');
+  const [linkUrl, setLinkUrl] = useState('');
+
   const project = useMemo(() => historyProjects.find((p) => String(p.id) === String(id)), [historyProjects, id]);
 
   /** 获取项目的阶段数据，无数据则返回空模板（全部阶段均支持上传） */
@@ -95,11 +100,6 @@ function HistoryDetail() {
   }
 
   // 添加链接弹窗状态
-  const [linkModalOpen, setLinkModalOpen] = useState(false);
-  const [linkPhaseKey, setLinkPhaseKey] = useState('');
-  const [linkName, setLinkName] = useState('');
-  const [linkUrl, setLinkUrl] = useState('');
-
   /** 添加链接 */
   const handleAddLink = () => {
     if (!project) return;
@@ -271,7 +271,7 @@ function HistoryDetail() {
                           <span style={{ color: '#46436a', fontSize: 12 }}>{file.fileName}</span>
                         )}
                       <span style={{ color: '#9d9ab8', fontSize: 11, flexShrink: 0 }}>
-                        ({file.fileSize})
+                        {file.link ? '链接' : `(${file.fileSize})`}
                       </span>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
@@ -299,6 +299,7 @@ function HistoryDetail() {
             {/* 上传按钮 */}
             <Upload
               showUploadList={false}
+              maxCount={1}
               beforeUpload={() => false}
               onChange={({ fileList }) => handleUpload(phase.key, fileList)}
             >

@@ -284,7 +284,7 @@ function Attendance() {
         for (const [k, v] of Object.entries(attendanceAdjustments)) {
           const mm = k.match(/^(\d+)-(.+)-\d{4}-\d{2}-\d{2}$/);
           if (!mm || mm[1] !== m.id) continue;
-          const cur = aggByProject.get(mm[2]) || { attend: 0, leave: 0, start: '9999-12-31', end: '0000-01-01' };
+          const cur = aggByProject.get(mm[2]) || { attend: null as number | null, leave: 0, start: '9999-12-31', end: '0000-01-01' };
           if (v.attendDays != null) cur.attend = (cur.attend ?? 0) + v.attendDays;
           cur.leave += v.leaveDays || 0;
           if (v.projectStart && v.projectStart < cur.start) cur.start = v.projectStart;

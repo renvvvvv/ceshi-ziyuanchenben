@@ -344,7 +344,7 @@ function ProjectDetail() {
             {/* 上传按钮 + 添加链接按钮 */}
             <div style={{ display: 'flex', gap: 8 }}>
               <Upload
-                showUploadList={false}
+                showUploadList={false} maxCount={1}
                 beforeUpload={() => false}
                 onChange={({ fileList }) => handleUpload(phase.key, fileList)}
               >

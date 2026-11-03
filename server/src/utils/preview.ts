@@ -16,7 +16,12 @@ const __dirname = join(fileURLToPath(import.meta.url), '..');
 const UPLOAD_ROOT = join(__dirname, '..', '..', '..', 'uploads');
 const CACHE_DIR = join(UPLOAD_ROOT, 'preview-cache');
 
-const IMG_EXT = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'ico']);
+const IMG_EXT = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'ico']); // svg 移除（可内嵌脚本）
+const DANGEROUS_EXT = new Set(['svg', 'html', 'htm', 'xhtml', 'xml']); // 强制下载
+
+function escHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
 const TEXT_EXT = new Set(['txt', 'md', 'csv', 'log', 'json', 'xml', 'yml', 'yaml', 'ini', 'conf']);
 const OFFICE_EXT = new Set(['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'wps', 'et', 'dps']);
 
@@ -62,7 +67,7 @@ export async function convertToPdf(absPath: string): Promise<string> {
 /** 加载等待页（自动 3 秒刷新，转完自动跳到 PDF） */
 function loadingPage(res: Response, previewUrl: string, fileName: string): void {
   res.type('html').send(`<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>正在转换: ${fileName}</title>
+<html><head><meta charset="utf-8"><title>正在转换: ${escHtml(fileName)}</title>
 <meta http-equiv="refresh" content="3;url=${previewUrl}">
 <style>body{font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;background:#f6f5fc;margin:0}
 .box{text-align:center;padding:40px 60px;background:#fff;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,0.08)}
@@ -71,7 +76,7 @@ function loadingPage(res: Response, previewUrl: string, fileName: string): void 
 h3{color:#1e1b2e;margin:0 0 8px;font-size:16px}p{color:#6b6892;font-size:13px;margin:0}</style></head>
 <body><div class="box"><div class="spinner"></div>
 <h3>正在转换为 PDF...</h3>
-<p>${fileName}</p><p style="margin-top:8px">大文件首次转换需要一些时间，页面将自动刷新</p>
+<p>${escHtml(fileName)}</p><p style="margin-top:8px">大文件首次转换需要一些时间，页面将自动刷新</p>
 </div></body></html>`);
 }
 
@@ -104,7 +109,12 @@ export async function sendPreview(res: Response, absPath: string, displayName: s
     return;
   }
 
-  // 不支持的类型：inline 直出
+  // SVG/HTML 等可执行类型：强制 attachment 下载（防存储型 XSS）
+  if (DANGEROUS_EXT.has(ext)) {
+    res.download(absPath, displayName);
+    return;
+  }
+  // 其他未知类型：inline 直出
   res.sendFile(absPath, {
     headers: { 'Content-Disposition': `inline; filename*=UTF-8''${encodeURIComponent(displayName)}` },
   } as never);

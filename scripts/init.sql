@@ -124,7 +124,7 @@ ALTER TABLE team_members ADD COLUMN IF NOT EXISTS leave_end_date TEXT;
 ALTER TABLE team_members ADD COLUMN IF NOT EXISTS title TEXT;      -- 职级（人员画像，2026-10-07 新增）
 ALTER TABLE team_members ADD COLUMN IF NOT EXISTS profile TEXT;    -- 画像评语（2026-10-07 新增）
 
--- 2026-10-07：移除演示种子 EMP001/EMP002（生产为真实人员数据，反复种回已删除的演示行会造成数据污染）
+-- 2026-10-07：移除演示种子 EMP001/EMP002（生产为真实人员数据，重启反复种回已删除的演示行会造成数据污染）
 
 -- 知识库文档表（树形结构 + markdown + 可选外部链接）
 -- 2026-07-19 新增：支持本地 KB 系统，可作为飞书 iframe 的替代/补充
@@ -197,6 +197,79 @@ CREATE TABLE IF NOT EXISTS test_docs (
     created_at  TIMESTAMPTZ DEFAULT NOW(),
     updated_at  TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- ============================================================
+-- 测试资源配置模块（收编自单文件资源配置工具，2026-08-28）
+-- 设计：主表存标量字段 + data JSONB 存 10 个子模块数组
+--（personnel/staff/subsidy/external/loads/instruments/consumables/labor/safety/cert），
+-- 与原工具 JSON 导出格式逐字对齐，存量备份可直接导入
+-- ============================================================
+CREATE TABLE IF NOT EXISTS rc_projects (
+    id          SERIAL PRIMARY KEY,
+    name        TEXT NOT NULL,
+    mw          TEXT DEFAULT '',
+    site        TEXT DEFAULT '',
+    manager     TEXT DEFAULT '',
+    test_days   INT DEFAULT 40,
+    start_date  TEXT,
+    end_date    TEXT,
+    remark      TEXT DEFAULT '',
+    status      TEXT NOT NULL DEFAULT '配置中',   -- 配置中 | 已交付
+    data        JSONB NOT NULL DEFAULT '{}',      -- 10 个子模块数组（详见前端 resourceConfig.ts 类型）
+    created_by  TEXT DEFAULT '',
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_rc_projects_status ON rc_projects(status);
+CREATE INDEX IF NOT EXISTS idx_rc_projects_updated ON rc_projects(updated_at DESC);
+
+-- 自有资源库（部门级，跨项目共用：假负载/仪表/PDU/机柜）
+CREATE TABLE IF NOT EXISTS rc_assets (
+    id          SERIAL PRIMARY KEY,
+    cat         TEXT NOT NULL CHECK (cat IN ('load','ins','pdu','cabinet')),
+    name        TEXT NOT NULL,
+    spec        TEXT DEFAULT '',                  -- spec 中的功率数字有语义（假负载匹配用）
+    count       INT NOT NULL DEFAULT 0 CHECK (count >= 0),
+    note        TEXT DEFAULT '',
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_rc_assets_cat ON rc_assets(cat);
+
+-- 已交付配置存档（完整项目快照，只读）
+CREATE TABLE IF NOT EXISTS rc_delivered (
+    id          SERIAL PRIMARY KEY,
+    project_id  INT,
+    name        TEXT NOT NULL,
+    saved_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    snapshot    JSONB NOT NULL                    -- 完整 rc_projects 行快照
+);
+
+-- 部门人员库（收编自原工具，P4~P7 职级；导入时 P→T 归一，展示层再映射回 P）
+CREATE TABLE IF NOT EXISTS rc_dept_members (
+    id          SERIAL PRIMARY KEY,
+    name        TEXT NOT NULL,
+    level       TEXT NOT NULL DEFAULT 'T4',   -- 内部存 T4~T7（原工具双轨制）
+    post        TEXT DEFAULT '',
+    company     TEXT DEFAULT '',
+    phone       TEXT DEFAULT '',
+    skill       TEXT DEFAULT '',
+    note        TEXT DEFAULT '',
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_rc_dept_level ON rc_dept_members(level);
+
+-- AI 用量记账（AI 测试专家按账号限额）
+CREATE TABLE IF NOT EXISTS ai_usage (
+    id          SERIAL PRIMARY KEY,
+    user_id     TEXT NOT NULL,
+    username    TEXT NOT NULL,
+    mode        TEXT NOT NULL DEFAULT 'deep',
+    tokens_in   INTEGER NOT NULL DEFAULT 0,
+    tokens_out  INTEGER NOT NULL DEFAULT 0,
+    question    TEXT,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_ai_usage_user_time ON ai_usage(user_id, created_at);
 
 -- 操作审计日志：记录高危写操作（谁/何时/对什么做了什么），数据异常时一分钟定位
 CREATE TABLE IF NOT EXISTS audit_log (
