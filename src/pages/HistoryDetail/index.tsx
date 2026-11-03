@@ -1,6 +1,6 @@
-import { useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Descriptions, Timeline, Button, Breadcrumb, Card, Avatar, Empty, Tag, Upload, message, Modal } from 'antd';
+import { Input, Descriptions, Timeline, Button, Breadcrumb, Card, Avatar, Empty, Tag, Upload, message, Modal } from 'antd';
 import { ArrowLeftOutlined, HomeOutlined, ProjectOutlined, FileOutlined, HistoryOutlined, LinkOutlined, DownloadOutlined, DeleteOutlined, UploadOutlined } from '@ant-design/icons';
 import type { UploadFile } from 'antd/es/upload/interface';
 import StatusTag from '../../components/StatusTag';
@@ -94,11 +94,62 @@ function HistoryDetail() {
     );
   }
 
+  // 添加链接弹窗状态
+  const [linkModalOpen, setLinkModalOpen] = useState(false);
+  const [linkPhaseKey, setLinkPhaseKey] = useState('');
+  const [linkName, setLinkName] = useState('');
+  const [linkUrl, setLinkUrl] = useState('');
+
+  /** 添加链接 */
+  const handleAddLink = () => {
+    if (!project) return;
+    const name = linkName.trim();
+    const url = linkUrl.trim();
+    if (!name) { message.warning('请输入链接名称'); return; }
+    if (!/^https?:\/\/.+/.test(url)) { message.warning('请输入合法链接地址（以 http:// 或 https:// 开头）'); return; }
+    const newFile: ProjectPhaseFile = {
+      id: `link_${Date.now()}`,
+      fileName: name,
+      fileType: 'link',
+      uploadedAt: new Date().toLocaleString('zh-CN'),
+      link: url,
+    };
+    setHistoryPhases((prev) => {
+      const current = prev[project.id] ?? ALL_PHASE_TEMPLATES.map((t) => ({
+        ...t,
+        status: 'pending' as const,
+        files: [],
+        allowUpload: true,
+      }));
+      return {
+        ...prev,
+        [project.id]: current.map((phase) =>
+          phase.key === linkPhaseKey
+            ? { ...phase, files: [...phase.files, newFile] }
+            : phase
+        ),
+      };
+    });
+    message.success(`链接「${name}」添加成功`);
+    setLinkModalOpen(false);
+    setLinkName('');
+    setLinkUrl('');
+  };
+
   /** 文件上传处理 */
-  const handleUpload = (phaseKey: string, fileList: UploadFile[]) => {
+  const handleUpload = async (phaseKey: string, fileList: UploadFile[]) => {
     if (!project) return;
     const lastFile = fileList[fileList.length - 1];
     if (!lastFile?.originFileObj) return;
+
+    let fileUrl: string | undefined;
+    try {
+      const fd = new FormData();
+      fd.append('file', lastFile.originFileObj);
+      const r = await fetch('/api/projects/files/upload', { method: 'POST', body: fd, credentials: 'include' }).then((x) => x.json());
+      if (r?.success) fileUrl = r.fileUrl;
+      else message.warning(`「${lastFile.name}」文件本体上传失败，仅记录了文件信息`);
+    } catch { message.warning('网络异常，文件本体未上传'); }
 
     const newFile: ProjectPhaseFile = {
       id: `file_${Date.now()}`,
@@ -106,6 +157,7 @@ function HistoryDetail() {
       fileSize: lastFile.originFileObj.size ? formatFileSize(lastFile.originFileObj.size) : '-',
       fileType: lastFile.name.split('.').pop(),
       uploadedAt: new Date().toLocaleString('zh-CN'),
+      fileUrl,
     };
 
     setHistoryPhases((prev) => {
@@ -225,19 +277,14 @@ function HistoryDetail() {
                     }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                      <FileOutlined style={{ color: getFileIcon(file.fileType), fontSize: 14, flexShrink: 0 }} />
-                      <span
-                        style={{
-                          color: '#46436a',
-                          fontSize: 12,
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                        }}
-                        title={`${file.fileName} (${file.fileSize})`}
-                      >
-                        {file.fileName}
-                      </span>
+                      {file.link ? <LinkOutlined style={{ color: '#6366f1', fontSize: 14, flexShrink: 0 }} /> : <FileOutlined style={{ color: getFileIcon(file.fileType), fontSize: 14, flexShrink: 0 }} />}
+                      {file.link ? (
+                          <a href={file.link} target="_blank" rel="noopener noreferrer" style={{ color: '#4f46e5', fontSize: 12, textDecoration: 'none' }} title={file.fileName}>{file.fileName}</a>
+                        ) : file.fileUrl ? (
+                          <a href={file.fileUrl} target="_blank" rel="noopener noreferrer" style={{ color: '#4f46e5', fontSize: 12, textDecoration: 'none' }} title={`${file.fileName}（点击预览）`}>{file.fileName}</a>
+                        ) : (
+                          <span style={{ color: '#46436a', fontSize: 12 }}>{file.fileName}</span>
+                        )}
                       <span style={{ color: '#9d9ab8', fontSize: 11, flexShrink: 0 }}>
                         ({file.fileSize})
                       </span>
@@ -285,6 +332,27 @@ function HistoryDetail() {
                 上传文件
               </Button>
             </Upload>
+              <Button
+                icon={<LinkOutlined />}
+                size="small"
+                onClick={() => {
+                  setLinkPhaseKey(phase.key);
+                  setLinkName('');
+                  setLinkUrl('');
+                  setLinkModalOpen(true);
+                }}
+                style={{
+                  borderColor: 'rgba(99,102,241,0.35)',
+                  color: '#6366f1',
+                  fontFamily: 'var(--font-primary)',
+                  borderRadius: 6,
+                  fontSize: 12,
+                  background: 'transparent',
+                  marginLeft: 8,
+                }}
+              >
+                添加链接
+              </Button>
           </div>
         )}
 
@@ -407,7 +475,31 @@ function HistoryDetail() {
           返回历史项目
         </Button>
       </div>
-    </div>
+    
+      {/* 添加链接弹窗 */}
+      <Modal
+        title={<span style={{ fontFamily: 'var(--font-primary)' }}><LinkOutlined style={{ color: '#6366f1', marginRight: 8 }} />添加链接</span>}
+        open={linkModalOpen}
+        onOk={handleAddLink}
+        onCancel={() => setLinkModalOpen(false)}
+        okText="添加"
+        cancelText="取消"
+        okButtonProps={{ style: { background: 'linear-gradient(135deg, #6366f1, #818cf8)', border: 'none' } }}
+        style={{ top: 160 }}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 12, fontFamily: 'var(--font-primary)' }}>
+          <div>
+            <div style={{ fontSize: 12.5, color: '#46436a', marginBottom: 6, fontWeight: 500 }}>链接名称 <span style={{ color: '#dc2626' }}>*</span></div>
+            <Input placeholder="例如：复盘总结飞书文档" value={linkName} onChange={(e) => setLinkName(e.target.value)} maxLength={60} />
+          </div>
+          <div>
+            <div style={{ fontSize: 12.5, color: '#46436a', marginBottom: 6, fontWeight: 500 }}>链接地址 <span style={{ color: '#dc2626' }}>*</span></div>
+            <Input placeholder="http:// 或 https:// 开头的完整地址" value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} />
+            <div style={{ fontSize: 11, color: '#9d9ab8', marginTop: 4 }}>保存后点击名称即可跳转</div>
+          </div>
+        </div>
+      </Modal>
+</div>
   );
 }
 

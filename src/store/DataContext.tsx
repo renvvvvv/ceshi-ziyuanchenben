@@ -199,6 +199,24 @@ export function DataProvider({ children }: { children: ReactNode }) {
     return () => clearTimeout(timer);
   }, [projectPhases]);
   const [historyPhases, setHistoryPhases] = usePersistentState<Record<string, ProjectPhase[]>>('historyPhases', mergedHistoryPhases);
+  const histPhasesSyncedRef = useRef<Record<string, ProjectPhase[]> | null>(null);
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const cur = historyPhases;
+      const synced = histPhasesSyncedRef.current || {};
+      for (const pid of Object.keys(cur)) {
+        if (JSON.stringify(cur[pid]) === JSON.stringify(synced[pid])) continue;
+        histPhasesSyncedRef.current = { ...synced, [pid]: cur[pid] };
+        void fetch(`/api/projects/phases/h_${pid}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ phases: cur[pid] }),
+        }).catch(() => {});
+      }
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [historyPhases]);
   const [attendanceAdjustments, setAttendanceAdjustmentsRaw] = usePersistentState<Record<string, AttendanceAdjustment>>('attendanceAdjustments', {});
 
   /**
@@ -315,6 +333,21 @@ export function DataProvider({ children }: { children: ReactNode }) {
             phasesSyncedRef.current = { ...(phasesSyncedRef.current || {}), ...phRes.data };
           }
         } catch { /* phases 接口失败不阻塞主流程 */ }
+
+        // HistoryPhases：后端 h_ 前缀键还原为历史项目 id
+        try {
+          const phRes2 = await fetch('/api/projects/phases', { credentials: 'include' }).then((r) => r.json());
+          if (phRes2?.success && phRes2.data) {
+            const histData: Record<string, ProjectPhase[]> = {};
+            for (const [k, v] of Object.entries(phRes2.data as Record<string, ProjectPhase[]>)) {
+              if (k.startsWith('h_')) histData[k.slice(2)] = v;
+            }
+            if (Object.keys(histData).length > 0) {
+              setHistoryPhases((prev) => ({ ...prev, ...histData }));
+              histPhasesSyncedRef.current = { ...(histPhasesSyncedRef.current || {}), ...histData };
+            }
+          }
+        } catch { /* 不阻塞 */ }
 
         // 全部成功 → 数据源 = api；任意失败 → cache（用 localStorage 兜底）
         const allOk = projRes && memRes && histRes && attRes;
