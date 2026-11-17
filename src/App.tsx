@@ -19,6 +19,7 @@ const Login = lazy(() => import('./pages/Login'));
 const PermissionConfig = lazy(() => import('./pages/PermissionConfig'));
 const KnowledgeBase = lazy(() => import('./pages/KnowledgeBase'));
 const Attendance = lazy(() => import('./pages/Attendance'));
+const FormulaRef = lazy(() => import('./pages/FormulaRef'));
 const ReportReview = lazy(() => import('./pages/ReportReview'));
 const AiTestExpert = lazy(() => import('./pages/AiTestExpert'));
 const ResourceConfig = lazy(() => import('./pages/ResourceConfig'));
@@ -110,6 +111,7 @@ function AppRoutes() {
           <Route path="permission-config" element={<RequirePermission module="permissionConfig"><PermissionConfig /></RequirePermission>} />
           <Route path="knowledge-base" element={<RequirePermission module="dashboard"><KnowledgeBase /></RequirePermission>} />
           <Route path="ai-test-expert" element={<RequirePermission module="aiTestExpert"><AiTestExpert /></RequirePermission>} />
+          <Route path="formulas" element={<RequirePermission module="dashboard"><FormulaRef /></RequirePermission>} />
           <Route path="attendance" element={<RequirePermission module="attendance"><Attendance /></RequirePermission>} />
           <Route path="report-review" element={<RequirePermission module="reportReview"><ReportReview /></RequirePermission>} />
         </Route>
