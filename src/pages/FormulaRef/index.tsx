@@ -243,7 +243,7 @@ export default function FormulaRef() {
           测试公式速查
         </Title>
         <Text type="secondary" style={{ fontSize: 12 }}>
-          输入实测值自动计算并判定是否合格 · 点击「复制结果」可直接粘贴到报告
+          输入实测值自动计算并判定是否合格
         </Text>
       </div>
 
