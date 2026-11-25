@@ -17,9 +17,39 @@ export interface FormulaInput {
 export interface FormulaJudgment {
   operator: '<=' | '>=' | '|' | 'range' | 'abs<=';
   threshold?: number;
+  /** 限值就是某个下拉输入项的选中值（例如绝缘等级对应的允许温升、噪声测点对应的限值） */
+  thresholdFrom?: string;
+  /** 限值按某个下拉输入项的选中值查表（键是选项的 value） */
+  thresholdBy?: { key: string; map: Record<string, number> };
   range?: [number, number];
+  /** 判定区间按某个下拉输入项的选中值查表（键是选项的 value） */
+  rangeBy?: { key: string; map: Record<string, [number, number]> };
+  /** 多个输入要各自对照各自限值的规则：返回 true 为合格。有它时上面的 operator / 限值不再使用 */
+  check?: (v: Record<string, number>) => boolean;
   passText: string;
   failText: string;
+}
+
+/** 按判定规则求“合格 / 不合格”。返回 null 表示没有判定规则或限值缺失（界面显示“无判定标准”） */
+export function evaluateJudgment(
+  j: FormulaJudgment | undefined, values: Record<string, number>, result: number,
+): boolean | null {
+  if (!j) return null;
+  if (j.check) return j.check(values);
+  const lookup = (src?: { key: string; map: Record<string, unknown> }) =>
+    src ? src.map[String(values[src.key])] : undefined;
+  const limit = lookup(j.thresholdBy);
+  const threshold = limit !== undefined ? Number(limit)
+    : j.thresholdFrom !== undefined ? Number(values[j.thresholdFrom]) : (j.threshold ?? 0);
+  const range = (lookup(j.rangeBy) as [number, number] | undefined) ?? j.range;
+  switch (j.operator) {
+    case '<=': return result <= threshold;
+    case '>=': return result >= threshold;
+    case '|': return Math.abs(result) <= threshold;
+    case 'range': return range ? result >= range[0] && result <= range[1] : null;
+    case 'abs<=': return Math.abs(result) <= threshold;
+    default: return null;
+  }
 }
 
 export interface FormulaDef {
@@ -435,8 +465,8 @@ export const FORMULAS: FormulaDef[] = [
     resultScale: 2,
     judgment: {
       operator: '<=',
-      threshold: 4,
-      passText: '合格（在线式 ≤ 4ms，输出无中断）',
+      thresholdFrom: 'type',
+      passText: '合格（不超过所选类型的限值：在线式 ≤ 4ms，后备式/线路互动式 ≤ 10ms）',
       failText: '超出限值，IT设备可能重启',
     },
     note: '用示波器或专用切换时间测试仪。测试点：UPS 输出端，满载状态',
@@ -598,6 +628,8 @@ export const FORMULAS: FormulaDef[] = [
     judgment: {
       operator: '<=',
       threshold: 5,
+      // 电压、频率各有各的限值，必须分别判定：只拿两者中的较大值去比 5s，电压 4.8s 也会被判合格
+      check: (v) => v.vRecovery <= 4 && v.fRecovery <= 5,
       passText: '合格（电压 ≤ 4s，频率 ≤ 5s）',
       failText: '恢复过慢，检查AVR/调速器',
     },
@@ -673,8 +705,8 @@ export const FORMULAS: FormulaDef[] = [
     resultScale: 0,
     judgment: {
       operator: '>=',
-      threshold: 10,
-      passText: '合格（10kV 电缆 ≥ 10MΩ，35kV ≥ 35MΩ）',
+      thresholdFrom: 'voltage',
+      passText: '合格（不低于所选电压等级的要求：10kV ≥ 10MΩ，35kV ≥ 35MΩ）',
       failText: '低于标准，检查电缆头/本体绝缘',
     },
     note: '测试前将电缆充分放电（≥ 2min），2500V 兆欧表，60s 读数',
@@ -702,8 +734,8 @@ export const FORMULAS: FormulaDef[] = [
     resultScale: 1,
     judgment: {
       operator: '<=',
-      threshold: 65,
-      passText: '合格（不超过绝缘等级允许温升）',
+      thresholdFrom: 'insulation',
+      passText: '合格（不超过所选绝缘等级的允许温升）',
       failText: '温升超标，检查负载率/冷却系统',
     },
     standard: 'GB/T 1094 / GB/T 6450',
@@ -761,8 +793,8 @@ export const FORMULAS: FormulaDef[] = [
     resultScale: 1,
     judgment: {
       operator: '<=',
-      threshold: 70,
-      passText: '合格（母线排 ≤ 70K）',
+      thresholdFrom: 'location',
+      passText: '合格（不超过该测温位置的允许温升：母线排 ≤ 70K，螺栓连接处/接线端子 ≤ 80K，手车触头 ≤ 75K）',
       failText: '温升超标，检查负载/接触电阻/紧固力矩',
     },
     standard: 'GB/T 11022 / GB/T 3906',
@@ -793,10 +825,10 @@ export const FORMULAS: FormulaDef[] = [
     id: 'spd-status',
     category: 'electrical',
     title: 'SPD 浪涌保护器状态判定',
-    formulaText: '压敏电压实测 vs 标称偏差 ≤ ±10%',
+    formulaText: '压敏电压实测 vs 出厂值偏差 ≤ ±10%',
     inputs: [
-      { key: 'rated', label: 'SPD 标称 Uc', unit: 'V', defaultValue: 385 },
-      { key: 'measured', label: '实测压敏电压', unit: 'V', placeholder: '392' },
+      { key: 'rated', label: '出厂压敏电压 U1mA', unit: 'V', defaultValue: 620 },
+      { key: 'measured', label: '实测压敏电压 U1mA', unit: 'V', placeholder: '612' },
     ],
     compute: (v) => (v.measured - v.rated) / v.rated * 100,
     resultUnit: '%',
@@ -808,7 +840,7 @@ export const FORMULAS: FormulaDef[] = [
       passText: '合格（偏差 ≤ ±10%）',
       failText: 'SPD 劣化，需更换',
     },
-    note: '常用 Uc 值：275V / 320V / 385V / 440V。SPD 遥信端子指示灯变红也需更换',
+    note: '基准填压敏电压 U1mA 的出厂值（或同型号新品实测值），不是最大持续工作电压 Uc——Uc 385V 的模块 U1mA 通常在 600V 上下，拿 385 当基准会把正常模块判成劣化。SPD 遥信端子指示灯变红也需更换',
   },
   // ==================== 暖通 ====================
   {
@@ -1180,13 +1212,14 @@ export const FORMULAS: FormulaDef[] = [
     id: 'cctv-storage',
     category: 'weak',
     title: '视频监控存储容量',
-    formulaText: '容量(TB) = 码流 × 86400 × 天数 × 通道数 / 8 / 1024³',
+    // Mbps → MB/s 除以 8；MB → TB 除以两次 1024。此前多除了一次 1024（公式文本还写成了 1024³），结果小 1024 倍
+    formulaText: '容量(TB) = 码流(Mbps) × 86400 × 天数 × 通道数 / 8 / 1024²',
     inputs: [
       { key: 'bitrate', label: '单路码流', unit: 'Mbps', defaultValue: 4 },
       { key: 'days', label: '存储天数', unit: '天', defaultValue: 30 },
       { key: 'channels', label: '通道数', unit: '路', placeholder: '64' },
     ],
-    compute: (v) => v.bitrate * 86400 * v.days * v.channels / 8 / 1024 / 1024 / 1024,
+    compute: (v) => v.bitrate * 86400 * v.days * v.channels / 8 / 1024 / 1024,
     resultUnit: 'TB',
     resultLabel: '所需存储',
     resultScale: 1,
@@ -1230,8 +1263,8 @@ export const FORMULAS: FormulaDef[] = [
     resultScale: 2,
     judgment: {
       operator: '>=',
-      threshold: 0.35,
-      passText: '合格（≥ 0.35MPa）',
+      thresholdBy: { key: 'height', map: { '24': 0.35, '50': 0.5 } },
+      passText: '合格（不低于该建筑高度的要求：≤24m ≥ 0.35MPa，>24m ≥ 0.50MPa）',
       failText: '不合格（压力不足）',
     },
     standard: 'GB 50974',
@@ -1255,8 +1288,8 @@ export const FORMULAS: FormulaDef[] = [
     resultScale: 0,
     judgment: {
       operator: 'range',
-      range: [40, 50],
-      passText: '合格（楼梯间 40~50Pa）',
+      rangeBy: { key: 'location', map: { '1': [40, 50], '2': [25, 30] } },
+      passText: '合格（楼梯间 40~50Pa，前室/合用前室 25~30Pa）',
       failText: '超出范围，调节加压风机',
     },
     standard: 'GB 51251',
@@ -1324,8 +1357,8 @@ export const FORMULAS: FormulaDef[] = [
     resultScale: 1,
     judgment: {
       operator: '<=',
-      threshold: 85,
-      passText: '合格',
+      thresholdFrom: 'location',
+      passText: '合格（不超过该测点的限值：柴发机房 85dB，机房内 70dB，办公区域 60dB）',
       failText: '超标，需隔音/减振处理',
     },
     standard: 'GBZ 2.2',

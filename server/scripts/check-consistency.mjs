@@ -24,6 +24,9 @@ const client = new pg.Client({
   password: PGPASSWORD,
 });
 
+// 与 server/scripts/init.sql 里的建表语句保持一致。
+// 旧清单里的 users / sessions / learned_corrections 是 SQLite 时代的表，早已迁走
+//（账号与会话在 data/*.json，学习库在 data/learned-corrections.json），留着会让本脚本永远报“不存在”。
 const EXPECTED_TABLES = [
   'test_projects',
   'team_members',
@@ -31,9 +34,14 @@ const EXPECTED_TABLES = [
   'resource_calc_history',
   'kb_documents',
   'attendance_adjustments',
-  'learned_corrections',
-  'users',
-  'sessions',
+  'knowledge_embeddings',
+  'ai_usage',
+  'audit_log',
+  'project_phases',
+  'test_docs',
+  'drawing_jobs',
+  'sys_snapshots',
+  'rc_store',
 ];
 
 async function main() {
@@ -70,25 +78,26 @@ async function main() {
     // 3. 孤儿数据检查
     console.log('\n=== 孤儿数据检查 ===');
 
-    // team_members.assigned_project_ids 引用的项目是否存在
+    // team_members.current_projects（JSON 数组，存项目名）引用的项目是否存在
     try {
       const { rows: orphans } = await client.query(`
-        SELECT tm.id, tm.name, tm.assigned_project_ids
+        SELECT tm.id, tm.name, tm.current_projects
         FROM team_members tm
-        WHERE tm.assigned_project_ids IS NOT NULL AND tm.assigned_project_ids != '[]'
-        AND NOT EXISTS (
-          SELECT 1 FROM jsonb_array_elements_text(tm.assigned_project_ids::jsonb) AS pid
-          JOIN test_projects tp ON tp.id::text = pid
+        WHERE tm.current_projects IS NOT NULL AND tm.current_projects != '[]'
+        AND EXISTS (
+          SELECT 1 FROM jsonb_array_elements_text(tm.current_projects::jsonb) AS pname
+          LEFT JOIN test_projects tp ON tp.name = pname
+          WHERE tp.id IS NULL
         )
       `);
       if (orphans.length > 0) {
-        console.log(`  ⚠ team_members 有 ${orphans.length} 条记录的 assigned_project_ids 引用不存在的项目`);
+        console.log(`  ⚠ team_members 有 ${orphans.length} 条记录的 current_projects 引用不存在的项目`);
         issues++;
       } else {
-        console.log('  ✓ team_members.assigned_project_ids 无孤儿引用');
+        console.log('  ✓ team_members.current_projects 无孤儿引用');
       }
     } catch (e) {
-      console.log(`  - 跳过 team_members 孤儿检查（列可能不存在）`);
+      console.log(`  - 跳过 team_members 孤儿检查（${e.message}）`);
     }
 
     // attendance_adjustments 引用的 member 是否存在

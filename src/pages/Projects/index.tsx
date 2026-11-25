@@ -276,9 +276,12 @@ function Projects() {
               title="归档到历史项目"
               description={`确定要把项目"${record.name}"归档到历史项目板块吗？归档后可在历史项目页面查看。`}
               onConfirm={() => {
-                const ok = archiveProject(record.id);
-                if (ok) message.success('项目已归档到历史项目');
-                else message.error('归档失败');
+                // 成败以后端结果为准：没归档成时项目会自动放回列表，并给出原因
+                const ok = archiveProject(record.id, (done, reason) => {
+                  if (done) message.success('项目已归档到历史项目');
+                  else message.error(reason || '归档失败，项目已放回列表');
+                });
+                if (!ok) message.error('归档失败');
               }}
               okText="确认归档"
               cancelText="取消"

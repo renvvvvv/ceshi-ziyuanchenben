@@ -12,3 +12,11 @@ dist/
 vite.config.ts.timestamp-*
 .claude/
 .workbuddy/
+# 服务器上的上传目录挂在仓库根目录下（图纸任务、制度文件），体积大且与镜像无关；
+# 不排除的话每次构建都会把它整个送进构建上下文和构建缓存
+uploads/
+# 测试产物
+test-results/
+e2e-report/
+playwright-report/
+.DS_Store

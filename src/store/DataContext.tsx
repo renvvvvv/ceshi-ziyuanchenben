@@ -21,6 +21,7 @@ import type {
   Project,
   HistoricalProject,
   TeamMember,
+  MemberProject,
   TestDoc,
   ProjectPhase,
 } from '../types';
@@ -79,6 +80,18 @@ function usePersistentState<T>(key: string, initial: T): [T, (value: T | ((prev:
     };
   }, [key, state]);
 
+  // 刷新/关标签时强制落盘：防抖窗口内的最后变更不再丢失
+  useEffect(() => {
+    const flush = () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        saveToStorage(key, stateRef.current);
+      }
+    };
+    window.addEventListener('beforeunload', flush);
+    return () => window.removeEventListener('beforeunload', flush);
+  }, [key]);
+
   return [state, setState];
 }
 
@@ -107,12 +120,12 @@ interface DataContextValue {
   deleteProject: (id: string) => void;
   getProjectById: (id: string) => Project | undefined;
   // 显式归档（手动把"已完成"项目移到历史项目）
-  archiveProject: (id: string) => boolean;
+  archiveProject: (id: string, onDone?: (ok: boolean, reason?: string) => void) => boolean;
 
   // 历史项目
   historyProjects: HistoricalProject[];
   setHistoryProjects: (value: HistoricalProject[] | ((prev: HistoricalProject[]) => HistoricalProject[])) => void;
-  addHistoryProject: (project: HistoricalProject) => void;
+  addHistoryProject: (project: HistoricalProject, onDone?: (ok: boolean, reason?: string) => void, opts?: { adoptExisting?: boolean }) => void;
   updateHistoryProject: (id: string, updates: Partial<HistoricalProject>) => void;
   deleteHistoryProject: (id: string) => void;
   getHistoryProjectById: (id: string) => HistoricalProject | undefined;
@@ -120,7 +133,7 @@ interface DataContextValue {
   // 团队成员
   teamMembers: TeamMember[];
   setTeamMembers: (value: TeamMember[] | ((prev: TeamMember[]) => TeamMember[])) => void;
-  addTeamMember: (member: TeamMember) => void;
+  addTeamMember: (member: TeamMember, onDone?: (ok: boolean, reason?: string) => void) => void;
   updateTeamMember: (id: string, updates: Partial<TeamMember>) => void;
   deleteTeamMember: (id: string) => void;
 
@@ -172,11 +185,45 @@ const mergedHistoryPhases: Record<string, ProjectPhase[]> = {
   ...mockHistoryPhasesPartial,
 };
 
+/**
+ * 项目改期 / 改名后，把成员侧照抄的那份项目信息对齐到项目表。
+ * 只改条目里的项目名和起止日期：不增删条目、不改成员状态（指派和状态流转仍由原来的逻辑负责）。
+ * 项目名对不上的条目（已归档、历史遗留）原样保留。没有变化的成员返回原对象（不触发多余渲染）。
+ */
+function alignMemberToProject(
+  m: TeamMember, oldName: string, p: { name: string; startDate?: string; endDate?: string },
+): TeamMember {
+  const startDate = p.startDate || '';
+  const endDate = p.endDate || '';
+  let touched = false;
+  const fix = (list: MemberProject[] | undefined): MemberProject[] | undefined => {
+    if (!list) return list;
+    return list.map((e) => {
+      if (e.projectName !== oldName) return e;
+      if (e.projectName === p.name && (e.startDate || '') === startDate && (e.endDate || '') === endDate) return e;
+      touched = true;
+      return { ...e, projectName: p.name, startDate, endDate };
+    });
+  };
+  const proj = fix(m.projects);
+  const upcoming = fix(m.upcomingProjects);
+  const current = (m.currentProjects || []).map((n) => {
+    if (n !== oldName || n === p.name) return n;
+    touched = true;
+    return p.name;
+  });
+  if (!touched) return m;
+  return { ...m, projects: proj, upcomingProjects: upcoming, currentProjects: current };
+}
+
 export function DataProvider({ children }: { children: ReactNode }) {
   // ====== 持久化状态（localStorage 兜底，后端是主源） ======
   const [projects, setProjects] = usePersistentState<Project[]>('projects', mockProjects);
   const [historyProjects, setHistoryProjects] = usePersistentState<HistoricalProject[]>('historyProjects', mockHistoryProjects);
   const [teamMembers, setTeamMembers] = usePersistentState<TeamMember[]>('teamMembers', mockTeamMembers);
+  // ref 快照：把 API 副作用从 setState updater 里挪出来（StrictMode/并发渲染会重放 updater 导致双发请求）
+  const teamMembersRef = useRef(teamMembers);
+  teamMembersRef.current = teamMembers;
   const [testDocs, setTestDocs] = usePersistentState<TestDoc[]>('testDocs', mockTestDocs);
   const [projectPhases, setProjectPhases] = usePersistentState<Record<string, ProjectPhase[]>>('projectPhases', mockProjectPhases);
   // phases 后端同步：记录已同步快照，变更防抖 PUT（localStorage 之外实现多账号共享）
@@ -186,14 +233,18 @@ export function DataProvider({ children }: { children: ReactNode }) {
       const cur = projectPhases;
       const synced = phasesSyncedRef.current || {};
       for (const pid of Object.keys(cur)) {
+        // 只同步真实编号（后端主键是整数）。本地占位键——刚新建还没拿到编号、mock 示例数据——不能写进后端
+        if (!/^\d+$/.test(pid)) continue;
         if (JSON.stringify(cur[pid]) === JSON.stringify(synced[pid])) continue;
-        phasesSyncedRef.current = { ...synced, [pid]: cur[pid] };
         void fetch(`/api/projects/phases/${pid}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
           body: JSON.stringify({ phases: cur[pid] }),
-        }).catch(() => { /* 离线时 localStorage 仍在，下次变更重试 */ });
+        }).then((r) => {
+          // 仅成功才标记已同步；失败保持脏标记，下次变更/重载时自动重试（防编辑永久丢失）
+          if (r.ok) phasesSyncedRef.current = { ...(phasesSyncedRef.current || {}), [pid]: cur[pid] };
+        }).catch(() => { /* 离线不置位，localStorage 兜底，下次重试 */ });
       }
     }, 800);
     return () => clearTimeout(timer);
@@ -205,13 +256,17 @@ export function DataProvider({ children }: { children: ReactNode }) {
       const cur = historyPhases;
       const synced = histPhasesSyncedRef.current || {};
       for (const pid of Object.keys(cur)) {
+        // 同上：只同步真实编号。归档后的项目在拿到历史表真实编号之前用的是 arch_ 开头的占位键——
+        // 项目表与历史表是两套独立编号，按项目表编号去写 h_<编号>，会覆盖历史表里同编号的另一条记录
+        if (!/^\d+$/.test(pid)) continue;
         if (JSON.stringify(cur[pid]) === JSON.stringify(synced[pid])) continue;
-        histPhasesSyncedRef.current = { ...synced, [pid]: cur[pid] };
         void fetch(`/api/projects/phases/h_${pid}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
           body: JSON.stringify({ phases: cur[pid] }),
+        }).then((r) => {
+          if (r.ok) histPhasesSyncedRef.current = { ...(histPhasesSyncedRef.current || {}), [pid]: cur[pid] };
         }).catch(() => {});
       }
     }, 800);
@@ -224,13 +279,17 @@ export function DataProvider({ children }: { children: ReactNode }) {
    * 1. 立即更新本地 state + localStorage（响应快）
    * 2. 异步同步到后端 attendance_adjustments 表（持久化）
    */
+  const attendanceRef = useRef(attendanceAdjustments);
+  attendanceRef.current = attendanceAdjustments;
   const setAttendanceAdjustments = useCallback((
     updater: Record<string, AttendanceAdjustment>
       | ((prev: Record<string, AttendanceAdjustment>) => Record<string, AttendanceAdjustment>)
   ) => {
-    setAttendanceAdjustmentsRaw((prev) => {
+    {
+      const prev = attendanceRef.current;
       const next = typeof updater === 'function' ? updater(prev) : updater;
-      // 同步每个 key 到后端（best-effort，失败不阻塞 UI）
+      attendanceRef.current = next; // 连续调用立即可见
+      // 同步每个 key 到后端（best-effort，失败不阻塞 UI；副作用在 setState 之外，StrictMode 不再双发）
       // key 格式：${memberId}-${projectName}-${cycleStart}
       // cycleStart 是 YYYY-MM-DD 格式（含 -），不能用 split('-') 否则日期被截断
       for (const [key, value] of Object.entries(next)) {
@@ -254,8 +313,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
           attendDays: value.attendDays,
         }).catch((err) => console.warn('[DataContext] 考勤校准同步失败', key, err));
       }
-      return next;
-    });
+      setAttendanceAdjustmentsRaw(next);
+    }
   }, []);
   // 数据源标记：'mock' | 'api' | 'cache' | 'loading' | 'error'，用于 UI 显示数据来源
   const [dataSource, setDataSource] = useState<'mock' | 'api' | 'cache' | 'loading' | 'error'>('loading');
@@ -268,16 +327,38 @@ export function DataProvider({ children }: { children: ReactNode }) {
   //      - 若 localStorage 有缓存 → 降级到 cache（UI 可用但提示"离线模式"）
   //      - 若无缓存且 USE_MOCK_FALLBACK=true → 用 mock（仅调试）
   //      - 若无缓存且禁用 mock → 标记 error，UI 显示"加载失败"
+  /** 拉全项目列表：后端单页上限 100 条，按 total 翻页取完。
+   *  只取第一页的话，第 101 个项目起在仪表盘、项目列表、人员池下拉里消失，成员与这些项目的关联还会被“孤儿清理”删掉 */
+  const fetchAllProjects = async (): Promise<Awaited<ReturnType<typeof projectsApi.list>>> => {
+    const first = await projectsApi.list({ page: 1, size: 100 });
+    const all = [...(first.data || [])];
+    const total = first.total ?? all.length;
+    for (let page = 2; all.length < total && page <= 100; page++) {
+      const next = await projectsApi.list({ page, size: 100 });
+      if (!next.data?.length) break;
+      all.push(...next.data);
+    }
+    return { ...first, data: all, total };
+  };
+
   const loadFromBackend = useCallback(async () => {
     try {
       {
-        const [projRes, memRes, histRes, attRes, docsRes] = await Promise.all([
-          projectsApi.list({ page: 1, size: 500 }),
+        // allSettled：任一接口失败（如未登录时考勤接口 401）不再拖垮其余匿名可读数据的加载
+        const [projR, memR, histR, attR, docsR, phR] = await Promise.allSettled([
+          fetchAllProjects(),
           teamMembersApi.list(),
           historyProjectsApi.list(),
           attendanceAdjustmentsApi.list(),
           fetch('/api/test-docs', { credentials: 'include' }).then((r) => r.json()).catch(() => null),
+          fetch('/api/projects/phases', { credentials: 'include' }).then((r) => r.json()).catch(() => null),
         ]);
+        const projRes = projR.status === 'fulfilled' ? projR.value : undefined;
+        const memRes = memR.status === 'fulfilled' ? memR.value : undefined;
+        const histRes = histR.status === 'fulfilled' ? histR.value : undefined;
+        const attRes = attR.status === 'fulfilled' ? attR.value : undefined;
+        const docsRes = docsR.status === 'fulfilled' ? docsR.value : null;
+        const phRes = phR.status === 'fulfilled' ? phR.value : null;
 
         // 诊断日志
         console.log('[DataContext] 后端加载结果:', {
@@ -286,17 +367,19 @@ export function DataProvider({ children }: { children: ReactNode }) {
           memSuccess: memRes?.success, memLen: memRes?.data?.length,
         });
 
-        // Projects：后端有数据 → 用后端覆盖本地（让 id 同步成 DB 主键）
-        if (projRes?.success && projRes.data && projRes.data.length > 0) {
+        // 接口成功就以服务端为准，空列表也一样：否则表是空的时候，界面显示的是 mock 示例数据
+        // 或上一个账号留在本机的缓存，角标却写着“api”
+        // Projects：用后端覆盖本地（让 id 同步成 DB 主键）
+        if (projRes?.success && Array.isArray(projRes.data)) {
           console.log('[DataContext] 用后端数据覆盖 projects:', projRes.data.length, '条');
           setProjects(projRes.data);
         }
-        // Members：后端有数据 → 用后端覆盖本地
-        if (memRes?.success && memRes.data && memRes.data.length > 0) {
+        // Members：用后端覆盖本地
+        if (memRes?.success && Array.isArray(memRes.data)) {
           setTeamMembers(memRes.data);
         }
-        // History：后端有数据 → 用后端覆盖本地
-        if (histRes?.success && histRes.data && histRes.data.length > 0) {
+        // History：用后端覆盖本地
+        if (histRes?.success && Array.isArray(histRes.data)) {
           console.log('[DataContext] 用后端数据覆盖 historyProjects:', histRes.data.length, '条');
           setHistoryProjects(histRes.data);
         }
@@ -315,8 +398,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
             };
           }
           // 仅在后端有数据时覆盖本地，避免清掉 localStorage
+          // 用 raw：这是服务端数据的本地落地，不应再触发"逐 key upsert 回服务端"
           if (Object.keys(map).length > 0) {
-            setAttendanceAdjustments(map);
+            setAttendanceAdjustmentsRaw(map);
           }
         }
 
@@ -325,36 +409,33 @@ export function DataProvider({ children }: { children: ReactNode }) {
           setTestDocs(docsRes.data);
         }
 
-        // ProjectPhases（阶段/附件）：后端有数据则按键合并覆盖（多账号共享）
-        try {
-          const phRes = await fetch('/api/projects/phases', { credentials: 'include' }).then((r) => r.json());
-          if (phRes?.success && phRes.data && Object.keys(phRes.data).length > 0) {
-            setProjectPhases((prev) => ({ ...prev, ...phRes.data }));
-            phasesSyncedRef.current = { ...(phasesSyncedRef.current || {}), ...phRes.data };
+        // ProjectPhases（阶段/附件）：一次请求双用——普通键进 projectPhases，h_ 前缀键还原为历史项目 id
+        // （此前请求两次同一接口，且 h_ 键被并入 projectPhases 触发孤儿清理反复删除）
+        if (phRes?.success && phRes.data) {
+          const projData: Record<string, ProjectPhase[]> = {};
+          const histData: Record<string, ProjectPhase[]> = {};
+          for (const [k, v] of Object.entries(phRes.data as Record<string, ProjectPhase[]>)) {
+            if (k.startsWith('h_')) histData[k.slice(2)] = v;
+            else projData[k] = v;
           }
-        } catch { /* phases 接口失败不阻塞主流程 */ }
-
-        // HistoryPhases：后端 h_ 前缀键还原为历史项目 id
-        try {
-          const phRes2 = await fetch('/api/projects/phases', { credentials: 'include' }).then((r) => r.json());
-          if (phRes2?.success && phRes2.data) {
-            const histData: Record<string, ProjectPhase[]> = {};
-            for (const [k, v] of Object.entries(phRes2.data as Record<string, ProjectPhase[]>)) {
-              if (k.startsWith('h_')) histData[k.slice(2)] = v;
-            }
-            if (Object.keys(histData).length > 0) {
-              setHistoryPhases((prev) => ({ ...prev, ...histData }));
-              histPhasesSyncedRef.current = { ...(histPhasesSyncedRef.current || {}), ...histData };
-            }
+          if (Object.keys(projData).length > 0) {
+            setProjectPhases((prev) => ({ ...prev, ...projData }));
+            phasesSyncedRef.current = { ...(phasesSyncedRef.current || {}), ...projData };
           }
-        } catch { /* 不阻塞 */ }
+          if (Object.keys(histData).length > 0) {
+            setHistoryPhases((prev) => ({ ...prev, ...histData }));
+            histPhasesSyncedRef.current = { ...(histPhasesSyncedRef.current || {}), ...histData };
+          }
+        }
 
-        // 全部成功 → 数据源 = api；任意失败 → cache（用 localStorage 兜底）
-        const allOk = projRes && memRes && histRes && attRes;
-        setDataSource(allOk ? 'api' : 'cache');
+        // 核心数据成功 → api；核心失败 → cache（localStorage 兜底）。考勤/文档为辅助数据，失败不影响判定
+        const coreOk = Boolean(projRes?.success && memRes?.success);
+        setDataSource(coreOk ? 'api' : 'cache');
+        return coreOk;
       }
     } catch (err) {
       console.warn('[DataContext] 后端拉取失败:', err);
+      return false;
       // 检查 localStorage 是否有缓存数据
       const hasCache = localStorage.getItem(STORAGE_PREFIX + 'projects');
       if (hasCache) {
@@ -396,6 +477,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   //   1. projectPhases[id] 中 id 不存在于 projects + historyProjects（已删项目残留的 phases）
   //   2. teamMembers.currentProjects / projects / upcomingProjects 中包含已不存在的项目名
   useEffect(() => {
+    if (dataSource === 'loading') return; // 等真实数据就绪再清理（挂载瞬间是 mock/缓存快照，误删会持久化）
     const validIds = new Set([
       ...projects.map((p) => p.id),
       ...historyProjects.map((p) => p.id),
@@ -420,9 +502,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
 
     // 2. 清理 teamMembers 中不存在的项目关联
-    let memberCleanCount = 0;
-    setTeamMembers((prevMembers) =>
-      prevMembers.map((m) => {
+    // ⚠️ effect 依赖含 teamMembers：updater 无变化时必须返回原引用，
+    //    否则 map 的新数组引用会触发 effect 重跑 → 无限 setState 循环（启动卡死根因）
+    setTeamMembers((prevMembers) => {
+      let anyChanged = false;
+      const next = prevMembers.map((m) => {
         const newProjects = (m.projects || []).filter((p) => validNames.has(p.projectName));
         const newCurrent = (m.currentProjects || []).filter((n) => validNames.has(n));
         const newUpcoming = (m.upcomingProjects || []).filter((up) => validNames.has(up.projectName));
@@ -430,16 +514,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
           newProjects.length !== (m.projects || []).length ||
           newCurrent.length !== (m.currentProjects || []).length ||
           newUpcoming.length !== (m.upcomingProjects || []).length;
-        if (changed) memberCleanCount += 1;
+        if (changed) { anyChanged = true; }
         return changed
           ? { ...m, projects: newProjects, currentProjects: newCurrent, upcomingProjects: newUpcoming }
           : m;
-      })
-    );
-    if (memberCleanCount > 0) {
-      console.info(`[DataContext] data_health: 清理 ${memberCleanCount} 个成员的孤儿项目关联`);
-    }
-  }, []); // 只在挂载时执行一次（projects + historyProjects + projectPhases 通过 setTeamMembers 链式更新）
+      });
+      return anyChanged ? next : prevMembers; // 原引用短路：无孤儿时不触发重渲染
+    });
+  }, [dataSource, projects, historyProjects, projectPhases, teamMembers, setProjectPhases, setTeamMembers, setHistoryProjects]); // 只在挂载时执行一次（projects + historyProjects + projectPhases 通过 setTeamMembers 链式更新）
 
   // ====== 项目 CRUD（同时调 API + 本地 state） ======
   const addProject = useCallback((project: Project) => {
@@ -450,18 +532,40 @@ export function DataProvider({ children }: { children: ReactNode }) {
         // 用后端返回的真实 id 替换本地 id（避免和 DB 自增 id 冲突）
         const realId = String(res.id);
         setProjects((prev) => prev.map((p) => (p.id === project.id ? { ...p, id: realId } : p)));
+      } else {
+        // 创建失败回滚乐观插入（此前失败项目滞留本地临时 id，后续编辑只改本地、换设备即丢）
+        setProjects((prev) => prev.filter((p) => p.id !== project.id));
       }
+    }).catch(() => {
+      setProjects((prev) => prev.filter((p) => p.id !== project.id));
     });
   }, [setProjects]);
 
   const updateProject = useCallback((id: string, updates: Partial<Project>) => {
+    const before = projects.find((p) => p.id === id) || null;
+    const after = before ? { ...before, ...updates } : null;
     setProjects((prev) => prev.map((p) => (p.id === id ? { ...p, ...updates } : p)));
+    // 项目改期 / 改名后，成员侧照抄的那份要跟着改：人员池卡片、考勤的应出勤读的都是成员里的这份日期。
+    // 此前只有“尚未开始”的项目在项目列表页编辑时会被更新；进行中项目的日期、从详情页做的修改都不同步，
+    // 换台电脑或刷新后又变回旧日期（服务器上的那份从没改过）
+    if (before && after && (before.name !== after.name
+      || (before.startDate || '') !== (after.startDate || '') || (before.endDate || '') !== (after.endDate || ''))) {
+      const target = { name: after.name, startDate: after.startDate, endDate: after.endDate };
+      setTeamMembers((prev) => prev.map((m) => alignMemberToProject(m, before.name, target)));
+      // 同步到服务器，别的电脑、别的账号也能看到；只发内容有变化的成员
+      for (const m of teamMembersRef.current) {
+        const next = alignMemberToProject(m, before.name, target);
+        if (next === m) continue;
+        void teamMembersApi.update(m.id, { projects: next.projects, upcomingProjects: next.upcomingProjects, currentProjects: next.currentProjects })
+          .catch((err) => console.warn('[DataContext] 项目改期后同步成员的项目日期失败', m.id, err));
+      }
+    }
     // 调后端 API（id 是 DB 自增 int）
     const dbId = parseInt(id, 10);
     if (!Number.isNaN(dbId)) {
       void projectsApi.update(String(dbId), updates);
     }
-  }, [setProjects]);
+  }, [projects, setProjects, setTeamMembers]);
 
   const deleteProject = useCallback((id: string) => {
     // 删除前先找到项目信息（用于清理 teamMembers 关联）
@@ -502,30 +606,80 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const getProjectById = useCallback((id: string) => projects.find((p) => p.id === id), [projects]);
 
   // ====== 历史项目 CRUD ======
-  const addHistoryProject = useCallback((project: HistoricalProject) => {
-    setHistoryProjects((prev) => {
-      if (prev.some((p) => p.id === project.id)) return prev;
-      return [project, ...prev];
-    });
-    // 历史项目目前调 projectsApi.create（同张表），实际应调 historyProjectsApi
-    void historyProjectsApi.create(project).then((res) => {
-      if (res?.success && res.id) {
-        const realId = String(res.id);
-        setHistoryProjects((prev) => prev.map((p) => (p.id === project.id ? { ...p, id: realId } : p)));
-        // 阶段数据键同步迁移：archiveProject 先用旧 id 存了 historyPhases，
-        // 本地项目 id 被替换成后端新 id 后，阶段数据必须跟着换键，否则详情页查不到 + 被孤儿清理删除
-        setHistoryPhases((prev) => {
-          if (prev[project.id] && !prev[realId]) {
-            const next = { ...prev, [realId]: prev[project.id] };
-            delete next[project.id];
-            return next;
-          }
-          return prev;
-        });
+  /**
+   * 新增历史项目：先乐观插入占位行，接口返回后再换成后端真实编号；失败则撤回占位行并通过 onDone 告知原因。
+   * opts.adoptExisting：归档场景用——项目转“已完成”时后端已自动写过一条同名记录，再创建必然 409；
+   * 这时确认是同一个项目（客户、起止日期一致）就沿用那条记录并用项目的最新字段刷新它，阶段数据换到它的编号下。
+   */
+  const addHistoryProject = useCallback((
+    project: HistoricalProject,
+    onDone?: (ok: boolean, reason?: string) => void,
+    opts?: { adoptExisting?: boolean },
+  ) => {
+    const tempId = project.id;
+    setHistoryProjects((prev) => (prev.some((p) => p.id === tempId) ? prev : [project, ...prev]));
+    (async () => {
+      let realId: string | null = null;
+      let failure: string | undefined;
+      let existing: HistoricalProject | undefined;
+      try {
+        const res = await historyProjectsApi.create(project);
+        if (res?.success && res.id) realId = String(res.id);
+        else failure = '后端没有返回记录编号';
+      } catch (e: any) {
+        // request() 对非 2xx 是抛错：同名 409 的回查必须放在这里（此前写在 .then 里，对真正的 409 永远执行不到，
+        // 归档后的项目就一直带着项目表的编号，阶段数据被写到历史表里同编号的另一条记录上）
+        if (e?.statusCode === 409) {
+          try {
+            const list = await historyProjectsApi.list();
+            existing = (list.data || []).find((p) => p.name === project.name);
+            if (existing && existing.id !== undefined && existing.id !== null) realId = String(existing.id);
+          } catch { /* 回查失败：按没拿到编号处理 */ }
+          if (!realId) failure = '历史项目中已有同名记录，但没能取到它的编号';
+        } else {
+          failure = e?.message || '创建历史项目失败';
+        }
       }
-    });
+      if (realId && existing && !opts?.adoptExisting) {
+        failure = `历史项目中已有同名项目「${project.name}」`;
+        realId = null;
+      }
+      if (realId && existing && opts?.adoptExisting) {
+        // 同名 ≠ 同一个项目：客户或起止日期对不上，说明历史里那条是以前另一个同名项目，不能把它的记录改成这个项目
+        const same = (existing.customer || '') === (project.customer || '')
+          && (existing.startDate || '') === (project.startDate || '')
+          && (existing.endDate || '') === (project.endDate || '');
+        if (!same) {
+          failure = `历史项目中已有同名的另一条记录「${project.name}」（客户或起止日期不同），无法归档。请先修改名称，或处理那条历史记录`;
+          realId = null;
+        }
+      }
+      if (!realId) {
+        // 没拿到真实编号：撤回占位行。否则它会带着一个假编号留在列表里，之后的编辑、删除都会打到错误的记录上
+        setHistoryProjects((prev) => prev.filter((p) => p.id !== tempId));
+        onDone?.(false, failure);
+        return;
+      }
+      const rid = realId;
+      // 归档沿用既有记录时，用项目当前的字段刷新它（自动归档写的是转“已完成”那一刻的快照，之后补录的信息进不来）
+      if (existing) {
+        try { await historyProjectsApi.update(rid, project); } catch { /* 刷新失败不影响归档结果 */ }
+      }
+      setHistoryProjects((prev) => prev
+        .filter((p) => p.id === tempId || String(p.id) !== rid)
+        .map((p) => (p.id === tempId ? { ...p, id: rid } : p)));
+      // 阶段数据换键：占位键 → 真实编号。目标记录已经有阶段数据时不覆盖
+      setHistoryPhases((prev) => {
+        if (!prev[tempId]) return prev;
+        const next = { ...prev };
+        const moving = next[tempId];
+        delete next[tempId];
+        if (!next[rid]) next[rid] = moving;
+        return next;
+      });
+      onDone?.(true);
+    })();
   }, [setHistoryProjects, setHistoryPhases]);
-
   const updateHistoryProject = useCallback((id: string, updates: Partial<HistoricalProject>) => {
     setHistoryProjects((prev) => prev.map((p) => (p.id === id ? { ...p, ...updates } : p)));
     // 调后端 API（id 是 DB 主键 int）
@@ -546,15 +700,26 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const getHistoryProjectById = useCallback((id: string) => historyProjects.find((p) => p.id === id), [historyProjects]);
 
   // ====== 团队成员 CRUD ======
-  const addTeamMember = useCallback((member: TeamMember) => {
+  const addTeamMember = useCallback((member: TeamMember, onDone?: (ok: boolean, reason?: string) => void) => {
     // 乐观更新本地（用传入的 id 作为临时 id）
     setTeamMembers((prev) => [...prev, member]);
+    const tempId = member.id;
     // 调后端 API
     void teamMembersApi.create(member).then((res) => {
       if (res?.success && res.id) {
         const realId = String(res.id);
-        setTeamMembers((prev) => prev.map((m) => (m.id === member.id ? { ...m, id: realId } : m)));
+        setTeamMembers((prev) => prev.map((m) => (m.id === tempId ? { ...m, id: realId } : m)));
+        onDone?.(true);
+        return;
       }
+      // 后端没给编号：撤回乐观插入的那一行
+      setTeamMembers((prev) => prev.filter((m) => m.id !== tempId));
+      onDone?.(false, '后端没有返回成员编号');
+    }, (e: any) => {
+      // 工号重复（409）等失败：撤回那一行并告知原因。此前既不回滚也不提示，
+      // 成员一直带着临时编号留在列表里，之后的编辑都写不进后端
+      setTeamMembers((prev) => prev.filter((m) => m.id !== tempId));
+      onDone?.(false, e?.message || '添加成员失败');
     });
   }, [setTeamMembers]);
 
@@ -662,7 +827,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
         (p) => p.status === '测试中' && projects.some((orig) => orig.id === p.id && orig.status === '未开始')
       );
       if (projectsToStart.length > 0) {
-        setTeamMembers((prevMembers) => {
+        const prevMembers = teamMembersRef.current;
+        {
           const newMembers = prevMembers.map((m) => {
             const assignedToStarted = projectsToStart.filter((p) => (p.assignedMemberIds || []).includes(m.id));
             if (assignedToStarted.length === 0) return m;
@@ -683,19 +849,21 @@ export function DataProvider({ children }: { children: ReactNode }) {
             return { ...m, status: m.status === '休假' ? m.status : '测试中' as const, projects: newProjects, currentProjects: newCurrentProjects, upcomingProjects: newUpcoming };
           });
 
-          // 同步到 DB
+          // 同步到 DB（副作用已在 setState 之外）
+          let memberChanged = false;
           for (const m of newMembers) {
             const orig = prevMembers.find((o) => o.id === m.id);
             if (!orig) continue;
             if (JSON.stringify(orig.currentProjects) !== JSON.stringify(m.currentProjects) || orig.status !== m.status) {
+              memberChanged = true;
               const dbId = parseInt(m.id, 10);
               if (Number.isNaN(dbId)) continue;
               void teamMembersApi.update(String(dbId), { status: m.status, currentProjects: m.currentProjects || [] })
                 .catch((err) => console.warn('[autoProcessProjects] 成员同步失败', m.id, err));
             }
           }
-          return newMembers;
-        });
+          if (memberChanged) setTeamMembers(newMembers);
+        }
       }
     } finally {
       isAutoProcessingProjectsRef.current = false;
@@ -703,48 +871,59 @@ export function DataProvider({ children }: { children: ReactNode }) {
   }, [projects, setProjects, setTeamMembers]);
 
   // ====== 显式归档：把"已完成"项目从 projects 移到 historyProjects（用户主动操作） ======
-  const archiveProject = useCallback((id: string) => {
+  // 返回 false 表示前置条件不满足（项目不存在或不是“已完成”）；真正成败在拿到后端结果后通过 onDone 告知
+  const archiveProject = useCallback((
+    id: string,
+    onDone?: (ok: boolean, reason?: string) => void,
+  ): boolean => {
     const project = projects.find((p) => p.id === id);
     if (!project) return false;
     if (project.status !== '已完成') return false;
 
-    // 1. 添加到 historyProjects
-    const archived: HistoricalProject = {
-      ...project,
-      id: project.id,
-      updatedAt: dayjs().format('YYYY-MM-DD'),
-    };
-    addHistoryProject(archived);
+    // 占位 id 用非数字前缀：阶段数据的后端同步只认数字键（真实编号）。拿到历史表真实编号之前，
+    // 阶段数据只留在本地，不会按项目表编号写到历史表里同编号的另一条记录上（两张表是两套独立编号）
+    const tempId = `arch_${id}`;
+    const phases = projectPhases[id];
 
-    // 2. 从 projects 移除
+    addHistoryProject(
+      { ...project, id: tempId, updatedAt: dayjs().format('YYYY-MM-DD') },
+      (ok, reason) => {
+        if (!ok) {
+          // 没归档成：项目放回列表、阶段数据放回原处（界面恢复原状，并给出原因）
+          setProjects((prev) => (prev.some((p) => p.id === id) ? prev : [project, ...prev]));
+          if (phases) setProjectPhases((prev) => (prev[id] ? prev : { ...prev, [id]: phases }));
+          onDone?.(false, reason);
+          return;
+        }
+        // 归档成功后才清理成员关联：从成员的 projects/currentProjects 移除本项目；
+        // 无其他进行中项目则转空闲（否则成员会永远卡在"测试中"）。DB 侧同步由 autoProcessMembers / 下次加载兜底
+        const memberIds = project.assignedMemberIds || [];
+        if (memberIds.length > 0) {
+          setTeamMembers((prev) => prev.map((m) => {
+            if (!memberIds.includes(m.id)) return m;
+            const restProjects = (m.projects || []).filter((mp) => mp.projectName !== project.name);
+            const restCurrent = (m.currentProjects || []).filter((cp) => cp !== project.name);
+            const restUpcoming = (m.upcomingProjects || []).filter((up) => up.projectName !== project.name);
+            const newStatus = m.status === '休假' ? m.status
+              : restProjects.length > 0 ? '测试中' as const : '空闲' as const;
+            return { ...m, projects: restProjects, currentProjects: restCurrent, upcomingProjects: restUpcoming, status: newStatus };
+          }));
+        }
+        onDone?.(true);
+      },
+      { adoptExisting: true },
+    );
+
+    // 乐观更新：先从项目列表移走，阶段数据挪到历史侧的占位键下（拿到真实编号后 addHistoryProject 会换键）
     setProjects((prev) => prev.filter((p) => p.id !== id));
-
-    // 3. 转移阶段数据（addHistoryProject 拿到后端真实 id 后会再迁移键）
-    if (projectPhases[id]) {
-      setHistoryPhases((prev) => ({ ...prev, [id]: projectPhases[id] }));
+    if (phases) {
+      setHistoryPhases((prev) => ({ ...prev, [tempId]: phases }));
       setProjectPhases((prev) => {
         const next = { ...prev };
         delete next[id];
         return next;
       });
     }
-
-    // 4. 清理成员关联：从成员的 projects/currentProjects 移除本项目；
-    //    无其他进行中项目则转空闲（否则成员会永远卡在"测试中"）
-    //    DB 侧同步由 autoProcessMembers / 下次加载兜底
-    const memberIds = project.assignedMemberIds || [];
-    if (memberIds.length > 0) {
-      setTeamMembers((prev) => prev.map((m) => {
-        if (!memberIds.includes(m.id)) return m;
-        const restProjects = (m.projects || []).filter((mp) => mp.projectName !== project.name);
-        const restCurrent = (m.currentProjects || []).filter((cp) => cp !== project.name);
-        const restUpcoming = (m.upcomingProjects || []).filter((up) => up.projectName !== project.name);
-        const newStatus = m.status === '休假' ? m.status
-          : restProjects.length > 0 ? '测试中' as const : '空闲' as const;
-        return { ...m, projects: restProjects, currentProjects: restCurrent, upcomingProjects: restUpcoming, status: newStatus };
-      }));
-    }
-
     return true;
   }, [projects, projectPhases, addHistoryProject, setProjects, setProjectPhases, setHistoryPhases, setTeamMembers]);
 
@@ -755,7 +934,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
     try {
     const todayStr = dayjs().format('YYYY-MM-DD');
 
-    setTeamMembers((prevMembers) => {
+    const prevMembers = teamMembersRef.current;
+    {
       const updates: { memberId: string; updates: Record<string, unknown> }[] = [];
 
       const updatedMembers = prevMembers.map((m) => {
@@ -793,16 +973,17 @@ export function DataProvider({ children }: { children: ReactNode }) {
         return m;
       });
 
-      // 同步 DB
-      for (const { memberId, updates: fields } of updates) {
-        const dbId = parseInt(memberId, 10);
-        if (Number.isNaN(dbId)) continue;
-        void teamMembersApi.update(String(dbId), fields)
-          .catch((err) => console.warn('[autoProcessMembers] 同步失败', memberId, err));
+      if (updates.length > 0) {
+        // 副作用在 setState 之外（updater 必须是纯函数）
+        for (const { memberId, updates: fields } of updates) {
+          const dbId = parseInt(memberId, 10);
+          if (Number.isNaN(dbId)) continue;
+          void teamMembersApi.update(String(dbId), fields)
+            .catch((err) => console.warn('[autoProcessMembers] 同步失败', memberId, err));
+        }
+        setTeamMembers(updatedMembers);
       }
-
-      return updatedMembers;
-    });
+    }
     } finally {
       isAutoProcessingMembersRef.current = false;
     }

@@ -176,6 +176,7 @@ function ChatArea() {
       webSearch: null, _question: question,
     } as ChatMessage]);
     let firstToken = true;
+    let streamError = '';   // 后端以 SSE error 事件给出的原因（超时、鉴权、限流等）
 
     try {
       manualAbortRef.current = false;
@@ -196,7 +197,11 @@ function ChatArea() {
       const rollback = () => setMessages(prev => prev.length >= 2 && prev[prev.length - 1]._question === question
         ? prev.slice(0, -2) : prev);
       if (res.status === 401) { message.error('登录已失效，请重新登录'); rollback(); return; }
-      if (!res.ok) { message.error(`AI 问答失败（HTTP ${res.status}）`); rollback(); return; }
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        message.error(d.message || d.error || `AI 问答失败（HTTP ${res.status}）`);
+        rollback(); return;
+      }
 
       // 流式读取 SSE
       const reader = res.body?.getReader();
@@ -243,6 +248,7 @@ function ChatArea() {
               } else if (data.type === 'error') {
                 if (data.partial) fullContent = data.partial;
                 const errMsg = data.message || 'AI 回答过程中出现异常';
+                streamError = errMsg;
                 setMessages(prev => prev.map((m, i) => i === assistantIdx ? {
                   ...m, content: fullContent || `⚠️ ${errMsg}`, reasoning: fullReasoning,
                 } : m));
@@ -252,24 +258,33 @@ function ChatArea() {
           }
         }
       }
-      // 兜底：流已关闭但 content 仍为空（GLM 返回了空响应）
-      if (!fullContent.trim()) {
+      // 兜底：流已关闭但 content 仍为空（GLM 返回了空响应）。收到过 error 事件时气泡里已经是真实原因，不能再盖掉
+      if (!fullContent.trim() && !streamError) {
         setMessages(prev => prev.map((m, i) => i === assistantIdx ? {
           ...m, content: '⚠️ AI 未返回有效内容，请稍后重试或换一种问法。',
         } : m));
       }
     } catch (err: any) {
-      if (err?.name === 'AbortError' && !manualAbortRef.current) message.warning('AI 回答超时（GLM-5.2 思考+联网搜索耗时较长），请稍后重试');
-      else if (err?.name === 'AbortError' && manualAbortRef.current) { /* 用户主动取消，静默 */ }
-      else message.error('问答请求失败，请确认后端服务正常');
+      if (err?.name === 'AbortError' && !manualAbortRef.current) {
+        const tip = '⚠️ AI 回答超时（GLM-5.2 思考+联网搜索耗时较长），请稍后重试';
+        setMessages(prev => prev.map((m, i) => i === assistantIdx ? { ...m, content: m.content || tip } : m));
+        message.warning('AI 回答超时（GLM-5.2 思考+联网搜索耗时较长），请稍后重试');
+      } else if (err?.name === 'AbortError' && manualAbortRef.current) { /* 用户主动取消，静默 */ }
+      else {
+        // 网络错误等：不留一个空白气泡在对话里
+        setMessages(prev => prev.map((m, i) => i === assistantIdx ? { ...m, content: m.content || '⚠️ 问答请求失败，请确认网络或后端服务正常后重试。' } : m));
+        message.error('问答请求失败，请确认后端服务正常');
+      }
     } finally {
       if (askTimeoutRef.current) { clearTimeout(askTimeoutRef.current); askTimeoutRef.current = null; }
       abortRef.current = null;
       setAsking(false);
     }
-  }, [input, asking, messages]);
+  }, [input, asking, messages, qaMode]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    // 中文输入法里按回车是“上屏”：组合期间（isComposing）的回车不能当成发送
+    if (e.nativeEvent.isComposing) return;
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAsk(); }
   };
 

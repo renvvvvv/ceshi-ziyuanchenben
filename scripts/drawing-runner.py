@@ -13,7 +13,7 @@
   <job>/STATUS       本进程写入的实时状态 {stage,detail,log,updated_at}
   <job>/out/sheets/  成品 Excel 逐 sheet 转储 JSON（前端可视化用）
 """
-import json, os, subprocess, time, glob, shutil, sys
+import json, os, signal, subprocess, time, glob, shutil, sys
 
 BASE = os.environ.get('DRAWING_UPLOAD_DIR', '/root/test-platform/uploads/drawing')
 PIPE = os.environ.get('DRAWING_PIPELINE', '/root/drawing-tools/scripts/run_pipeline.py')
@@ -21,6 +21,38 @@ LOG_LINES = 40          # STATUS 内保留的日志尾行数
 SHEET_ROW_CAP = 2000    # 单 sheet 可视化行数上限（导出仍是完整 xlsx）
 
 JOB_N_DWG = {}  # jobId -> 图纸数（供 STATUS 携带，平台落库显示）
+
+# 本进程以 root 运行，而容器里的后端以普通用户（镜像内 app，uid/gid 999）运行：后端要往 <job>/out/ 写 AI 复核结果，
+# 删除任务时要能删掉整个目录。root 建的目录默认 755，后端写不进去（2026-11-24 实测 Permission denied；此前只是靠
+# 后端容器重启时入口脚本 chown -R 兜底，新任务等不到那次重启）。所以建目录时、任务结束时都把目录移交给后端用户。
+# 换部署方式（后端运行用户不同）时用环境变量改成实际的 uid/gid。
+SHARE_UID = int(os.environ.get('DRAWING_SHARE_UID', '999'))
+SHARE_GID = int(os.environ.get('DRAWING_SHARE_GID', '999'))
+# 单任务最长运行时间（秒）。本执行器单进程串行，管线卡死（如转换器挂起）时后面的任务会一直“排队中”。
+# 历史最长任务 107 张图纸用了 213 分钟，默认给到 12 小时。
+JOB_TIMEOUT = int(os.environ.get('DRAWING_JOB_TIMEOUT_SEC', str(12 * 3600)))
+
+
+def share_tree(path):
+    """把目录及其下所有子目录、文件的属主改成后端用户。非 root 运行时改不了属主，忽略即可。"""
+    if not os.path.isdir(path): return
+    for root, dirs, files in os.walk(path):
+        for p in [root] + [os.path.join(root, x) for x in files]:
+            try: os.chown(p, SHARE_UID, SHARE_GID)
+            except Exception: pass
+
+
+def kill_tree(p):
+    """结束管线及其全部子进程（管线在独立进程组里）：先 TERM 留收尾时间，30 秒后仍没退出就 KILL。"""
+    try:
+        os.killpg(p.pid, signal.SIGTERM)
+        for _ in range(30):
+            if p.poll() is not None: return
+            time.sleep(1)
+        os.killpg(p.pid, signal.SIGKILL)
+        p.wait(timeout=30)
+    except Exception:
+        pass
 
 def write_status(job, stage, detail='', log=''):
     st = {'stage': stage, 'detail': detail, 'log': log.split('\n')[-LOG_LINES:],
@@ -74,6 +106,7 @@ def run_job(job):
     out_dir = os.path.join(job, 'out'); src = os.path.join(job, 'src')
     inbox = os.path.join(job, 'inbox')
     os.makedirs(out_dir, exist_ok=True); os.makedirs(src, exist_ok=True)
+    share_tree(job)  # out/、src/ 是 root 建的：先交给后端用户，任务结束时再整棵目录交一次
     write_status(job, '解压归档', '整理上传文件')
     n_dwgs = 0
     for f in sorted(glob.glob(os.path.join(inbox, '*'))):
@@ -98,11 +131,14 @@ def run_job(job):
     for opt, key in (('--pairs', 'pairs'), ('--floors', 'floors')):
         if m.get(key): cmd += [opt, str(m[key])]
     with open(os.path.join(out_dir, 'pipeline.log'), 'a') as lg:
-        p = subprocess.Popen(cmd, stdout=lg, stderr=lg)
+        # 独立进程组：超时终止时连同转换器等子进程一起结束，不留孤儿进程占着文件
+        p = subprocess.Popen(cmd, stdout=lg, stderr=lg, start_new_session=True)
     # 运行中：每 2s 刷新阶段 + 日志尾
-    t0 = time.time()
+    t0 = time.time(); timed_out = False
     txt_out = os.path.join(out_dir, 'txt')
     while p.poll() is None:
+        if time.time() - t0 > JOB_TIMEOUT:
+            kill_tree(p); timed_out = True; break
         done_n = sum(1 for _ in glob.glob(os.path.join(txt_out, 'txt_*.txt')))
         detail = ''
         if n_dwgs and done_n > 0:
@@ -114,6 +150,11 @@ def run_job(job):
             detail = 'ODA 批量转换中（该阶段无逐张进度，%d 张预计约 %d 分钟）' % (n_dwgs, max(1, n_dwgs // 3))
         write_status(job, stage_from_log(out_dir), detail, tail(out_dir + '/pipeline.log'))
         time.sleep(5)
+    if timed_out:
+        write_status(job, 'error',
+                     f'管线运行超过 {JOB_TIMEOUT // 60} 分钟仍未结束，已强制终止（通常是转换器挂起），请重新发起',
+                     tail(out_dir + '/pipeline.log'))
+        return
     dur = int((time.time() - t0) / 60)
     # 空壳判定 + 告警展示（report.steps.gen=fail(empty-lv) 或 warnings 非空时降级提示）
     warns, gen_fail = [], False
@@ -152,6 +193,11 @@ def main():
                 except Exception as e:
                     try: write_status(job, 'error', f'执行器异常：{e}')
                     except Exception: pass  # 任务目录可能已被删除
+                finally:
+                    # 不论成功、失败还是异常，目录都要交给后端用户；图纸数只在本任务期间用得到
+                    JOB_N_DWG.pop(os.path.basename(job), None)
+                    try: share_tree(job)
+                    except Exception: pass
         time.sleep(2)
 
 if __name__ == '__main__':

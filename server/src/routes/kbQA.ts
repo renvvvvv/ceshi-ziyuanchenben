@@ -153,10 +153,16 @@ function retrieveKeyword(question: string, topN: number = 3): KnowledgeChunk[] {
 /** 向量是否已初始化（DB 里已有知识块向量） */
 let vectorReady = false;
 
+// embedding-3 不在 Coding Plan 套餐内，调用它只扣账户的按量付费余额。
+// 用户要求平台的 token 消耗全部走套餐（2026-11-24），所以默认关闭向量检索：不调用 embedding，知识检索走关键词匹配。
+// 如确需重新开启（会按量计费），在 .env 里设 KB_VECTOR_RETRIEVAL=on。
+const VECTOR_ENABLED = process.env.KB_VECTOR_RETRIEVAL === 'on';
+
 /**
  * 调智谱 embedding-3 API 生成文本向量
  */
 async function getEmbedding(text: string): Promise<number[]> {
+  if (!VECTOR_ENABLED) return [];   // 返回空向量 → retrieveVector 走关键词降级
   const apiKey = process.env.ZHIPU_API_KEY;
   if (!apiKey) throw new Error('ZHIPU_API_KEY 未设置');
   const resp = await fetch('https://open.bigmodel.cn/api/paas/v4/embeddings', {
@@ -173,22 +179,34 @@ async function getEmbedding(text: string): Promise<number[]> {
  * 批量生成向量（每次最多 64 条）
  */
 async function batchEmbeddings(texts: string[]): Promise<number[][]> {
+  if (!VECTOR_ENABLED) return [];
   const results: number[][] = [];
-  const batchSize = 64;
+  const batchSize = 32; // 64→32：千级知识块一次性嵌入易触发 TPM 限流，减半批次
   for (let i = 0; i < texts.length; i += batchSize) {
     const batch = texts.slice(i, i + batchSize);
     const apiKey = process.env.ZHIPU_API_KEY;
     if (!apiKey) throw new Error('ZHIPU_API_KEY 未设置');
-    const resp = await fetch('https://open.bigmodel.cn/api/paas/v4/embeddings', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-      body: JSON.stringify({ model: 'embedding-3', input: batch, dimensions: 1024 }),
-    });
+    // 429 限流指数退避（5/15/30/60/120s，最多5次）；401/403 密钥错误直接失败不空转重试
+    let resp!: any;
+    for (let attempt = 0; ; attempt++) {
+      resp = await fetch('https://open.bigmodel.cn/api/paas/v4/embeddings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+        body: JSON.stringify({ model: 'embedding-3', input: batch, dimensions: 1024 }),
+        signal: AbortSignal.timeout(60_000), // 连接半开时 60s 放弃，避免 initVectorIndex 永久阻塞
+      });
+      if (resp.ok || attempt >= 5) break;
+      if (resp.status === 401 || resp.status === 403) throw new Error(`embedding 鉴权失败 HTTP ${resp.status}（检查 ZHIPU_API_KEY/余额）`);
+      const waitMs = resp.status === 429 ? [5000, 15000, 30000, 60000, 120000][Math.min(attempt, 4)] : 2000;
+      console.warn(`[KB-QA] embedding batch@${i} HTTP ${resp.status}，${waitMs / 1000}s 后重试（第 ${attempt + 1} 次）`);
+      await new Promise(r => setTimeout(r, waitMs));
+    }
     if (!resp.ok) throw new Error(`batch embedding HTTP ${resp.status}`);
     const data: any = await resp.json();
     for (const item of data.data || []) {
       results.push(item.embedding);
     }
+    await new Promise(r => setTimeout(r, 500)); // 批间隔，进一步降低限流概率
   }
   return results;
 }
@@ -197,14 +215,27 @@ async function batchEmbeddings(texts: string[]): Promise<number[][]> {
  * 启动时：把知识块向量化存入 knowledge_embeddings 表（仅首次或内容变更时执行）
  */
 async function initVectorIndex(): Promise<void> {
+  if (!VECTOR_ENABLED) {
+    console.log('[KB-QA] 向量检索已关闭：embedding-3 不在套餐内、只扣按量余额（KB_VECTOR_RETRIEVAL 未设为 on），知识检索使用关键词匹配');
+    vectorReady = false;
+    return;
+  }
   try {
-    // 检查 DB 里是否已有向量数据
-    const rows = await db.allAsync('SELECT count(*) as cnt FROM knowledge_embeddings') as any[];
-    const dbCount = Number(rows[0]?.cnt || 0);
-
-    if (dbCount > 0 && dbCount >= knowledgeChunks.length) {
-      // 已有足够数据，跳过（内容变更检测可后续用 hash 实现）
-      console.log(`[KB-QA] 向量索引已就绪（${dbCount} 条向量）`);
+    // 按 file 粒度比对（总量比对无法发现"文件减少/替换"场景的失同步）
+    // 长度一律用 UTF-8 字节数：PostgreSQL 的 LENGTH() 数的是 Unicode 码点，JS 的 .length 数的是 UTF-16 码元，
+    // 遇到增补平面字符两者不等，会让含此类字符的文件每次重启都被误判为"已变更"而全量重建向量
+    const rows = await db.allAsync('SELECT file, COUNT(*) AS cnt, SUM(OCTET_LENGTH(content)) AS len FROM knowledge_embeddings GROUP BY file') as any[];
+    const dbByFile = new Map(rows.map(r => [r.file, `${Number(r.cnt)}:${Number(r.len)}`]));
+    const localByFile = new Map<string, { n: number; len: number }>();
+    for (const c of knowledgeChunks) {
+      const cur = localByFile.get(c.file) || { n: 0, len: 0 };
+      localByFile.set(c.file, { n: cur.n + 1, len: cur.len + Buffer.byteLength(c.content, 'utf8') });
+    }
+    // 块数+内容总长双签名：文件内容修改（块数不变）也能触发重建
+    const inSync = localByFile.size > 0 && dbByFile.size === localByFile.size
+      && [...localByFile].every(([f, v]) => dbByFile.get(f) === `${v.n}:${v.len}`);
+    if (inSync) {
+      console.log(`[KB-QA] 向量索引已就绪（${knowledgeChunks.length} 条向量，${localByFile.size} 个文件全部同步）`);
       vectorReady = true;
       return;
     }
@@ -212,14 +243,14 @@ async function initVectorIndex(): Promise<void> {
     // 需要生成向量
     console.log(`[KB-QA] 开始向量化 ${knowledgeChunks.length} 个知识块（智谱 embedding-3）...`);
 
-    // 清空旧数据
-    await db.runAsync('DELETE FROM knowledge_embeddings');
-
-    // 批量生成 embedding
+    // 先全部嵌入成功，再清旧库（此前先删后嵌：中途限流/断网会把可用向量也清空，问答被迫降级）
     // 嵌入文本截断 1000→4000：国标块均长 3500 字，答案在块后半段时嵌入语义缺失
     // （RAG 评测发现：中段内容出题未命中率显著偏高）。embedding-3 上下文 8K token 足够
     const texts = knowledgeChunks.map(c => `${c.title}\n${c.content.slice(0, 4000)}`);
     const embeddings = await batchEmbeddings(texts);
+
+    // 全部成功后才替换旧数据
+    await db.runAsync('DELETE FROM knowledge_embeddings');
 
     // 存入 DB（pgvector 接收字符串格式的向量 '[0.1,0.2,...]'）
     let inserted = 0;
@@ -294,81 +325,6 @@ interface ChatMessage {
   content: string;
 }
 
-interface GLMResponse {
-  content: string;
-  reasoning?: string;       // 思考过程
-  webSearch?: any[];        // 联网搜索结果
-}
-
-/**
- * 调 GLM-5.2 多轮对话
- *   - thinking: enabled（开启思考）
- *   - reasoning_effort: max（思考强度：高）
- *   - tools: web_search（联网搜索，获取最新信息）
- */
-async function callGLMChat(
-  apiKey: string,
-  systemPrompt: string,
-  messages: ChatMessage[],
-): Promise<GLMResponse> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 150000); // 150s 超时（思考max+联网搜索可能需要60-120s）
-
-  try {
-    const response = await fetch('https://open.bigmodel.cn/api/paas/v4/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: 'glm-5.2',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          ...messages.map(m => ({ role: m.role, content: m.content })),
-        ],
-        thinking: { type: 'enabled' },      // 开启思考模式
-        reasoning_effort: 'max',            // 思考强度：高
-        tools: [                            // 联网搜索工具
-          {
-            type: 'web_search',
-            web_search: {
-              enable: true,
-              search_engine: 'search_pro',
-              search_result: true,
-              count: 5,
-            },
-          },
-        ],
-        temperature: 1.0,   // GLM-5.2 思考模式建议 1.0
-        max_tokens: 8192,
-        stream: false,
-      }),
-      signal: controller.signal,
-    });
-    clearTimeout(timeout);
-
-    if (!response.ok) {
-      const errText = await response.text();
-      throw new Error(`GLM-5.2 HTTP ${response.status}: ${errText.slice(0, 300)}`);
-    }
-
-    const data: any = await response.json();
-    const msg = data.choices?.[0]?.message || {};
-    const content: string = msg.content || '';
-    const reasoning: string = msg.reasoning_content || '';  // 思考过程
-    const webSearch = msg.web_search || data.web_search || null;
-
-    return { content, reasoning, webSearch };
-  } catch (err: any) {
-    clearTimeout(timeout);
-    if (err.name === 'AbortError') {
-      throw new Error('AI 回答超时（150s，含思考+联网搜索），请稍后重试');
-    }
-    throw err;
-  }
-}
-
 /**
  * 流式调用 GLM-5.2（stream=true，逐 chunk 回调）
  * onChunk: 每收到一段内容就回调（实时推送给前端）
@@ -425,15 +381,29 @@ async function callGLMChatStream(
   onChunk: (data: { content?: string; reasoning?: string; done?: boolean }) => void,
   mode: QaMode = 'deep',
   shouldAbort?: () => boolean,   // 客户端断开时提前中止上游流（防关页后继续烧 token）
+  registerAbort?: (abort: () => void) => void,   // 把“中止上游”交给调用方：客户端一断开就能立刻中止
 ): Promise<{ reasoning: string; webSearch: any[] | null; usage: { input: number; output: number } }> {
   const controller = new AbortController();
-  // fast 模式通常 10s 内出全量结果，给 60s 余量；deep 含思考+联网搜索最长 150s
-  const timeout = setTimeout(() => controller.abort(), mode === 'fast' ? 60000 : 150000);
+  // 空闲超时：fast 档 60s、deep 档 150s 内没有收到任何新数据就中止。流式回答的总时长不固定，所以不设总超时；
+  // 但拿到响应头之后流中途停顿也必须有超时——此前定时器在响应头到达时就清掉了，读流阶段没有超时
+  const idleMs = mode === 'fast' ? 60000 : 150000;
+  let timer = setTimeout(() => controller.abort(), idleMs);
+  const bumpTimer = () => { clearTimeout(timer); timer = setTimeout(() => controller.abort(), idleMs); };
+  let clientGone = false; // 客户端断开：停止消费上游流并中止请求
+  registerAbort?.(() => { clientGone = true; controller.abort(); });
+  // 累积量放在 try 外：客户端中途断开时要把已收到的部分按“提前结束”正常返回
+  let fullReasoning = '';
+  let webSearch: any[] | null = null;
+  let usageIn = 0;
+  let usageOut = 0;
 
   try {
     // 2026-08-27 起改走 Anthropic 兼容端点（智谱 Coding Plan 套餐通道）。
-    // 标准 /paas/v4 端点下该套餐报 1113 余额不足；Anthropic 端点可用 glm-5.2 / glm-5.3-flash。
-    const model = mode === 'fast' ? 'glm-5.3-flash' : 'glm-5.2';
+    // 标准 /paas/v4 端点下该套餐曾报 1113 余额不足；Anthropic 端点可用 glm-5.3 / glm-5.2 / glm-5.3-flash（2026-11-23 实测）。
+    // deep 档保持 glm-5.2：2026-11-23 实测 glm-5.3 思考更久，一道题耗时 185s、超过前端 175s 超时（同题对比未测完），
+    // 待对比数据出来再决定是否切换
+    // KB_DEEP_MODEL 可临时覆盖深度思考档的模型（对比实验用），不设即 glm-5.2
+    const model = mode === 'fast' ? 'glm-5.3-flash' : (process.env.KB_DEEP_MODEL || 'glm-5.2');
     // fast 档：关闭思考（秒回的关键）+ 搜索限 2 次；deep 档：思考 + 搜索 5 次
     const thinking = mode === 'fast' ? { type: 'disabled' } : { type: 'enabled' };
     const searchUses = mode === 'fast' ? 2 : 5;
@@ -455,7 +425,7 @@ async function callGLMChatStream(
       }),
       signal: controller.signal,
     });
-    clearTimeout(timeout);
+    bumpTimer();
 
     if (!response.ok) {
       const errText = await response.text();
@@ -467,18 +437,14 @@ async function callGLMChatStream(
     if (!reader) throw new Error('无法读取响应流');
     const decoder = new TextDecoder();
     let buffer = '';
-    let fullReasoning = '';
-    let webSearch: any[] | null = null;
-    let clientGone = false; // 客户端断开：停止消费上游流并中止请求
-    // 用量统计：message_start 带输入 token，message_delta 末次带累计输出 token
-    let usageIn = 0;
-    let usageOut = 0;
+    // 用量统计：智谱端点的真实 input/output tokens 在末尾的 message_delta 里（output 为累计值，取最后一次）
     const narration = new ToolNarrationFilter();
 
     while (true) {
       if (shouldAbort?.()) { clientGone = true; controller.abort(); break; }
       const { done, value } = await reader.read();
       if (done) break;
+      bumpTimer(); // 收到新数据：空闲计时重新开始
       buffer += decoder.decode(value, { stream: true });
 
       // 按行处理 SSE
@@ -550,9 +516,14 @@ async function callGLMChatStream(
     onChunk({ done: true });
     return { reasoning: fullReasoning, webSearch, usage: { input: usageIn, output: usageOut } };
   } catch (err: any) {
-    clearTimeout(timeout);
+    clearTimeout(timer);
+    if (err.name === 'AbortError' && clientGone) {
+      // 客户端已经断开：按“提前结束”处理，不算错误
+      onChunk({ done: true });
+      return { reasoning: fullReasoning, webSearch, usage: { input: usageIn, output: usageOut } };
+    }
     if (err.name === 'AbortError') {
-      throw new Error('AI 回答超时（150s，含思考+联网搜索），请稍后重试');
+      throw new Error(`AI 回答超时（${idleMs / 1000} 秒内没有收到新数据，含思考+联网搜索），请稍后重试`);
     }
     throw err;
   }
@@ -797,8 +768,10 @@ router.post('/', requireAuth, async (req, res) => {
 
     let streamEnded = false;
     let clientGone = false;
-    // 客户端断开（关页/取消）：置位后 GLM 上游流提前中止，不再空烧 token
-    res.on('close', () => { clientGone = true; });
+    let abortUpstream: (() => void) | null = null;
+    // 客户端断开（关页/取消）：立刻中止 GLM 上游流，不再空烧 token。
+    // 此前只置一个标志位，要等上游送来下一段数据才会被发现；上游停滞时这个请求就一直挂着
+    res.on('close', () => { clientGone = true; abortUpstream?.(); });
     const safeWrite = (payload: string): boolean => {
       if (streamEnded) return false;
       try {
@@ -840,6 +813,7 @@ router.post('/', requireAuth, async (req, res) => {
         },
         qaMode,
         () => clientGone,
+        (abort) => { abortUpstream = abort; },
       );
 
       // 兜底：若 GLM 没产出 content（例如被内容安全拦截），给前端一个可见提示
@@ -965,7 +939,7 @@ router.get('/usage', requireAuth, requireRole(['管理者']), async (req, res) =
  * 请求体: { question: '原始问题', answer: '补充或纠正后的答案' }
  * 响应: { success:true, learned: { question, answer } }
  */
-router.post('/learn', requireAuth, (req, res) => {
+router.post('/learn', requireAuth, async (req, res) => {
   const { question, answer } = req.body || {};
   if (!question || !answer || typeof question !== 'string' || typeof answer !== 'string') {
     return res.status(400).json({ success: false, message: '需要 question 和 answer 字段' });
@@ -983,7 +957,21 @@ router.post('/learn', requireAuth, (req, res) => {
 
   // 以问题为 key 去重，相同问题覆盖更新（count 累加）
   const key = question.trim().slice(0, 200);
-  const existing = learnedCache[key];
+  if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
+    return res.status(400).json({ success: false, message: '问题内容不能用作知识条目' });
+  }
+  // 容量上限：防 learnedCache 无限增长拖慢每次问答的构建打分。
+  // 库是“以问题为 key 的对象”，此前却按数组去判断，这个上限从来没生效过
+  const LEARNED_MAX = 2000;
+  const keys = Object.keys(learnedCache);
+  if (keys.length >= LEARNED_MAX && !Object.hasOwn(learnedCache, key)) {
+    // 淘汰使用次数最少、最早加入的条目，给新条目留出一个位置
+    keys.sort((a, b) => ((learnedCache[a]?.count || 0) - (learnedCache[b]?.count || 0))
+      || String(learnedCache[a]?.createdAt || '').localeCompare(String(learnedCache[b]?.createdAt || '')));
+    for (const k of keys.slice(0, keys.length - LEARNED_MAX + 1)) delete learnedCache[k];
+    saveLearned();
+  }
+  const existing = Object.hasOwn(learnedCache, key) ? learnedCache[key] : undefined;
   const answerSafe = answer.trim().slice(0, 2000);
   learnedCache[key] = {
     question: question.trim().slice(0, 500),

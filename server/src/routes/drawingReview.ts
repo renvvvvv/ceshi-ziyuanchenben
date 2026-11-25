@@ -11,20 +11,25 @@
  * 精度随人工反馈积累持续提升，同样的错不犯第二次。
  *
  * 文件协议：
- *   out/review.json         当前复核状态（model/findings[]/stats/updated_at）
+ *   out/review.json         当前复核状态（model/mode/findings[]/stats/updated_at）
  *   out/review-history.json 追加式记录：AI 复核 / 人工反馈 / AI 重核回应
+ *   out/review-pending.json 后台深度复核的“进行中 / 失败”标记（跑完即删；服务重启后据此识别中断）
  *
  * 接口：
- *   GET  /api/drawing/jobs/:id/review           读复核状态 + 历史 + 自学习库
- *   POST /api/drawing/jobs/:id/review           发起 AI 复核（预扫描 + GLM）
+ *   GET  /api/drawing/jobs/:id/review           读复核状态 + 历史 + 自学习库 + 后台复核状态 pending
+ *   POST /api/drawing/jobs/:id/review           发起 AI 复核（预扫描 + GLM）。body 不带 deep：GLM-5.2 同步等待约 1 分钟；
+ *                                               body { deep: true }：GLM-5.3 转后台执行，立即返回 202，结果靠 GET 轮询。
+ *                                               2026-11-24 起页面上的复核按钮固定带 deep（用户决定默认用 GLM-5.3）；
+ *                                               不带 deep 的同步接口保留给测试脚本和人工反馈后的重核使用
  *   POST /api/drawing/jobs/:id/review/feedback  人工反馈 → AI 重新复核（并沉淀经验）
  */
 import { Router, Request, Response, NextFunction } from 'express';
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import db from '../database.js';
 import { requireAuth, requireRole } from './auth.js';
+import { describeZhipuError, ZHIPU_CHAT_URL } from '../utils/zhipuError.js';
 
 const router = Router();
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -35,6 +40,12 @@ const asyncH = (fn: (req: Request, res: Response, next: NextFunction) => Promise
 
 const ID_RE = /^[a-z0-9-]+$/;
 function validId(id: string): boolean { return ID_RE.test(id) && id.length >= 6 && id.length <= 64; }
+
+/** 给用户看的失败原因：中止（超时）的错误对象自带的是英文文案 */
+function errText(err: any, fallback: string): string {
+  if (err?.name === 'AbortError') return 'AI 复核超时（模型响应过慢），请稍后重试';
+  return err?.message || fallback;
+}
 
 // ============== 同任务串行锁（防并发复核互相覆盖 review/history/学习库） ==============
 const jobLocks = new Map<string, Promise<void>>();
@@ -72,6 +83,7 @@ interface Finding {
 
 interface ReviewState {
   model: string;
+  mode?: 'standard' | 'deep';   // 标准复核（GLM-5.2，约 1 分钟）/ 深度复核（GLM-5.3，约 6~8 分钟，后台跑）
   updated_at: string;
   findings: Finding[];
   stats: Record<string, number>;
@@ -98,6 +110,37 @@ function saveReview(id: string, review: ReviewState, history: any[]) {
     writeFileSync(tmp, JSON.stringify(data, null, 2));
     renameSync(tmp, f);
   }
+}
+
+// ============== 后台深度复核的“进行中 / 失败”标记 ==============
+// 落盘而不只放内存：刷新页面、换个人打开都能看到；服务重启后也能把没人管的“进行中”识别成中断。
+interface PendingReview {
+  mode: 'standard' | 'deep';
+  status: 'running' | 'failed';
+  started_at: string;
+  by?: string;
+  failed_at?: string;
+  error?: string;
+}
+/** 本进程内正在跑的复核任务（标准或深度），同任务有任务在跑时拒绝新的复核和人工反馈 */
+const activeReviews = new Map<string, Promise<unknown>>();
+function pendingPath(id: string) { return join(BASE, id, 'out', 'review-pending.json'); }
+function savePending(id: string, p: PendingReview | null) {
+  const f = pendingPath(id);
+  if (!p) { try { unlinkSync(f); } catch { /* 本来就没有 */ } return; }
+  writeFileSync(f, JSON.stringify(p, null, 2));
+}
+function loadPending(id: string): PendingReview | null {
+  let p: PendingReview | null = null;
+  try { p = JSON.parse(readFileSync(pendingPath(id), 'utf8')); } catch { return null; }
+  if (!p || p.status !== 'running') return p;
+  // 标记是“进行中”，但本进程里并没有这个任务（服务重启过），或已远超时限：判为中断，免得界面一直转圈
+  const limitMs = (p.mode === 'deep' ? DEEP_CFG.timeoutMs : DR_TIMEOUT_MS) + 5 * 60000;
+  if (!activeReviews.has(id) || Date.now() - (Date.parse(p.started_at) || 0) > limitMs) {
+    p = { ...p, status: 'failed', failed_at: new Date().toISOString(), error: '复核被中断（服务重启或超时），请重新发起' };
+    try { savePending(id, p); } catch { /* 写不回去也只是每次 GET 重新判一次 */ }
+  }
+  return p;
 }
 
 // ============== 自学习库（人工反馈沉淀 → 后续复核自动复用） ==============
@@ -259,45 +302,118 @@ function prescan(id: string): Finding[] {
 
 // ============== GLM 调用（思考开启，不联网，强约束 JSON） ==============
 
-async function callGLMJSON(system: string, user: string): Promise<{ json: any; raw: string }> {
+/**
+ * 模型选型（Coding Plan 套餐端点，2026-11-24 实测）：glm-5.3 high 思考量过大，把 max_tokens 8192 全部用在思考上、
+ * 正文为空（两次都在 190s 返回且无 JSON：8192 token ÷ 套餐通道约 43 token/s ≈ 190s）；glm-5.3 不支持 medium，low 则完全不思考。
+ * 故用 glm-5.2 medium：会思考但不过度，也是 2026-11-23 之前线上一直使用的配置。
+ *
+ * 以下环境变量可临时覆盖模型 / 强度 / 输出额度 / 超时（做对比实验用），不设即上面的选型。
+ * DRAWING_REVIEW_DUMP_DIR 设了目录，就把每次发给模型的完整提示词落盘（核对"引用的原文是否真在材料里"用）。
+ */
+const DR_MODEL = process.env.DRAWING_REVIEW_MODEL || 'glm-5.2';
+const DR_EFFORT = process.env.DRAWING_REVIEW_EFFORT || 'medium';
+const DR_MAX_TOKENS = Number(process.env.DRAWING_REVIEW_MAX_TOKENS) || 8192;
+const DR_TIMEOUT_MS = Number(process.env.DRAWING_REVIEW_TIMEOUT_MS) || 420000;
+const DR_DUMP_DIR = process.env.DRAWING_REVIEW_DUMP_DIR || '';
+// DRAWING_REVIEW_STREAM=1 时改用流式请求：非流式请求若要 300s 以上才返回，Node 的 fetch 会在等响应头时自行超时
+// （undici headersTimeout），与 DR_TIMEOUT_MS 无关；流式的响应头立刻到达，没有这个限制。线上 glm-5.2 约 70s 返回，用不到，默认关闭。
+const DR_STREAM = process.env.DRAWING_REVIEW_STREAM === '1';
+
+type ReviewCfg = { mode: 'standard' | 'deep'; model: string; effort: string; maxTokens: number; timeoutMs: number; stream: boolean };
+/** 标准复核：同步等待，约 1 分钟 */
+const STANDARD_CFG: ReviewCfg = { mode: 'standard', model: DR_MODEL, effort: DR_EFFORT, maxTokens: DR_MAX_TOKENS, timeoutMs: DR_TIMEOUT_MS, stream: DR_STREAM };
+/**
+ * 深度复核：GLM-5.3 · high。2026-11-24 实测（同一任务各 3 次，两位评委交叉评分）：
+ *   - AI 补充疑点 18 条，标准复核 9 条；成立 17 条对 7~8 条。多出来的是需要跨表对照才能发现的疑点
+ *     （按同层编号规律预判缺失柜号、A 路配电室出现偶数编号变压器、配对室低压柜数量不对称等）
+ *   - 单次 364~430 秒（标准复核约 70 秒）；总结出现过计数错误和夸大（写“补充 8 项”实为 7 项），以逐条疑点为准
+ *   - 必须放大输出额度：默认的 8192 会被思考用完、正文为空；必须用流式请求：非流式超过 300 秒会被
+ *     Node fetch 等响应头的超时打断。因为要跑好几分钟，所以放在后台执行，不占着 HTTP 请求
+ */
+const DEEP_CFG: ReviewCfg = { mode: 'deep', model: 'glm-5.3', effort: 'high', maxTokens: 65536, timeoutMs: 900000, stream: true };
+
+/** 读智谱 OpenAI 兼容端点的 SSE 流，把正文增量拼成与非流式响应同构的对象 */
+async function readZhipuStream(resp: Awaited<ReturnType<typeof fetch>>): Promise<any> {   // 本文件里的 Response 是 express 的，这里要的是 fetch 的
+  const reader = resp.body?.getReader();
+  if (!reader) throw new Error('无法读取响应流');
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let content = '';
+  let finishReason: string | undefined;
+  let usage: any;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() || '';
+    for (const line of lines) {
+      const t = line.trim();
+      if (!t.startsWith('data:')) continue;
+      const payload = t.slice(5).trim();
+      if (!payload || payload === '[DONE]') continue;
+      try {
+        const evt = JSON.parse(payload);
+        const ch = evt.choices?.[0];
+        if (ch?.delta?.content) content += ch.delta.content;
+        if (ch?.finish_reason) finishReason = ch.finish_reason;
+        if (evt.usage) usage = evt.usage;
+      } catch { /* 不完整的片段跳过 */ }
+    }
+  }
+  return { choices: [{ message: { content }, finish_reason: finishReason }], usage };
+}
+
+async function callGLMJSON(system: string, user: string, cfg: ReviewCfg = STANDARD_CFG): Promise<{ json: any; raw: string; truncated: boolean }> {
   const apiKey = process.env.ZHIPU_API_KEY;
   if (!apiKey) throw new Error('ZHIPU_API_KEY 未设置');
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 175000); // nginx 反代 180s，留 5s 余量
+  const timer = setTimeout(() => controller.abort(), cfg.timeoutMs); // 标准复核 420s：nginx 反代 450s，留 30s 余量
+  if (DR_DUMP_DIR) {
+    try {
+      mkdirSync(DR_DUMP_DIR, { recursive: true });
+      writeFileSync(join(DR_DUMP_DIR, `prompt-${Date.now()}.json`), JSON.stringify({ system, user }));
+    } catch { /* 落盘失败不影响复核 */ }
+  }
   try {
-    const resp = await fetch('https://open.bigmodel.cn/api/paas/v4/chat/completions', {
+    const resp = await fetch(ZHIPU_CHAT_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({
-        model: 'glm-5.2',
+        model: cfg.model,
         messages: [
           { role: 'system', content: system },
           { role: 'user', content: user },
         ],
         thinking: { type: 'enabled' },
-        reasoning_effort: 'medium',   // 复核是结构化任务，medium 足够且避免 max 思考跑满超时
+        reasoning_effort: cfg.effort,
         temperature: 1.0,
-        max_tokens: 8192,
-        stream: false,
+        max_tokens: cfg.maxTokens,
+        stream: cfg.stream,
       }),
       signal: controller.signal,
     });
-    if (!resp.ok) throw new Error(`GLM HTTP ${resp.status}: ${(await resp.text()).slice(0, 200)}`);
-    const data: any = await resp.json();
+    if (!resp.ok) throw new Error(describeZhipuError(resp.status, await resp.text()));
+    const data: any = cfg.stream ? await readZhipuStream(resp) : await resp.json();
     const raw: string = data.choices?.[0]?.message?.content || '';
+    const finishReason: string | undefined = data.choices?.[0]?.finish_reason;
+    if (DR_DUMP_DIR) console.log(`[drawingReview] 模型 ${cfg.model}（${cfg.mode}）返回：正文 ${raw.length} 字，finish=${data.choices?.[0]?.finish_reason}，思考 ${((data.usage?.completion_tokens_details?.reasoning_tokens) || 0)} tok`);
     // 剥掉可能的 ```json 围栏后取首个 { 到末个 } 的 JSON 体
     const text = raw.replace(/```(?:json)?/g, '').trim();
     const lo = text.indexOf('{'); const hi = text.lastIndexOf('}');
-    if (lo < 0 || hi <= lo) throw new Error('AI 未返回 JSON');
+    if (lo < 0 || hi <= lo) {
+      // finish=length 多半是思考占满了输出上限，正文还没开始写就到顶
+      throw new Error(`AI 未返回 JSON（输出 ${raw.length} 字，finish=${data.choices?.[0]?.finish_reason ?? '未知'}；finish=length 表示思考用尽了输出上限）`);
+    }
     const body = text.slice(lo, hi + 1);
     try {
-      return { json: JSON.parse(body), raw };
+      return { json: JSON.parse(body), raw, truncated: finishReason === 'length' };
     } catch {
       // 输出超长被截断时兜底打捞：逐元素括号扫描重建 findings 数组（丢掉残缺的末尾元素）
       const salvaged = salvageFindingsJSON(body);
       if (salvaged) {
         console.warn(`[drawingReview] JSON 截断已打捞：${salvaged.findings?.length ?? 0} 条 findings`);
-        return { json: salvaged, raw };
+        return { json: salvaged, raw, truncated: true };
       }
       throw new Error('AI 返回 JSON 解析失败（截断且无法打捞）');
     }
@@ -365,7 +481,8 @@ router.get('/jobs/:id/review', requireAuth, asyncH(async (req, res) => {
   if (!validId(id)) { res.status(400).json({ success: false }); return; }
   const { review, history } = loadReview(id);
   const all = loadLearnings();
-  res.json({ success: true, review, history, learnings: all.slice(-200) }); // 最新200条，防止库增大后拖慢详情打开
+  // pending：后台深度复核“进行中 / 失败”的标记，没有则为 null
+  res.json({ success: true, review, history, learnings: all.slice(-200), pending: loadPending(id) }); // 最新200条，防止库增大后拖慢详情打开
 }));
 
 /** 摘取小表全文 + 大表规模，控制送入 GLM 的上下文体积 */
@@ -397,20 +514,75 @@ function buildContext(id: string, scanFindings: Finding[]): string {
   return parts.join('\n\n');
 }
 
-/** POST 发起 AI 复核 */
-router.post('/jobs/:id/review', requireAuth, asyncH(async (req, res) => {
+/** POST 发起 AI 复核。body 不带 deep 为标准复核（同步等待）；{ deep: true } 为深度复核（转后台，立即返回 202） */
+router.post('/jobs/:id/review', requireAuth, requireRole(['管理者', '编辑者']), asyncH(async (req, res) => {
   const { id } = req.params;
   if (!validId(id)) { res.status(400).json({ success: false }); return; }
   if (!existsSync(join(BASE, id, 'out', 'sheets', 'index.json'))) {
     res.status(400).json({ success: false, message: '任务尚未生成表格，无法复核' }); return;
   }
-  // 同任务串行：防止并发复核互相覆盖 review/history/学习库
-  const result = await withJobLock(id, () => runReview(id, req));
+  // 同任务已有复核在跑（深度复核要跑好几分钟）：直接拒绝而不是排队，否则排队的请求会等到自己超时
+  if (activeReviews.has(id)) { res.status(409).json({ success: false, message: '该任务正在复核中，请等完成后再试' }); return; }
+  const username = (req as any).user?.username || '';
+  try { savePending(id, null); } catch { /* 清不掉旧标记不影响复核 */ } // 新一轮开始，清掉上一轮留下的失败标记
+  if (req.body?.deep === true) {
+    const startedAt = new Date().toISOString();
+    // 先在进程内登记、再落“进行中”标记：GET 要两项同时成立才认定在跑。
+    // 标记文件本身写不进去（如任务目录被删）也不能挡住后面的清理，所以每一步都各自兜住。
+    const job = withJobLock(id, () => runReviewWithRetry(id, username))
+      .then(
+        () => { try { savePending(id, null); } catch { /* 标记删不掉不影响结果 */ } },
+        (err: any) => {
+          console.error(`[drawingReview] 深度复核失败（${id}）:`, err?.message || err);
+          try {
+            savePending(id, { mode: 'deep', status: 'failed', started_at: startedAt, by: username,
+              failed_at: new Date().toISOString(), error: errText(err, '深度复核失败') });
+          } catch { /* 写不了失败标记：日志里已有原因 */ }
+        },
+      )
+      .then(() => { activeReviews.delete(id); }, () => { activeReviews.delete(id); });
+    activeReviews.set(id, job);
+    try { savePending(id, { mode: 'deep', status: 'running', started_at: startedAt, by: username }); } catch { /* 同上 */ }
+    res.status(202).json({ success: true, started: true, mode: 'deep', message: '深度复核已在后台开始' });
+    return;
+  }
+  // 标准复核：同步等待（约 1 分钟）。runReview 抛出的上游错误（如欠费 1113）转成带 message 的 502：前端只读 message
+  let result: { review?: ReviewState; err?: string };
+  const std = withJobLock(id, () => runReview(id, { username }, STANDARD_CFG));
+  activeReviews.set(id, std.then(() => undefined, () => undefined));
+  try {
+    result = await std;
+  } catch (err: any) {
+    result = { err: errText(err, 'AI 复核失败') };
+  } finally { activeReviews.delete(id); }
   if (result.err) { res.status(502).json({ success: false, message: result.err }); return; }
   res.json({ success: true, review: result.review, learnings: loadLearnings() });
 }));
 
-async function runReview(id: string, req: Request): Promise<{ review?: ReviewState; err?: string }> {
+/**
+ * 后台复核的入口：只在“限流”时自动重试。
+ * 套餐通道有并发和频率上限，而且和平台上其他 AI 功能、账号下的编程工具共用；复核要占一条连接好几分钟，
+ * 线上实测出现过启动 0.15 秒即被拒（HTTP 429，错误码 1305）。等 20 / 40 / 60 秒再试，期间“进行中”标记保持不变。
+ * 其他错误（鉴权、欠费、输出不合规）不重试，直接按失败处理。
+ */
+const RATE_LIMIT_RE = /限流|429|1302|1305/;
+async function runReviewWithRetry(id: string, username: string): Promise<{ review?: ReviewState; err?: string }> {
+  let lastErr: any;
+  for (let attempt = 1; attempt <= 4; attempt++) {
+    try {
+      return await runReview(id, { username }, DEEP_CFG);
+    } catch (err: any) {
+      lastErr = err;
+      if (attempt === 4 || !RATE_LIMIT_RE.test(String(err?.message || err))) throw err;
+      const waitSec = 20 * attempt;
+      console.warn(`[drawingReview] 复核遇到限流（${err?.message}），${waitSec}s 后重试（第 ${attempt} 次）`);
+      await new Promise(r => setTimeout(r, waitSec * 1000));
+    }
+  }
+  throw lastErr;
+}
+
+async function runReview(id: string, ctx: { username: string }, cfg: ReviewCfg): Promise<{ review?: ReviewState; err?: string }> {
   const jobRows = await db.allAsync(`SELECT title FROM drawing_jobs WHERE id=$1`, id) as any[];
   const jobTitle: string = jobRows[0]?.title || '';
   const scan = prescan(id);
@@ -418,7 +590,7 @@ async function runReview(id: string, req: Request): Promise<{ review?: ReviewSta
   const lblock = learningsBlock(learnAll, jobTitle);
   const context = (lblock ? lblock + '\n\n' : '') + buildContext(id, scan);
   const t0 = Date.now();
-  const { json } = await callGLMJSON(SYS_REVIEW, context);
+  const { json } = await callGLMJSON(SYS_REVIEW, context, cfg);
   // 合并：预扫描为事实底座，AI 输出按 sid 修订，AI 新增条目追加
   const bySid = new Map<string, any>(scan.map(f => [f.id, { ...f }]));
   const updated = new Set<string>();
@@ -437,21 +609,27 @@ async function runReview(id: string, req: Request): Promise<{ review?: ReviewSta
     if (!af || !af.problem) continue;
     const lids: string[] | undefined = Array.isArray(af.learning_ids) ? af.learning_ids.map(String) : undefined;
     const sid = String(af.sid || af.id || '');
-    if (sid && bySid.has(sid) && !updated.has(sid)) {
-      applyTo(bySid.get(sid), af, lids);
-      updated.add(sid);
-      continue;
+    if (sid && bySid.has(sid)) {
+      // 认得的预扫描 id：第一条用它修订。同一个 id 又出现一条（AI 对一条疑点给了两份意见）属于补充条目，
+      // 不能再按“表名+行”去找别的疑点安放——那会把同一行的另一条预扫描疑点整条覆盖掉
+      if (!updated.has(sid)) {
+        applyTo(bySid.get(sid), af, lids);
+        updated.add(sid);
+        continue;
+      }
+    } else if (sid) {
+      // sid 非空但对不上（AI 改写了 id）：这时才按 表名+行 兜底匹配到尚未被修订的预扫描条目
+      const rowKey = String(af.row || '');
+      const byPos = [...bySid.keys()].find(k => !updated.has(k)
+        && bySid.get(k).sheet === String(af.sheet || '') && String(bySid.get(k).row) === rowKey);
+      if (byPos) {
+        applyTo(bySid.get(byPos), af, lids);
+        updated.add(byPos);
+        continue;
+      }
     }
-    // sid 缺失/对不上时按 表名+行 兜底匹配（防 AI 改写 id 造成映射落空）
-    const rowKey = String(af.row || '');
-    const byPos = [...bySid.keys()].find(k => !updated.has(k)
-      && bySid.get(k).sheet === String(af.sheet || '') && String(bySid.get(k).row) === rowKey);
-    if (byPos) {
-      applyTo(bySid.get(byPos), af, lids);
-      updated.add(byPos);
-      continue;
-    }
-    if (!sid || !bySid.has(sid)) {
+    {
+      // sid 为空（AI 明确标为补充发现），或上面都没匹配上：一律作为 AI 补充条目新建，不动预扫描条目
       bySid.set(`A${++aiIdx}`, {
         id: `A${aiIdx}`, source: 'ai', type: af.type || '其他', severity: af.severity || '中',
         sheet: af.sheet || '', row: af.row || '', problem: af.problem,
@@ -463,8 +641,9 @@ async function runReview(id: string, req: Request): Promise<{ review?: ReviewSta
   }
   // 预扫描未被 AI 覆盖的条目保留原样（不丢事实）
   const findings = [...bySid.values()];
-  // 自学习记账：本轮 AI 引用了哪些历史经验（全局锁内读改写）
-  const appliedN = await withJobLock('__learnings__', async () => countLearningApplied(findings as Finding[], learnAll));
+  // 自学习记账：本轮 AI 引用了哪些历史经验。库必须在锁内重新读：learnAll 是模型调用之前的快照，
+  // 复核要跑 1~8 分钟，期间别的任务通过反馈或修正新增的经验，会被这份旧快照整库写回时抹掉
+  const appliedN = await withJobLock('__learnings__', async () => countLearningApplied(findings as Finding[], loadLearnings()));
   const stats: Record<string, number> = {
     total: findings.length,
     high: findings.filter(f => f.severity === '高').length,
@@ -472,12 +651,22 @@ async function runReview(id: string, req: Request): Promise<{ review?: ReviewSta
     low: findings.filter(f => f.severity === '低').length,
   };
   const review: ReviewState = {
-    model: 'glm-5.2', updated_at: new Date().toISOString(),
+    model: cfg.model, mode: cfg.mode, updated_at: new Date().toISOString(),
     findings, stats, summary: String(json.summary || ''),
   };
-  const { history } = loadReview(id);
-  history.push({ role: 'ai', kind: 'review', at: review.updated_at, dur_sec: Math.round((Date.now() - t0) / 1000),
-    by: (req as any).user?.username || '', stats, summary: review.summary,
+  // 复核期间可能有人已经在旧结果上做过人工处理：预扫描条目（S 开头，跨轮稳定）的人工状态和修正值带回新结果，
+  // 不让人工的工作被覆盖（标准、深度两种模式都带回）。AI 补充条目每轮重新编号、对不上，不带回。
+  // 这次读盘与下面的落盘之间不能再有 await，否则其间落盘的人工修正会被这次写覆盖。
+  const { review: prevReview, history } = loadReview(id);
+  const prevById = new Map((prevReview?.findings || []).map(f => [f.id, f]));
+  for (const f of findings as Finding[]) {
+    const pf = prevById.get(f.id);
+    if (!pf || f.source !== 'scan') continue;
+    if (pf.corrected_value) f.corrected_value = pf.corrected_value;
+    if (pf.status && pf.status !== '待复核' && pf.status !== 'AI已复核') f.status = pf.status;
+  }
+  history.push({ role: 'ai', kind: 'review', mode: cfg.mode, at: review.updated_at, dur_sec: Math.round((Date.now() - t0) / 1000),
+    by: ctx.username, stats, summary: review.summary,
     learned_applied: appliedN, learnings_known: matchLearnings(learnAll, jobTitle).length });
   saveReview(id, review, history);
   return { review };
@@ -488,9 +677,12 @@ router.post('/jobs/:id/review/feedback', requireAuth, asyncH(async (req, res) =>
   const { id } = req.params;
   if (!validId(id)) { res.status(400).json({ success: false }); return; }
   const msg = String(req.body?.message || '').trim();
+  if (msg.length > 5000) { res.status(400).json({ error: '留言过长（≤5000 字）' }); return; }
   if (!msg) { res.status(400).json({ success: false, message: '反馈内容不能为空' }); return; }
   const { review } = loadReview(id);
   if (!review) { res.status(400).json({ success: false, message: '请先发起一次 AI 复核' }); return; }
+  // 深度复核在后台跑的时候不接反馈：排到它后面要等好几分钟，前端等不到；反馈内容还在输入框里，稍后可重提
+  if (activeReviews.has(id)) { res.status(409).json({ success: false, message: '该任务正在复核中（深度复核约需 6~8 分钟），请等完成后再提交反馈' }); return; }
   const result = await withJobLock(id, () => runFeedback(id, req, msg));
   if (result.savedFeedbackOnly) {
     // AI 重核失败但人工反馈已落盘，绝不丢用户的反馈
@@ -504,11 +696,10 @@ router.post('/jobs/:id/review/feedback', requireAuth, asyncH(async (req, res) =>
 async function runFeedback(id: string, req: Request, msg: string): Promise<{
   review?: ReviewState; responses?: any[]; err?: string; savedFeedbackOnly?: boolean;
 }> {
-  const { review, history } = loadReview(id);
+  const { review } = loadReview(id);
   if (!review) return { err: '请先发起一次 AI 复核' };
   const username = (req as any).user?.username || (req as any).user?.name || '';
-  const at = new Date().toISOString();
-  history.push({ role: 'human', kind: 'feedback', at, by: username, message: msg });
+  const feedbackEntry = { role: 'human' as const, kind: 'feedback', at: new Date().toISOString(), by: username, message: msg };
   const jobRows = await db.allAsync(`SELECT title FROM drawing_jobs WHERE id=$1`, id) as any[];
   const jobTitle: string = jobRows[0]?.title || '';
   const learnAll = loadLearnings();
@@ -519,19 +710,27 @@ async function runFeedback(id: string, req: Request, msg: string): Promise<{
     `【人工反馈】（反馈人：${username}）\n${msg}\n\n` +
     `【原始表格上下文】\n${buildContext(id, [])}`;
   const t0 = Date.now();
-  let json: any;
+  /** AI 没成功时也要保住人工反馈：重新读盘再追加，避免覆盖这期间别人落盘的修正 */
+  const saveFeedbackOnly = (): void => {
+    const cur = loadReview(id);
+    cur.history.push(feedbackEntry);
+    saveReview(id, cur.review || review, cur.history);
+  };
+  let json: any; let truncated = false;
   try {
-    json = (await callGLMJSON(SYS_REVERIFY, userPayload)).json;
+    ({ json, truncated } = await callGLMJSON(SYS_REVERIFY, userPayload));
   } catch (e: any) {
-    // AI 失败也要保住人工反馈（历史已 push，先落盘再返回）
-    saveReview(id, review, history);
-    return { err: e?.message || 'AI 重核失败', savedFeedbackOnly: true };
+    saveFeedbackOnly();
+    return { err: errText(e, 'AI 重核失败'), savedFeedbackOnly: true };
   }
-  // 沉淀反馈中的可复用经验（去重）；学习库为全局文件，用全局锁防跨任务并发丢失更新
-  const [, addedN, dupN] = await withJobLock('__learnings__', async () => addLearnings(json.learnings, id, jobTitle, username));
-  // 以 AI 输出的全量 findings 为新状态；source 沿用上一轮同 id 的值（AI 不回传该字段）
+  if (truncated) {
+    // 输出被截断时拿到的只是半份清单：用它替换旧清单，没输出的条目（包括已修正的）会整条消失。按失败处理
+    saveFeedbackOnly();
+    return { err: 'AI 重核的输出不完整（被截断），没有采用，请稍后重新提交', savedFeedbackOnly: true };
+  }
+  // 1) 先按 AI 输出组装清单（不含人工字段），再做学习库的两步记账——这几步有 await，放在读盘之前
   const prevSource = new Map(review.findings.map(f => [f.id, f.source]));
-  const findings: Finding[] = ((json.findings || []) as any[]).filter(f => f && f.problem).map((f, i) => ({
+  const base: Finding[] = ((json.findings || []) as any[]).filter(f => f && f.problem).map((f, i) => ({
     id: String(f.id || f.sid || `F${i + 1}`),
     source: prevSource.get(String(f.id || f.sid || '')) || (f.source === 'ai' ? 'ai' : 'scan'),
     type: f.type || '其他', severity: f.severity || '中',
@@ -540,8 +739,24 @@ async function runFeedback(id: string, req: Request, msg: string): Promise<{
     confidence: f.confidence || '中', status: f.status || 'AI已复核',
     ...(Array.isArray(f.learning_ids) ? { learning_ids: f.learning_ids.map(String) } : {}),
   }));
-  // 自学习记账：本轮引用了哪些历史经验（全局锁内读改写）
-  const appliedN = await withJobLock('__learnings__', async () => countLearningApplied(findings, loadLearnings()));
+  // 沉淀反馈中的可复用经验（去重）；学习库为全局文件，用全局锁防跨任务并发丢失更新
+  const [, addedN, dupN] = await withJobLock('__learnings__', async () => addLearnings(json.learnings, id, jobTitle, username));
+  // 自学习记账：本轮引用了哪些历史经验（库在锁内重新读）
+  const appliedN = await withJobLock('__learnings__', async () => countLearningApplied(base, loadLearnings()));
+  // 2) 之后不再有 await：读盘 → 带回人工修正 → 落盘。重核等模型的那一两分钟里，可能有人已经提交了修正
+  const cur = loadReview(id);
+  const prevFindings = cur.review?.findings || review.findings;
+  const prevById = new Map(prevFindings.map(f => [f.id, f]));
+  const findings: Finding[] = base.map(f => {
+    const pf = prevById.get(f.id);
+    // 人工填的修正值和“已修正”状态要带过来：AI 不回传这两个字段，不带的话修正就被这次重核抹掉了
+    return pf?.corrected_value ? { ...f, status: '已修正', corrected_value: pf.corrected_value } : f;
+  });
+  // 旧清单里带着人工修正值、这次 AI 没输出的条目：保留旧版本（人工的成果不能因为模型漏输出而消失）
+  const kept = new Set(findings.map(f => f.id));
+  for (const pf of prevFindings) {
+    if (pf.corrected_value && !kept.has(pf.id)) findings.push(pf);
+  }
   const stats: Record<string, number> = {
     total: findings.length,
     high: findings.filter(f => f.severity === '高').length,
@@ -552,10 +767,10 @@ async function runFeedback(id: string, req: Request, msg: string): Promise<{
     ...review, updated_at: new Date().toISOString(), findings, stats,
     summary: String(json.summary || review.summary),
   };
-  history.push({ role: 'ai', kind: 'reverify', at: updated.updated_at, dur_sec: Math.round((Date.now() - t0) / 1000),
+  cur.history.push(feedbackEntry, { role: 'ai', kind: 'reverify', at: updated.updated_at, dur_sec: Math.round((Date.now() - t0) / 1000),
     responses: json.responses || [], summary: updated.summary,
     learned_added: addedN, learned_dup: dupN, learned_applied: appliedN });
-  saveReview(id, updated, history);
+  saveReview(id, updated, cur.history);
   return { review: updated, responses: json.responses || [] };
 }
 
@@ -565,7 +780,7 @@ async function runFeedback(id: string, req: Request, msg: string): Promise<{
  *  人工复核逐条修正：直接填写正确值（如缺失的中压柜号、推定的容量）。
  *  结构化入学习库（kind=修正值，confidence=高），管线回写按楼栋匹配自动应用。
  */
-router.post('/jobs/:id/review/correct', requireAuth, requireRole(['管理者', '编辑者']), async (req, res) => {
+router.post('/jobs/:id/review/correct', requireAuth, requireRole(['管理者', '编辑者']), asyncH(async (req, res) => {
   const { id } = req.params;
   if (!validId(id)) { res.status(400).json({ success: false }); return; }
   const findingId = String(req.body?.findingId || '');
@@ -573,40 +788,45 @@ router.post('/jobs/:id/review/correct', requireAuth, requireRole(['管理者', '
   if (!findingId || !value || value.length > 200) {
     res.status(400).json({ success: false, message: '需要 findingId 和修正值（≤200字）' }); return;
   }
-  const { review, history } = loadReview(id);
-  if (!review) { res.status(400).json({ success: false, message: '请先发起一次 AI 复核' }); return; }
-  const f = review.findings.find(x => x.id === findingId);
-  if (!f) { res.status(404).json({ success: false, message: '疑点不存在' }); return; }
+  // 两条修正几乎同时提交时会互相覆盖（读-改-写之间隔着数据库往返）。同任务的人工操作串行执行。
+  // 用单独的锁而不是任务锁：任务锁可能正被一次要跑好几分钟的复核占着，排在它后面请求早就超时了
+  const out = await withJobLock(`manual:${id}`, async () => {
+    const { review, history } = loadReview(id);
+    if (!review) return { code: 400, body: { success: false, message: '请先发起一次 AI 复核' } };
+    const f = review.findings.find(x => x.id === findingId);
+    if (!f) return { code: 404, body: { success: false, message: '疑点不存在' } };
 
-  const username = (req as any).user?.username || '';
-  const at = new Date().toISOString();
-  // 更新疑点：修正值 + 状态
-  f.corrected_value = value;
-  f.status = '已修正';
-  // 学习库结构化条目（高置信：人工确认值）
-  const jobRows = await db.allAsync(`SELECT title FROM drawing_jobs WHERE id=$1`, id) as any[];
-  const jobTitle: string = jobRows[0]?.title || '';
-  const list = await withJobLock('__learnings__', async () => {
-    const l = loadLearnings();
-    l.push({
-      id: `L${l.length + 1}`, kind: '修正值',
-      content: `${f.sheet} ${f.row}：${f.problem.slice(0, 60)} → 正确值 ${value}`,
-      buildings: buildingKeys(jobTitle),
-      source_job: id, created_by: username, at, applied: 0,
-      correction: { finding_id: findingId, sheet: f.sheet, row: f.row, problem: f.problem.slice(0, 200), value },
+    const username = (req as any).user?.username || '';
+    const at = new Date().toISOString();
+    // 更新疑点：修正值 + 状态
+    f.corrected_value = value;
+    f.status = '已修正';
+    // 学习库结构化条目（高置信：人工确认值）
+    const jobRows = await db.allAsync(`SELECT title FROM drawing_jobs WHERE id=$1`, id) as any[];
+    const jobTitle: string = jobRows[0]?.title || '';
+    const list = await withJobLock('__learnings__', async () => {
+      const l = loadLearnings();
+      l.push({
+        id: `L${l.length + 1}`, kind: '修正值',
+        content: `${f.sheet} ${f.row}：${f.problem.slice(0, 60)} → 正确值 ${value}`,
+        buildings: buildingKeys(jobTitle),
+        source_job: id, created_by: username, at, applied: 0,
+        correction: { finding_id: findingId, sheet: f.sheet, row: f.row, problem: f.problem.slice(0, 200), value },
+      });
+      saveLearnings(l);
+      return l;
     });
-    saveLearnings(l);
-    return l;
+    history.push({ role: 'human', kind: 'correct', at, by: username, finding: findingId, value });
+    saveReview(id, review, history);
+    return { code: 200, body: { success: true, review, learnings: list.slice(-200) } };
   });
-  history.push({ role: 'human', kind: 'correct', at, by: username, finding: findingId, value });
-  saveReview(id, review, history);
-  res.json({ success: true, review, learnings: list.slice(-200) });
-});
+  res.status(out.code).json(out.body);
+}));
 
 /** POST /api/drawing/jobs/:id/review/suggest
  *  管线优化建议：版式问题/识别缺陷/改进想法，进建议库供规则迭代消费。
  */
-router.post('/jobs/:id/review/suggest', requireAuth, async (req, res) => {
+router.post('/jobs/:id/review/suggest', requireAuth, asyncH(async (req, res) => {
   const { id } = req.params;
   if (!validId(id)) { res.status(400).json({ success: false }); return; }
   const msg = String(req.body?.message || '').trim();
@@ -626,14 +846,14 @@ router.post('/jobs/:id/review/suggest', requireAuth, async (req, res) => {
     try { writeFileSync(SUG_FILE, JSON.stringify(arr, null, 2)); } catch (e: any) { console.warn('[drawingReview] 建议库写入失败:', e?.message); }
     return arr;
   });
-  // 历史也记一笔
-  const { review, history } = loadReview(id);
-  history.push({ role: 'human', kind: 'suggest', at: new Date().toISOString(), by: username, message: msg });
-  if (review) saveReview(id, review, history);
+  // 历史也记一笔（与人工修正共用同一把“同任务人工操作”锁，避免两边的读-改-写互相覆盖）
+  await withJobLock(`manual:${id}`, async () => {
+    const { review, history } = loadReview(id);
+    history.push({ role: 'human', kind: 'suggest', at: new Date().toISOString(), by: username, message: msg });
+    if (review) saveReview(id, review, history);
+  });
   res.json({ success: true, suggestions: list });
-});
-
-/** GET /api/drawing/jobs/:id/review/suggestions 本任务建议（列表页用） */
+}));
 
 /** GET /api/drawing/suggestions 全局建议库汇总（精度迭代看板） */
 router.get('/suggestions', requireAuth, async (_req, res) => {

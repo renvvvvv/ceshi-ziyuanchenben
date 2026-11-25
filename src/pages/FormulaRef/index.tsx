@@ -12,7 +12,7 @@ import {
   CheckCircleFilled, CloseCircleFilled, ThunderboltOutlined, FireOutlined,
   DesktopOutlined, ExperimentOutlined, DashboardOutlined, BookOutlined,
 } from '@ant-design/icons';
-import { FORMULAS, CATEGORY_LABELS, CATEGORY_ICONS, type FormulaDef, type FormulaCategory } from '../../data/formulas';
+import { FORMULAS, CATEGORY_LABELS, CATEGORY_ICONS, evaluateJudgment, type FormulaDef, type FormulaCategory } from '../../data/formulas';
 import { useIsMobile } from '../../hooks/useIsMobile';
 
 const { Text, Title } = Typography;
@@ -41,27 +41,36 @@ function FormulaCard({ formula }: { formula: FormulaDef }) {
   }, [values, formula]);
 
   const pass = useMemo(() => {
-    if (!result || !formula.judgment) return null;
-    const j = formula.judgment;
-    const v = result;
-    switch (j.operator) {
-      case '<=': return v <= (j.threshold ?? 0);
-      case '>=': return v >= (j.threshold ?? 0);
-      case '|': return Math.abs(v) <= (j.threshold ?? 0);
-      case 'range': return j.range ? v >= j.range[0] && v <= j.range[1] : false;
-      case 'abs<=': return Math.abs(v) <= (j.threshold ?? 0);
-      default: return null;
-    }
-  }, [result, formula.judgment]);
+    // 只有 null 才表示“还没算出来”：结果恰好是 0（如实测值与基准值相同）也要照常判定
+    if (result === null) return null;
+    return evaluateJudgment(formula.judgment, values, result);
+  }, [result, formula.judgment, values]);
 
   const scale = formula.resultScale ?? 2;
   const displayResult = result !== null ? result.toFixed(scale) : '--';
 
-  const handleCopy = useCallback(() => {
+  const handleCopy = useCallback(async () => {
     if (result === null) { message.warning('请先填写所有参数'); return; }
     const judgeText = pass === null ? '' : pass ? `（${formula.judgment?.passText}）` : `（${formula.judgment?.failText}）`;
     const text = `${formula.resultLabel}：${displayResult}${formula.resultUnit} ${judgeText}  [${formula.standard || '参考标准'}]`;
-    navigator.clipboard.writeText(text).then(() => message.success('已复制结果'));
+    // 平台以 http:// 内网 IP 访问（非安全上下文），navigator.clipboard 可能为 undefined → 降级 execCommand
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        ta.remove();
+      }
+      message.success('已复制结果');
+    } catch {
+      message.warning('复制失败，请手动选择文本复制');
+    }
   }, [result, pass, formula, displayResult]);
 
   return (
@@ -79,7 +88,7 @@ function FormulaCard({ formula }: { formula: FormulaDef }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <Text strong style={{ fontSize: 14 }}>{formula.title}</Text>
           {formula.standard && (
-            <Tag style={{ fontSize: 10, background: '#f0fdf4', color: '#16a34a', border: '1px solid #bbf7d0' }}>
+            <Tag style={{ fontSize: 11.5, background: '#f0fdf4', color: '#16a34a', border: '1px solid #bbf7d0' }}>
               {formula.standard}
             </Tag>
           )}
@@ -184,7 +193,7 @@ function FormulaCard({ formula }: { formula: FormulaDef }) {
           复制结果
         </Button>
         {formula.note && (
-          <Text type="secondary" style={{ fontSize: 10, maxWidth: '70%', textAlign: 'right' }}>
+          <Text type="secondary" style={{ fontSize: 11.5, maxWidth: '70%', textAlign: 'right' }}>
             💡 {formula.note}
           </Text>
         )}
@@ -250,7 +259,7 @@ export default function FormulaRef() {
       {/* 搜索 + 分类 */}
       <div style={{ marginBottom: 16 }}>
         <Input
-          placeholder="🔍 搜索公式、标准号、关键词..."
+          placeholder="搜索公式、标准号、关键词..."
           prefix={<SearchOutlined />}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -262,7 +271,8 @@ export default function FormulaRef() {
           activeKey={category}
           onChange={setCategory}
           items={tabItems}
-          size="small"
+          tabBarGutter={isMobile ? 10 : 4}
+          size={isMobile ? 'middle' : 'small'}
         />
       </div>
 

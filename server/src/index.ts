@@ -4,7 +4,7 @@ import cors from 'cors';
 import resourceCalcRouter from './routes/resourceCalc.js';
 import projectsRouter from './routes/projects.js';
 import reportReviewRouter from './routes/reportReview.js';
-import authRouter, { authMiddleware } from './routes/auth.js';
+import authRouter, { authMiddleware, requireAuth } from './routes/auth.js';
 import kbRouter from './routes/kb.js';
 import kbQARouter from './routes/kbQA.js';
 import drawingRouter from './routes/drawingPipeline.js';
@@ -16,6 +16,7 @@ import rcStoreRouter from './routes/rcStore.js';
 import testDocsRouter from './routes/testDocs.js';
 import attendanceRouter from './routes/attendance.js';
 import rcConfigRouter from './routes/rcConfig.js';
+import tripsRouter from './routes/trips.js';
 import { initDatabase } from './database.js';
 import db from './database.js';
 
@@ -32,8 +33,8 @@ const corsOptions: cors.CorsOptions = {
   origin(origin, cb) {
     // 同源请求（无 Origin 头）或 Postman 等工具（无 Origin）放行
     if (!origin) return cb(null, true);
-    // 未配置白名单 → 同源放行
-    if (ALLOWED_ORIGINS.length === 0) return cb(null, true);
+    // 未配置白名单 → 拒绝跨域（此前 cb(null,true) 实为反射放行任意源，语义理解错误）
+    if (ALLOWED_ORIGINS.length === 0) return cb(null, false);
     if (ALLOWED_ORIGINS.includes(origin)) return cb(null, true);
     cb(new Error(`CORS: origin ${origin} not allowed`));
   },
@@ -60,13 +61,21 @@ app.use('/api/rc', rcStoreRouter);
 app.use('/api/test-docs', testDocsRouter);
 app.use('/api/attendance-adjustments', attendanceRouter);
 app.use('/api/rc', rcConfigRouter);
+app.use('/api/trips', tripsRouter);
 
-app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+// 健康检查带一次数据库探测：库连不上时返回 503。此前恒返回 200，数据库一挂容器仍显示 healthy、
+// 部署脚本也报“后端正常”，而实际所有接口都是 500。
+app.get('/api/health', async (_req, res) => {
+  const dbOk = await Promise.race([
+    db.getAsync('SELECT 1').then(() => true, () => false),
+    new Promise<false>((resolve) => setTimeout(() => resolve(false), 3000)),
+  ]);
+  if (dbOk) res.json({ status: 'ok', db: 'ok', timestamp: new Date().toISOString() });
+  else res.status(503).json({ status: 'degraded', db: 'unavailable', timestamp: new Date().toISOString() });
 });
 
 // 深度健康检查：所有表行数 + 最近修改时间（用于防回归监控）
-app.get('/api/health/deep', async (_req, res) => {
+app.get('/api/health/deep', requireAuth, async (_req, res) => {
   try {
     const tables = [
       'test_projects',
@@ -144,6 +153,19 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
     res.status(409).json({ success: false, error: '数据完整性约束违反' });
     return;
   }
+  // 请求本身的问题按 4xx 返回（此前一律 500）：JSON 解析失败、请求体超过上限、文件上传出错（如超过大小限制）
+  if (err?.type === 'entity.parse.failed' || (err instanceof SyntaxError && (err as any).body)) {
+    res.status(400).json({ success: false, error: '请求体不是合法的 JSON' });
+    return;
+  }
+  if (err?.type === 'entity.too.large' || err?.code === 'LIMIT_FILE_SIZE') {
+    res.status(413).json({ success: false, error: '请求内容过大，超过大小限制' });
+    return;
+  }
+  if (err?.name === 'MulterError') {
+    res.status(400).json({ success: false, error: `文件上传失败：${err.message}` });
+    return;
+  }
   res.status(500).json({
     success: false,
     error: err?.message || 'Internal Server Error',
@@ -159,7 +181,7 @@ app.use('/api/*', (_req, res) => {
 initDatabase().then(() => {
   app.listen(PORT, () => {
     console.log(`[Server] Data Center Test Platform API running on http://localhost:${PORT}`);
-    console.log(`[Server] MiniMax API Key: ${process.env.MINIMAX_API_KEY ? '✓ configured' : '✗ not set'}`);
+    console.log(`[Server] Zhipu API Key: ${process.env.ZHIPU_API_KEY ? '✓ configured' : '✗ not set'}`);
   });
 }).catch(err => {
   console.error('[Server] Failed to init database:', err);

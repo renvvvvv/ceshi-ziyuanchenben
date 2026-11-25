@@ -55,17 +55,20 @@ export async function request<T>(path: string, options?: RequestOptions): Promis
       signal: controller.signal,
     });
 
-    clearTimeout(timeoutId);
-
+    // 响应体读完才撤超时：只等到响应头就撤的话，响应体迟迟不到时调用方会一直挂起（按钮一直转圈）
     if (!res.ok) {
-      const err = await res.json().catch(() => ({ message: res.statusText }));
-      throw new ApiError(
-        (err as { message?: string }).message || `请求失败: ${res.status}`,
-        res.status
-      );
+      const err = await res.json().catch(() => null);
+      clearTimeout(timeoutId);
+      // 后端多数失败响应带 message；全局错误处理中间件、部分参数校验只带 error
+      const text = (err as { message?: string; error?: string } | null)?.message
+        || (err as { error?: string } | null)?.error
+        || `请求失败: ${res.status}`;
+      throw new ApiError(text, res.status);
     }
 
-    return res.json() as Promise<T>;
+    const json = await res.json();
+    clearTimeout(timeoutId);
+    return json as T;
   } catch (error: any) {
     clearTimeout(timeoutId);
     if (error instanceof ApiError) throw error;
@@ -104,6 +107,8 @@ export const resourceCalcApi = {
     return request('/resource-calc', {
       method: 'POST',
       body: JSON.stringify(input),
+      // 后端给计算脚本的上限是 30 秒；前端默认超时也是 30 秒，两边同时到点，后端返回的真实原因（如“计算超时”）传不回来
+      timeout: 75_000,
     });
   },
 
@@ -128,7 +133,15 @@ export const resourceCalcApi = {
     });
     if (type && type !== 'all') params.set('type', type);
     if (date) params.set('date', date);
-    return request('/resource-calc/history?' + params.toString());
+    // 后端 data 是数组、total 在顶层。此前的类型声明写成 { items, total }，页面照着读 data.items，列表恒为空
+    return request<ApiResponse<HistoryGroupItem[] | PaginatedResponse<HistoryGroupItem>> & { total?: number }>(
+      '/resource-calc/history?' + params.toString(),
+    ).then((r) => {
+      const data = Array.isArray(r.data)
+        ? { items: r.data, total: r.total ?? r.data.length }
+        : (r.data as PaginatedResponse<HistoryGroupItem>);
+      return { ...r, data } as ApiResponse<PaginatedResponse<HistoryGroupItem>>;
+    });
   },
 
   /** 获取批次详情 */
@@ -164,6 +177,8 @@ export interface HistoryGroupItem {
   total_mw?: number;
   total_duration?: number;
   cabinet_power?: number;
+  /** 功率分段 [[功率, 台数], ...]（后端 JSONB 列；旧记录为空） */
+  cabinet_power_segments?: [number, number][];
   it_transformers?: string;
   power_transformers?: string;
   total_cabinets?: number;
@@ -180,6 +195,7 @@ export interface HistoryItem {
   total_mw: number;
   total_duration: number;
   cabinet_power: number;
+  cabinet_power_segments?: [number, number][];
   it_transformers: string;
   power_transformers: string;
   total_cabinets: number;
@@ -348,6 +364,13 @@ const SNAKE_TO_CAMEL: Record<string, string> = {
   employee_id: 'employeeId',
   current_projects: 'currentProjects',
   doc_link: 'docLink',
+  upcoming_projects: 'upcomingProjects',
+  // 审查修复（P0）：缺以下 4 个映射时后端 SELECT * 的字段"写得出、读不回"——
+  // 刷新后休假区间丢失（成员卡死休假态、考勤请假基数恒0）、项目交付日期恒空
+  leave_start_date: 'leaveStartDate',
+  leave_end_date: 'leaveEndDate',
+  planned_delivery_date: 'plannedDeliveryDate',
+  actual_delivery_date: 'actualDeliveryDate',
 };
 
 const CAMEL_TO_SNAKE: Record<string, string> = Object.fromEntries(
@@ -446,24 +469,22 @@ export function projectToDbBody(p: Partial<Project>): Record<string, unknown> {
 /**
  * 后端 team_members 行 → 前端 TeamMember
  */
+/** JSON 数组字段解包：历史 bug 可能存双层 JSON 文本（'"[]"'），parse 一次仍是字符串——循环解到数组为止 */
+function parseJsonArr<T>(v: unknown, fallback: T): T {
+  let x = v;
+  let guard = 0;
+  while (typeof x === 'string' && guard++ < 4) {
+    try { x = JSON.parse(x); } catch { return fallback; }
+  }
+  return Array.isArray(x) ? (x as T) : fallback;
+}
+
 export function dbRowToTeamMember(row: Record<string, unknown>): TeamMember {
   const c = snakeToCamel<Record<string, unknown>>(row);
-  let skills: string[] = [];
-  let currentProjects: string[] = [];
-  let projects: Array<{ projectName: string; startDate: string; endDate: string }> = [];
-  let upcomingProjects: Array<{ projectName: string; startDate: string; endDate: string }> = [];
-  try {
-    if (typeof c.skills === 'string') skills = JSON.parse(c.skills);
-  } catch { /* ignore */ }
-  try {
-    if (typeof c.currentProjects === 'string') currentProjects = JSON.parse(c.currentProjects);
-  } catch { /* ignore */ }
-  try {
-    if (typeof c.projects === 'string') projects = JSON.parse(c.projects);
-  } catch { /* ignore */ }
-  try {
-    if (typeof c.upcomingProjects === 'string') upcomingProjects = JSON.parse(c.upcomingProjects);
-  } catch { /* ignore */ }
+  const skills = parseJsonArr<string[]>(c.skills, []);
+  const currentProjects = parseJsonArr<string[]>(c.currentProjects, []);
+  const projects = parseJsonArr<Array<{ projectName: string; startDate: string; endDate: string }>>(c.projects, []);
+  const upcomingProjects = parseJsonArr<Array<{ projectName: string; startDate: string; endDate: string }>>(c.upcomingProjects, []);
 
   // 归一化 status：后端默认值是'在线'，但前端枚举只有'空闲'/'测试中'/'休假'
   // 把'在线'和任何未知值都映射为'空闲'，避免 TeamPool statusConfig[member.status] 是 undefined
@@ -577,12 +598,11 @@ export const projectsApi = {
   list: (params?: { page?: number; size?: number }) =>
     projectApi.getList(params as Record<string, string> | undefined).then((r) => ({
       success: r.success,
-      // 后端 GET /api/projects 直接返回 data: [...]（数组），不是 {items, total}
-      // 兼容两种格式：数组 或 {items, total}
+      // 后端 GET /api/projects 直接返回 data: [...]（数组），总数在顶层 total；兼容 {items, total} 格式
       data: Array.isArray(r.data)
         ? r.data.map(dbRowToProject)
         : ((r.data?.items || []).map(dbRowToProject)),
-      total: r.data?.total ?? (Array.isArray(r.data) ? r.data.length : 0),
+      total: r.data?.total ?? (r as { total?: number }).total ?? (Array.isArray(r.data) ? r.data.length : 0),
     })),
   get: (id: string) => projectApi.getById(Number(id)).then((r) => ({
     success: r.success,
@@ -591,7 +611,8 @@ export const projectsApi = {
   create: (body: Partial<Project>) =>
     projectApi.create(projectToDbBody(body)).then((r) => ({
       success: r.success,
-      id: (r.data as { id?: number } | undefined)?.id,
+      // 后端返回的是顶层的 { success, id }，没有 data 包裹；兼容两种形态
+      id: (r.data as { id?: number } | undefined)?.id ?? (r as { id?: number }).id,
     })),
   update: (id: string, body: Partial<Project>) =>
     projectApi.update(Number(id), projectToDbBody(body)).then((r) => ({
@@ -617,7 +638,8 @@ export const teamMembersApi = {
   create: (body: Partial<TeamMember>) =>
     projectApi.createTeamMember(teamMemberToDbBody(body)).then((r) => ({
       success: r.success,
-      id: (r.data as { id?: number } | undefined)?.id,
+      // 后端返回的是顶层的 { success, id }，没有 data 包裹；兼容两种形态
+      id: (r.data as { id?: number } | undefined)?.id ?? (r as { id?: number }).id,
     })),
   update: (id: string, body: Partial<TeamMember>) =>
     projectApi.updateTeamMember(id, teamMemberToDbBody(body)).then((r) => ({
@@ -640,7 +662,8 @@ export const historyProjectsApi = {
   create: (body: Partial<HistoricalProject>) =>
     projectApi.createHistory(historyProjectToDbBody(body)).then((r) => ({
       success: r.success,
-      id: (r.data as { id?: number } | undefined)?.id,
+      // 后端返回的是顶层的 { success, id }，没有 data 包裹；兼容两种形态
+      id: (r.data as { id?: number } | undefined)?.id ?? (r as { id?: number }).id,
     })),
   update: (id: string, body: Partial<HistoricalProject>) =>
     projectApi.updateHistory(id, historyProjectToDbBody(body)).then((r) => ({
@@ -648,4 +671,31 @@ export const historyProjectsApi = {
     })),
   remove: (id: string) =>
     projectApi.deleteHistory(id).then((r) => ({ success: r.success })),
+};
+
+
+// -------------------- 出差概览（值班补贴台账里的出差登记，只读） --------------------
+// 字段含义见后端 src/routes/trips.ts；统计算法和台账 Excel《出差时长与项目间休息天数统计》是同一套
+
+export interface TripSegment { s: string; e: string; days: number; reg: number | null; project: string; position: string | null }
+export interface TripRest { s: string; e: string; days: number; prev: string; next: string; same: boolean }
+export interface TripPerson {
+  key: string; memberId: number | null; name: string; employeeId: string | null; title: string | null; status: string | null;
+  segs: TripSegment[]; rests: TripRest[]; nBlock: number; monthly: number[]; annualDays: number;
+  restDays: number; restMax: number; restMaxStart: string | null; restMaxEnd: string | null;
+  firstStart: string | null; lastEnd: string | null; curRest: number;
+}
+export interface TripMonth { month: number; kind: 'cycle' | 'dated'; personDays: number; people: number; byProject: { project: string; days: number }[] }
+export interface TripOverviewData {
+  year: number; cut: string; today: string;
+  range: { start: string; end: string } | null;
+  months: TripMonth[];
+  projects: { name: string; days: number; people: number }[];
+  people: TripPerson[];
+}
+export interface TripOverviewMeta { asOf: string | null; importedAt: string | null; excluded: string[]; segments: number; cycles: number }
+
+export const tripsApi = {
+  overview: (year?: number) =>
+    request<ApiResponse<TripOverviewData> & { meta?: TripOverviewMeta | null }>(`/trips/overview${year ? `?year=${year}` : ''}`),
 };

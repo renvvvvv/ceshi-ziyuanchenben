@@ -48,7 +48,7 @@ export default function AiQuotaCard() {
       title={
         <Space>
           <RobotOutlined style={{ color: '#6366f1' }} />
-          <span style={{ color: '#1e1b2e' }}>AI 用量（admin 账号）</span>
+          <span style={{ color: '#1e1b2e' }}>AI 用量（当前登录账号）</span>
         </Space>
       }
     >

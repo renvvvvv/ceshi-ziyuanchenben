@@ -33,21 +33,48 @@ function ensureFile(): void {
   if (!fs.existsSync(FILE)) fs.writeFileSync(FILE, '{}', 'utf-8');
 }
 
+/** 这几个键名会落到对象原型上：original 是用户输入，必须拒掉，否则 all[original] 取到的是 Object.prototype，
+ *  往上面写 suggestion / count 会污染本进程里所有对象 */
+function isUnsafeKey(key: string): boolean {
+  return key === '__proto__' || key === 'constructor' || key === 'prototype';
+}
+
 /** 全量读取（小型文件可全量读） */
 export function loadCorrections(): Record<string, Correction> {
   ensureFile();
+  let raw: string;
   try {
-    return JSON.parse(fs.readFileSync(FILE, 'utf-8'));
+    raw = fs.readFileSync(FILE, 'utf-8');
   } catch {
+    return {};
+  }
+  try {
+    const parsed = JSON.parse(raw);
+    // 只保留形状正确的自有条目（解析结果里混入的数组、原型键等都丢弃）
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('格式不是对象');
+    const out: Record<string, Correction> = {};
+    for (const [k, v] of Object.entries(parsed)) {
+      if (isUnsafeKey(k) || !v || typeof v !== 'object') continue;
+      out[k] = v as Correction;
+    }
+    return out;
+  } catch (err) {
+    // 解析失败时不能当作“空库”返回：那样下一次写入会把整个库文件覆盖成只有一条，历史学习记录全部丢失。
+    // 先把坏文件改名留底，再从空库起步，并打出醒目日志。
+    const backup = `${FILE}.corrupt-${Date.now()}`;
+    try { fs.renameSync(FILE, backup); } catch { /* 改名也失败就只告警 */ }
+    console.error('[learnedCorrections] 库文件解析失败，已留底为', backup, '并从空库起步：', (err as Error).message);
     return {};
   }
 }
 
-/** 写入落盘 */
-function persist(corrections: Record<string, Correction>): void {
+/** 写入落盘：先写临时文件再改名，避免写到一半崩溃留下半截文件（删除条目的路由也用它，别再各写各的） */
+export function persistCorrections(corrections: Record<string, Correction>): void {
   try {
     ensureFile();
-    fs.writeFileSync(FILE, JSON.stringify(corrections, null, 2), 'utf-8');
+    const tmp = `${FILE}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify(corrections, null, 2), 'utf-8');
+    fs.renameSync(tmp, FILE);
   } catch (err) {
     // data 目录无写权限时降级为内存模式（不阻塞审核业务，但重启会丢失学习记录）
     console.warn('[learnedCorrections] 写入失败，降级为内存模式（需修复 data 目录权限）：', (err as Error).message);
@@ -57,17 +84,18 @@ function persist(corrections: Record<string, Correction>): void {
 /**
  * 添加或累加一条纠错记录（key = original）
  */
-export function addCorrection(original: string, suggestion: string, source: string = 'user'): Correction {
+export function addCorrection(original: string, suggestion: string, source: string = 'user'): Correction | null {
+  if (!original || isUnsafeKey(original)) return null;
   const all = loadCorrections();
-  const existing = all[original];
-  if (existing) {
+  if (Object.hasOwn(all, original)) {
+    const existing = all[original];
     existing.count += 1;
     existing.lastSeen = new Date().toISOString();
     if (suggestion && suggestion !== existing.suggestion) {
       // 用户提供了不同建议，采纳新建议
       existing.suggestion = suggestion;
     }
-    persist(all);
+    persistCorrections(all);
     return existing;
   }
   const created: Correction = {
@@ -78,7 +106,7 @@ export function addCorrection(original: string, suggestion: string, source: stri
     source,
   };
   all[original] = created;
-  persist(all);
+  persistCorrections(all);
   return created;
 }
 

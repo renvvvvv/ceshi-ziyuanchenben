@@ -164,3 +164,20 @@ export function debounce<T extends (...args: any[]) => any>(
     timeout = setTimeout(() => func(...args), wait);
   };
 }
+
+/**
+ * 把 Blob 保存成文件（浏览器端下载）。
+ * 链接要先进 DOM 再点击（部分浏览器的 Safari/旧版 Firefox 对游离的 <a> 不触发下载）；
+ * blob 地址延迟释放：点击后立刻 revoke，有的浏览器会连带取消这次下载。
+ */
+export function downloadBlob(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60 * 1000);
+}

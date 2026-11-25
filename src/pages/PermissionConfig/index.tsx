@@ -978,7 +978,10 @@ function PermissionConfig() {
               placeholder="输入姓名 / 工号 / 邮箱 / 手机号"
               value={feishuQuery}
               onChange={(e) => setFeishuQuery(e.target.value)}
-              onPressEnter={handleFeishuSearch}
+              onKeyDown={(e) => {
+                // 中文输入法里按回车是“上屏”：组合期间（isComposing）的回车不能当成搜索
+                if (e.key === 'Enter' && !e.nativeEvent.isComposing) handleFeishuSearch();
+              }}
               prefix={<SearchOutlined style={{ color: '#9d9ab8' }} />}
               style={{ flex: 1 }}
               allowClear

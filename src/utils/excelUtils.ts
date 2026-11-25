@@ -1,6 +1,6 @@
 import * as XLSX from 'xlsx';
 import dayjs from 'dayjs';
-import { type ResourceInput, type ResourceReport, normalizeReport } from './resourceCalculator';
+import { type ResourceInput, type ResourceReport, normalizeReport, extractStandardReport } from './resourceCalculator';
 
 // ============ 模板列名（匹配 V20 CSV 格式） ============
 
@@ -443,6 +443,9 @@ export interface BatchReportRow {
 export async function runBatchCalculation(inputs: ParsedInput[]): Promise<BatchReportRow[]> {
   // 构建合法 input 列表
   const validInputs: ResourceInput[] = [];
+  // 每条合法输入在导入数据里的原始行号（从 1 起）。结果的序号统一按它编号：此前校验失败的行按原始行号、
+  // 算出来的行按“合法输入里的序号”，有校验失败的行时两套序号并存，会出现重复序号
+  const origIndexOf: number[] = [];
   const errors: BatchReportRow[] = [];
 
   for (let i = 0; i < inputs.length; i++) {
@@ -460,44 +463,69 @@ export async function runBatchCalculation(inputs: ParsedInput[]): Promise<BatchR
       total_cabinets: item.total_cabinets!,
       ac_type: item.ac_type || '传统风冷',
     });
+    origIndexOf.push(i + 1);
   }
 
-  if (validInputs.length === 0) return errors;
+  if (validInputs.length === 0) return errors.sort((a, b) => a.index - b.index);
 
   const batchId = Date.now().toString();
 
-  // 调用后端群算 API（失败则回退本地计算）
-  try {
-    const res = await fetch('/api/resource-calc/batch', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ inputs: validInputs, batch_id: batchId }),
-    });
-    if (res.ok) {
-      const json = await res.json() as { success: boolean; data: (Record<string, unknown>)[] };
-      const normalized: BatchReportRow[] = json.data.map((item: Record<string, unknown>) => {
-        if (item.error) return { index: Number(item.index), error: String(item.error) };
-        const idx = Number(item.index);
-        const input = validInputs[idx - 1] || validInputs[0];
-        const report = normalizeReport(item, input);
-        return { index: idx, input, report };
-      });
-      return [...normalized, ...errors];
-    }
-  } catch {}
-
-  // 回退：本地计算（不存库）
-  const { calculateResource } = await import('./resourceCalculator');
-  const localResults = validInputs.map((input, idx) => {
+  // 调后端群算接口。后端单次最多 200 条，这里自动拆成多批发送，结果按原来的行号合并。
+  // 后端没算出来的行在结果里标出原因——不再悄悄改用本地的旧版模型继续出数（两套模型结果差很多，
+  // 旧模型的结果会被当成正式结果用，而且不入库）。
+  const CHUNK = 200;
+  const out: BatchReportRow[] = [];
+  for (let i = 0; i < validInputs.length; i += CHUNK) {
+    const chunk = validInputs.slice(i, i + CHUNK);
+    let rows: Array<Record<string, unknown>> | null = null;
     try {
-      const report = calculateResource(input);
-      return { index: idx + 1, input, report };
-    } catch (e) {
-      return { index: idx + 1, input, error: String(e) };
+      const res = await fetch('/api/resource-calc/batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ inputs: chunk, batch_id: batchId }),
+      });
+      if (res.ok) {
+        const json = await res.json() as { success?: boolean; data?: Array<Record<string, unknown>>; error?: string };
+        if (json.success && Array.isArray(json.data)) {
+          rows = json.data;
+        } else {
+          chunk.forEach((_, k) => out.push({ index: origIndexOf[i + k] ?? i + k + 1, error: json.error || '后端返回的数据格式不对，没有算出结果' }));
+        }
+      } else {
+        const err = await res.json().catch(() => ({})) as { error?: string; message?: string };
+        const why = describeBatchError(res.status, err.error || err.message);
+        chunk.forEach((_, k) => out.push({ index: origIndexOf[i + k] ?? i + k + 1, error: why }));
+        if (res.status === 401 || res.status === 403) {
+          // 登录失效 / 没权限：后面几批结果一样，不用再发
+          validInputs.slice(i + CHUNK).forEach((_, k) => out.push({ index: origIndexOf[i + CHUNK + k] ?? i + CHUNK + k + 1, error: why }));
+          break;
+        }
+      }
+    } catch (e: any) {
+      const why = `网络异常，没有算出结果（${e?.message || '后端没有响应'}）`;
+      chunk.forEach((_, k) => out.push({ index: origIndexOf[i + k] ?? i + k + 1, error: why }));
     }
-  });
-  return [...localResults, ...errors];
+    if (rows) {
+      rows.forEach((item) => {
+        if (item.error) { out.push({ index: origIndexOf[i + Number(item.index) - 1] ?? i + Number(item.index), error: String(item.error) }); return; }
+        const idx = Number(item.index);
+        const input = chunk[idx - 1] || chunk[0];
+        // 后端每条返回的是多版本包装结构，要先取“标准”版本
+        out.push({ index: origIndexOf[i + idx - 1] ?? i + idx, input, report: normalizeReport(extractStandardReport(item), input) });
+      });
+    }
+  }
+  return [...out, ...errors].sort((a, b) => a.index - b.index);
+}
+
+/** 群算接口失败时给用户看的原因 */
+function describeBatchError(status: number, detail?: string): string {
+  if (status === 401) return '登录已失效，请重新登录后再群算';
+  if (status === 403) return '当前账号没有执行计算的权限';
+  if (status === 429) return '请求过于频繁，请稍后重试';
+  if (status === 400 || status === 413) return `参数没有被后端接受：${detail || '请检查导入数据'}`;
+  return `后端计算服务没有响应（HTTP ${status}${detail ? '：' + detail : ''}），请稍后重试`;
 }
 
 export function exportBatchResultsToExcel(batchResults: BatchReportRow[]): void {

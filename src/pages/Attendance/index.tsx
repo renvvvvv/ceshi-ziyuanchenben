@@ -1,11 +1,25 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useCallback, useState, useMemo, useEffect, useRef } from 'react';
 import { Table, Select, DatePicker, Button, Modal, Tag, Empty, Radio, message, InputNumber, Form, Tabs, Input, Space, Tooltip } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { DownloadOutlined, EyeOutlined, CalendarOutlined, PrinterOutlined, FolderOutlined, UserOutlined, EditOutlined, ThunderboltOutlined, ToolOutlined, PlusOutlined, SyncOutlined } from '@ant-design/icons';
+import {
+  DownloadOutlined,
+  EyeOutlined,
+  CalendarOutlined,
+  PrinterOutlined,
+  FolderOutlined,
+  UserOutlined,
+  EditOutlined,
+  ThunderboltOutlined,
+  ToolOutlined,
+  PlusOutlined,
+  SyncOutlined,
+  TeamOutlined,
+} from '@ant-design/icons';
 import dayjs from 'dayjs';
 import * as XLSX from 'xlsx';
-import { useData } from '../../store/DataContext';
+import { useData, type AttendanceAdjustment } from '../../store/DataContext';
 import { useIsMobile } from '../../hooks/useIsMobile';
+import TripOverview from './TripOverview';
 import type { TeamMember, Project, HistoricalProject } from '../../types';
 
 // ============================================================
@@ -53,9 +67,10 @@ function Attendance() {
   const { teamMembers, projects, historyProjects, attendanceAdjustments, setAttendanceAdjustments, updateTeamMember, reload } = useData();
   const isMobile = useIsMobile();
   // 自然月口径：默认当月（原 19 日周期反推逻辑随周期统一移除）
+  const [cycleType] = useState<CycleType>('month'); // 保留单值（历史19日周期已移除），子组件 props 兼容
+  const setCycleType = useCallback((_: CycleType) => { /* 自然月单值模式：周期不再可切换 */ }, []);
   const [monthFilter, setMonthFilter] = useState<dayjs.Dayjs | null>(() => dayjs().startOf('month'));
-  const [cycleType, setCycleType] = useState<CycleType>('month');
-  const [memberFilter, setMemberFilter] = useState('全部');
+    const [memberFilter, setMemberFilter] = useState('全部');
   const [projectFilter, setProjectFilter] = useState('全部');
   const [previewOpen, setPreviewOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('statistics');
@@ -187,6 +202,8 @@ function Attendance() {
         setAttendanceAdjustments((prev) => ({
           ...prev,
           [key]: {
+            // 先带上已有记录：录入页存过的项目岗位、实际出勤不能被这次校准清空（后端是整条覆盖）
+            ...prev[key],
             projectStart: values.projectStart.format('YYYY-MM-DD'),
             projectEnd: values.projectEnd.format('YYYY-MM-DD'),
             leaveDays: values.leaveDays,
@@ -206,7 +223,7 @@ function Attendance() {
     setBatchAdj(initAdj);
     const initPos: Record<string, string> = {};
     teamMembers.forEach((m) => {
-      initPos[m.id] = m.position || POSITION_MAP[m.id] || '测试工程师';
+      initPos[m.id] = m.position || POSITION_MAP[m.employeeId] || '测试工程师';
     });
     setBatchPos(initPos);
     setBatchTab('attendance');
@@ -223,7 +240,7 @@ function Attendance() {
     filteredRows.forEach((r) => { rowMap.set(`${r.memberId}|${r.projectName}`, r); });
 
     // 1) 组装批量考勤变更
-    const adjUpdates: Record<string, { projectStart: string; projectEnd: string; leaveDays: number }> = {};
+    const adjUpdates: Record<string, AttendanceAdjustment> = {};
     Object.entries(batchAdj).forEach(([compositeKey, v]) => {
       const sepIdx = compositeKey.indexOf('|');
       if (sepIdx < 0) return;
@@ -237,9 +254,10 @@ function Attendance() {
 
       const adjKey = `${memberId}-${projectName}-${cycleStart}`;
       const existing = attendanceAdjustments[adjKey];
+      // 只写请假天数，并带上已有记录的其它字段。项目起止日期不再照抄（批量校准里也改不了日期）：
+      // 抄一份存起来，项目改期后应出勤还按旧日期算。日期只有人工填过才存（见录入页与人工校准）
       adjUpdates[adjKey] = {
-        projectStart: existing?.projectStart ?? original.projectStart,
-        projectEnd: existing?.projectEnd ?? original.projectEnd,
+        ...existing,
         leaveDays: v.leaveDays ?? existing?.leaveDays ?? original.leaveDays,
       };
       adjCount++;
@@ -254,7 +272,7 @@ function Attendance() {
     Object.entries(batchPos).forEach(([memberId, newPos]) => {
       const m = teamMembers.find((x) => x.id === memberId);
       if (!m) return;
-      const current = m.position || POSITION_MAP[memberId] || '测试工程师';
+      const current = m.position || POSITION_MAP[m.employeeId] || '测试工程师';
       if (newPos !== current) {
         updateTeamMember(memberId, { position: newPos });
         posCount++;
@@ -277,7 +295,7 @@ function Attendance() {
     const result: AttendanceRow[] = [];
     const isAll = cycleStart === '2000-01-01'; // 全部模式：跨月聚合
     teamMembers.forEach((m) => {
-      const memberPosition = m.position || POSITION_MAP[m.id] || '测试工程师';
+      const memberPosition = m.position || POSITION_MAP[m.employeeId] || '测试工程师';
       // 全部模式：聚合该人所有月份的考勤记录（按项目归并）
       const aggByProject = new Map<string, { attend: number | null; leave: number; start: string; end: string }>();
       if (isAll) {
@@ -449,8 +467,12 @@ function Attendance() {
         return <Tag style={{ background: style.bg, color: style.color, border: 'none', fontSize: 11 }}>{v}</Tag>;
       }
     },
-    { title: '项目周期', width: 180,
-      render: (_: unknown, r: AttendanceNode) => <span style={{ color: '#6b6892', fontSize: 12 }}>{r.projectStart} ~ {r.projectEnd}</span>
+    { title: '项目周期', width: isMobile ? 150 : 180,
+      render: (_: unknown, r: AttendanceNode) => (
+        <span style={{ color: '#6b6892', fontSize: 12, whiteSpace: 'nowrap' }}>
+          {isMobile ? `${(r.projectStart || '').slice(5)} ~ ${(r.projectEnd || '').slice(5)}` : `${r.projectStart} ~ ${r.projectEnd}`}
+        </span>
+      )
     },
     { title: '项目总天数', dataIndex: 'projectTotalDays', width: 100, align: 'center',
       render: (v: number, record) => <span style={{ color: record.children ? '#6366f1' : '#46436a', fontWeight: record.children ? 500 : 400 }}>{v}</span>
@@ -561,6 +583,11 @@ function Attendance() {
               onSync={reload}
             />,
           },
+          {
+            key: 'trips',
+            label: <span><TeamOutlined /> 出差概览</span>,
+            children: <TripOverview />,
+          },
         ]}
       />
 
@@ -621,7 +648,7 @@ function Attendance() {
           <Form.Item name="memberId" label="选择人员" rules={[{ required: true, message: '请选择人员' }]}>
             <Select placeholder="请选择人员" showSearch optionFilterProp="label"
               onChange={handleMemberChange}
-              options={teamMembers.map((m) => ({ value: m.id, label: `${m.name}（${POSITION_MAP[m.id] || '测试工程师'}）` }))}
+              options={teamMembers.map((m) => ({ value: m.id, label: `${m.name}（${m.position || POSITION_MAP[m.employeeId] || '测试工程师'}）` }))}
             />
           </Form.Item>
           <Form.Item name="projectName" label="选择项目" rules={[{ required: true, message: '请选择项目' }]}>
@@ -686,7 +713,7 @@ function Attendance() {
                   </div>
                   <Table<AttendanceRow>
                     size="small"
-                    pagination={{ pageSize: 50, showTotal: (t) => `共 ${t} 条` }}
+                    pagination={{ pageSize: 50, showTotal: (t) => `共 ${t} 条`, hideOnSinglePage: true }}
                     scroll={{ y: 360 }}
                     dataSource={filteredRows}
                     rowKey={(r) => `${r.memberId}|${r.projectName}`}
@@ -764,7 +791,7 @@ function Attendance() {
                       { title: '工号', dataIndex: 'employeeId', width: 100 },
                       { title: '当前岗位', key: 'curPos', width: 140,
                         render: (_v, r) => {
-                          const cur = r.position || POSITION_MAP[r.id] || '测试工程师';
+                          const cur = r.position || POSITION_MAP[r.employeeId] || '测试工程师';
                           const style = POSITION_STYLES[cur];
                           return style ? <Tag style={{ background: style.bg, color: style.color, border: 'none', margin: 0 }}>{cur}</Tag> : <span>{cur}</span>;
                         },
@@ -773,7 +800,7 @@ function Attendance() {
                         render: (_v, r) => (
                           <Select
                             size="small"
-                            value={batchPos[r.id] ?? r.position ?? POSITION_MAP[r.id] ?? '测试工程师'}
+                            value={batchPos[r.id] ?? r.position ?? POSITION_MAP[r.employeeId] ?? '测试工程师'}
                             onChange={(nv) => setBatchPos((prev) => ({ ...prev, [r.id]: nv }))}
                             style={{ width: '100%' }}
                             options={['助理测试工程师', '测试工程师', '项目主测', '项目经理'].map((v) => ({ value: v, label: v }))}
@@ -782,7 +809,7 @@ function Attendance() {
                       },
                       { title: '状态', key: 'dirty', width: 70, align: 'center' as const,
                         render: (_v, r) => {
-                          const cur = r.position || POSITION_MAP[r.id] || '测试工程师';
+                          const cur = r.position || POSITION_MAP[r.employeeId] || '测试工程师';
                           const nv = batchPos[r.id] ?? cur;
                           return nv !== cur
                             ? <Tag color="orange" style={{ margin: 0 }}>已修改</Tag>
@@ -848,7 +875,7 @@ function StatisticsView(props: {
       <style>{`.att-row-low > td { background: rgba(220,38,38,0.04) !important; }`}</style>
       <div style={{ background: '#f6f5fc', border: '1px solid #e9e7f4', borderRadius: 12, overflow: 'hidden' }}>
         <Table<AttendanceNode> columns={columns} dataSource={treeData}
-          pagination={{ pageSize: 20, showSizeChanger: true, pageSizeOptions: ['10', '20', '50'], showTotal: (t) => `共 ${t} 条` }}
+          pagination={{ pageSize: 20, showSizeChanger: true, pageSizeOptions: ['10', '20', '50'], showTotal: (t) => `共 ${t} 条`, hideOnSinglePage: isMobile }}
           size="small" scroll={{ x: 1050 }}
           expandable={{ defaultExpandAllRows: false, childrenColumnName: 'children' }}
           rowClassName={(record) => (record.children || record.rate >= 0.9) ? '' : 'att-row-low'}
@@ -885,7 +912,7 @@ function ProjectEntryView(props: {
   monthFilter: dayjs.Dayjs | null; setMonthFilter: (v: dayjs.Dayjs | null) => void;
   cycleStart: string; cycleEnd: string; cycleLabel: string;
   projectOptions: string[];
-  onSync?: () => void | Promise<unknown>;
+  onSync?: () => void | boolean | Promise<void | boolean>;
 }) {
   const { teamMembers, projects, historyProjects, attendanceAdjustments, setAttendanceAdjustments, cycleStart, cycleEnd, cycleLabel, projectOptions } = props;
   const isMobile = useIsMobile();
@@ -948,7 +975,7 @@ function ProjectEntryView(props: {
       let baseLeave = 0;
       if (m.leaveStartDate && m.leaveEndDate) baseLeave = overlapDays(m.leaveStartDate, m.leaveEndDate, duty.start, duty.end);
       const leaveDays = adj?.leaveDays ?? baseLeave;
-      const memberPos = m.position || POSITION_MAP[m.id] || '测试工程师';
+      const memberPos = m.position || POSITION_MAP[m.employeeId] || '测试工程师';
       const position = adj?.position || memberPos;
       const attendDays = adj?.attendDays != null ? Math.min(adj.attendDays, onDutyDays) : Math.max(onDutyDays - leaveDays, 0);
       rows.push({ memberId: m.id, memberName: m.name, projectStart: finalStart, projectEnd: finalEnd, onDutyDays, attendDays, leaveDays, position, entered: adj?.attendDays != null });
@@ -975,12 +1002,11 @@ function ProjectEntryView(props: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedProject, cycleStart]);
 
-  const handleSave = async () => {
-    setSaving(true);
+  const handleSave = () => {
     let count = 0;
 
     // 优化：先组装所有变更，再一次性 setState（避免循环里 N 次重渲染）
-    const adjUpdates: Record<string, { projectStart: string; projectEnd: string; leaveDays: number; position?: string; attendDays?: number }> = {};
+    const adjUpdates: Record<string, AttendanceAdjustment> = {};
     const newSaved = new Set(savedKeys);
 
     projectRows.forEach((r) => {
@@ -1002,8 +1028,9 @@ function ProjectEntryView(props: {
       if (!hasChange) return;
       const existing = attendanceAdjustments[key];
       adjUpdates[key] = {
-        projectStart: edit.projectStart ?? existing?.projectStart ?? r.projectStart,
-        projectEnd: edit.projectEnd ?? existing?.projectEnd ?? r.projectEnd,
+        // 起止日期：本次手改过、或以前人工填过才存；否则不存，算应出勤时跟随项目当前的日期
+        projectStart: edit.projectStart ?? existing?.projectStart,
+        projectEnd: edit.projectEnd ?? existing?.projectEnd,
         leaveDays: edit.leaveDays ?? existing?.leaveDays ?? r.leaveDays,
         position: edit.position ?? existing?.position ?? r.position,
         attendDays: edit.attendDays ?? existing?.attendDays,
@@ -1027,8 +1054,10 @@ function ProjectEntryView(props: {
     if (!props.onSync) return;
     setSyncing(true);
     try {
-      await props.onSync();
-      message.success('已同步最新的人员与项目指派');
+      const ok = await props.onSync();
+      // loadFromBackend 内部吞错从不 reject——必须按返回值区分真假成功
+      if (ok === false) message.warning('同步失败，当前展示的是本地缓存数据');
+      else message.success('已同步最新的人员与项目指派');
     } catch {
       message.error('同步失败，请重试');
     } finally {
@@ -1163,7 +1192,10 @@ function ProjectEntryView(props: {
                     // 有录入值用录入值，否则按 应出勤-请假 推算
                     const leave = editing[r.memberId]?.leaveDays ?? r.leaveDays ?? 0;
                     const fallback = Math.max(duty - leave, 0);
-                    const entered = editing[r.memberId]?.attendDays ?? r.attendDays;
+                    const ed = editing[r.memberId];
+                    // 本次改过请假、又没有手动改过实际出勤：按“应出勤 − 请假”推算；其余情况用已录入的值
+                    const entered = ed?.attendDays !== undefined ? ed.attendDays
+                      : (ed?.leaveDays !== undefined ? fallback : r.attendDays);
                     return (
                       <InputNumber
                         size="small" min={0} max={duty || 365}
@@ -1180,8 +1212,9 @@ function ProjectEntryView(props: {
                     const e = editing[r.memberId]?.projectEnd ?? r.projectEnd;
                     const dutyR = dutyRange(s || cycleStart, e || cycleEnd, cycleStart, cycleEnd, today); const duty = dutyR ? daysBetween(dutyR.start, dutyR.end) : 0;
                     const leave = editing[r.memberId]?.leaveDays ?? r.leaveDays ?? 0;
-                    const entered = editing[r.memberId]?.attendDays ?? r.attendDays;
-                    const attend = entered != null ? Math.min(entered, duty) : Math.max(duty - leave, 0);
+                    const ed = editing[r.memberId];
+                    // 与“实际出勤”列同一口径：手改过用手改值，否则随请假联动
+                    const attend = ed?.attendDays !== undefined ? Math.min(ed.attendDays, duty) : Math.max(duty - leave, 0);
                     const rate = duty > 0 ? attend / duty : 0;
                     const pct = (rate * 100).toFixed(0) + '%';
                     const color = rate >= 0.95 ? '#16a34a' : rate >= 0.9 ? '#d97706' : '#dc2626';

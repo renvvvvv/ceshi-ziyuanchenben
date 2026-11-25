@@ -17,17 +17,17 @@ function parseIdOrNull(raw: string): number | null {
   return n;
 }
 
-// 知识库 GET 可匿名（看），POST/PUT/DELETE 必须登录
+// 知识库 GET 也必须登录：文档正文是内部资料，公网上不能匿名可读（此前“可匿名看”是演示模式的设计）
 // 不强制 requireRole('管理者')，因为编辑者也可能写文档
 
 /** GET /api/kb — 获取所有 KB 文档（按 sort_order） */
-router.get('/', asyncHandler(async (_req, res) => {
+router.get('/', requireAuth, asyncHandler(async (_req, res) => {
   const rows = await db.allAsync('SELECT * FROM kb_documents ORDER BY parent_id NULLS FIRST, sort_order, id');
   res.json({ success: true, data: rows });
 }));
 
 /** GET /api/kb/:id — 获取单个 KB 文档 */
-router.get('/:id', asyncHandler(async (req, res) => {
+router.get('/:id', requireAuth, asyncHandler(async (req, res) => {
   const id = parseIdOrNull(req.params.id);
   if (id === null) { res.status(400).json({ error: 'id 必须为正整数' }); return; }
   const row = await db.getAsync('SELECT * FROM kb_documents WHERE id=$1', id);

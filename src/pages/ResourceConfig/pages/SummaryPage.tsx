@@ -11,6 +11,7 @@ import type { ChangeEvent } from 'react';
 import { Button, Card, Col, Empty, Modal, Row, Space, Statistic, Tag, Tooltip, Typography, message } from 'antd';
 import { BarChartOutlined, DownloadOutlined, UploadOutlined } from '@ant-design/icons';
 import { useAuth } from '../../../store/AuthContext';
+import { downloadBlob } from '../../../utils/common';
 import { computeInsAllocation, deliveredSummary } from '../calc';
 import type { RcStore } from '../store';
 import { num } from '../types';
@@ -83,13 +84,7 @@ export default function SummaryPage({ store }: { store: RcStore }) {
   /** 导出全部项目完整配置（store.config 原样 JSON） */
   const exportJson = () => {
     const blob = new Blob([JSON.stringify(store.config, null, 2)], { type: 'application/json;charset=utf-8' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = '资源配置-全部项目.json';
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(a.href);
+    downloadBlob(blob, '资源配置-全部项目.json');
     message.success(`已导出 ${projects.length} 个项目的完整配置`);
   };
 

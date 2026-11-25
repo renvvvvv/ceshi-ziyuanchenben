@@ -3,7 +3,7 @@
  * 一键聚合后端运行日志 / 宿主组件日志（docker/journal/资源）/ 图纸任务日志 / 数据库健康
  * 为一份快照；AI 解析错误时间线与根因建议；历史快照可追溯、可导出。
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Card, Table, Button, message, Modal, Tag, Space, Select, Input, Tooltip,
   Typography, Empty, Spin, Timeline, Alert, Descriptions, Tabs,
@@ -58,7 +58,8 @@ export default function SystemLogs() {
   const [detail, setDetail] = useState<SnapshotDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [activeComp, setActiveComp] = useState<string>('');
-  const [analyzing, setAnalyzing] = useState(false);
+  const [analyzingId, setAnalyzingId] = useState<string | null>(null); // 正在解析的快照 id：只在那张卡片上转圈
+  const detailSeqRef = useRef(0);                                      // 详情请求序号：后点的请求作废先点的
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -100,31 +101,34 @@ export default function SystemLogs() {
   };
 
   const openDetail = async (id: string) => {
+    const seq = ++detailSeqRef.current;
     setDetail(null); // 防失败时残留上一个快照内容
     setDetailOpen(true); setDetailLoading(true); setActiveComp('');
     try {
       const r = await request<{ success: boolean; snapshot: SnapshotDetail }>(`/syslogs/${id}`);
+      if (seq !== detailSeqRef.current) return; // 期间又打开了别的快照，这次的结果作废
       if (r?.snapshot) {
         setDetail(r.snapshot);
         if (r.snapshot.components?.length) setActiveComp(r.snapshot.components[0].name);
       }
-    } catch { message.error('读取快照失败'); }
-    finally { setDetailLoading(false); }
+    } catch { if (seq === detailSeqRef.current) message.error('读取快照失败'); }
+    finally { if (seq === detailSeqRef.current) setDetailLoading(false); }
   };
 
   const analyze = async () => {
     if (!detail) return;
     const targetId = detail.id; // 闭包捕获：响应到达时校验仍是这个快照（防结果串台）
-    setAnalyzing(true);
+    setAnalyzingId(targetId);
     try {
-      const r = await request<{ success: boolean; analysis?: AiAnalysis; message?: string }>(
+      const r = await request<{ success: boolean; analysis?: AiAnalysis; model?: string; message?: string }>(
         `/syslogs/${targetId}/analyze`, { method: 'POST', timeout: 180000 });
       if (r?.success && r.analysis) {
-        setDetail(prev => prev && prev.id === targetId ? { ...prev, ai_analysis: r.analysis!, ai_model: 'glm-5.2' } : prev);
+        setDetail(prev => prev && prev.id === targetId ? { ...prev, ai_analysis: r.analysis!, ai_model: r.model || 'glm-5.2' } : prev);
         message.success('AI 解析完成');
+        load(); // 列表里的“已解析”标记要跟着变，不能等用户手动刷新
       } else message.error(r?.message || 'AI 解析失败');
     } catch (e: any) { message.error(e?.message || 'AI 解析失败（可能超时）'); }
-    finally { setAnalyzing(false); }
+    finally { setAnalyzingId(null); }
   };
 
   const columns = [
@@ -213,18 +217,21 @@ export default function SystemLogs() {
               title={<Space><ThunderboltOutlined style={{ color: '#6366f1' }} /><span>AI 故障解析</span>{ai && sev && <Tag color={sev.color} icon={sev.icon} style={{ margin: 0 }}>严重度：{ai.severity}</Tag>}</Space>}
               extra={canOperate && (
                 <Button size="small" type="primary" ghost icon={<ThunderboltOutlined />}
-                  loading={analyzing} onClick={analyze} disabled={!!ai}>
+                  loading={analyzingId === detail.id} onClick={analyze} disabled={!!ai}>
                   {ai ? '已解析' : 'AI 解析（约 1-2 分钟）'}
                 </Button>
               )}>
-              {!ai && !analyzing ? (
+              {!ai && analyzingId !== detail.id ? (
                 <Typography.Text type="secondary" style={{ fontSize: 12.5 }}>
                   AI 将分析各组件日志：提取错误时间线、识别异常模式（重启/超时/5xx/资源压力）、判断根因并给出处置建议。日志无明显异常时会如实说明。
                 </Typography.Text>
-              ) : analyzing ? (
+              ) : analyzingId === detail.id ? (
                 <Space><Spin size="small" /><Typography.Text type="secondary" style={{ fontSize: 12 }}>AI 正在分析各组件日志…</Typography.Text></Space>
               ) : ai && (
                 <div>
+                  <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 6 }}>
+                    解析模型：{detail.ai_model || '—'}{detail.ai_at ? ` · ${new Date(detail.ai_at).toLocaleString('zh-CN', { hour12: false })}` : ''}
+                  </Typography.Text>
                   {ai.summary && <Alert type={ai.severity === '高' ? 'error' : ai.severity === '中' ? 'warning' : 'success'}
                     showIcon message={ai.summary} style={{ marginBottom: 10 }} />}
                   {ai.timeline?.length > 0 && (

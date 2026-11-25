@@ -387,12 +387,16 @@ export function calculateResource(input: ResourceInput): ResourceReport {
   ];
 
   const cabCount = normalizedInput.total_cabinets;
+  const infoSegs = normalizedInput.cabinet_power_segments || [];
 
   return {
     项目信息: {
       总容量: `${normalizedInput.total_mw}MW`,
       工期: `${dur}天`,
-      单机柜功率: `${normalizedInput.cabinet_power}kW`,
+      // 多功率段照实显示分段，而不是只显示一个平均功率
+      单机柜功率: infoSegs.length > 1
+        ? infoSegs.map(s => `${s.power}kW×${s.count}`).join('+')
+        : `${normalizedInput.cabinet_power}kW`,
       总机柜: `${normalizedInput.total_cabinets}个`,
       空调: normalizedInput.ac_type,
     },
@@ -429,6 +433,33 @@ export function calculateResource(input: ResourceInput): ResourceReport {
 // ============ 报告标准化 ============
 
 /** 将 Python 返回的原始报告或 TS 计算报告标准化，补全缺失的衍生字段 */
+/**
+ * 计算脚本默认输出的是多版本包装 { 多版本对比, 详细结果: { 版本名: 结果 } }：这里取“标准”版本的结果。
+ * 单算、群算的每一条、历史批次里的每一条都是这个包装——不解包直接喂给 normalizeReport，各链路全是 undefined。
+ */
+export function extractStandardReport(raw: Record<string, unknown>): Record<string, unknown> {
+  const detail = raw['详细结果'];
+  if (raw['多版本对比'] && detail && typeof detail === 'object') {
+    const results = detail as Record<string, Record<string, unknown>>;
+    const keys = Object.keys(results);
+    const stdKey = keys.find(k => k.includes('标准')) || keys[0];
+    if (results[stdKey]) return results[stdKey];
+  }
+  return raw;
+}
+
+/** 历史记录里的功率分段（后端存为 [[功率, 台数], ...]）还原成输入用的形态；旧记录没有分段时返回 undefined */
+export function segmentsFromHistory(raw: unknown): PowerSegment[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out: PowerSegment[] = [];
+  for (const g of raw) {
+    if (!Array.isArray(g) || g.length < 2) continue;
+    const power = Number(g[0]), count = Number(g[1]);
+    if (Number.isFinite(power) && power > 0 && Number.isFinite(count) && count > 0) out.push({ power, count });
+  }
+  return out.length ? out : undefined;
+}
+
 export function normalizeReport(raw: Record<string, unknown>, input: ResourceInput): ResourceReport {
   const dur = input.total_duration;
 

@@ -4,7 +4,8 @@ import {
   Table, Empty, Button, Modal, Form, Input, Select, DatePicker, InputNumber, message, Popconfirm, Space, Tag, Tooltip,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { PlusOutlined, LinkOutlined, SearchOutlined, EditOutlined, DeleteOutlined, EyeOutlined } from '@ant-design/icons';
+import { PlusOutlined, LinkOutlined, SearchOutlined, EditOutlined, DeleteOutlined, EyeOutlined, DownloadOutlined } from '@ant-design/icons';
+import * as XLSX from 'xlsx';
 import dayjs from 'dayjs';
 import StatusTag from '../../components/StatusTag';
 import { useData } from '../../store/DataContext';
@@ -78,7 +79,7 @@ function History() {
           !p.name.toLowerCase().includes(kw)
           && !p.customer.toLowerCase().includes(kw)
           && !(p.city || '').toLowerCase().includes(kw)
-          && !p.manager.toLowerCase().includes(kw)
+          && !(p.manager || '').toLowerCase().includes(kw)
         ) return false;
       }
       return true;
@@ -155,8 +156,10 @@ function History() {
           docLink: values.docLink || '',
           updatedAt: dayjs().format('YYYY-MM-DD HH:mm:ss'),
         };
-        addHistoryProject(newProject);
-        message.success('历史项目记录添加成功');
+        addHistoryProject(newProject, (done, reason) => {
+          if (done) message.success('历史项目记录添加成功');
+          else message.error(reason || '历史项目记录添加失败');
+        });
       }
       setModalOpen(false);
       setEditingProject(null);
@@ -164,6 +167,46 @@ function History() {
     } catch {
       // validation failed
     }
+  };
+
+  // 一键导出全部历史项目（Excel）：覆盖看板全部信息字段 + 交付状态判定
+  const handleExportAll = () => {
+    if (historyProjects.length === 0) {
+      Modal.warning({ title: '无数据', content: '当前没有历史项目可导出' });
+      return;
+    }
+    const deliveryTag = (p: HistoricalProject) => {
+      if (!p.actualDeliveryDate || !p.plannedDeliveryDate) return '';
+      if (p.actualDeliveryDate === p.plannedDeliveryDate) return '准时';
+      return p.actualDeliveryDate < p.plannedDeliveryDate ? '提前' : '延期';
+    };
+    const rows = [...historyProjects]
+      .sort((a, b) => (b.endDate || '').localeCompare(a.endDate || ''))
+      .map((p, i) => ({
+        '序号': i + 1,
+        '项目名称': p.name || '',
+        '城市': p.city || '',
+        '客户': p.customer || '',
+        '项目经理': p.manager || '',
+        '状态': p.status || '',
+        '开始日期': p.startDate || '',
+        '结束日期': p.endDate || '',
+        '计划交付': p.plannedDeliveryDate || '',
+        '实际交付': p.actualDeliveryDate || '',
+        '交付状态': deliveryTag(p),
+        'IT产出(MW)': p.itOutput ?? '',
+        '投入人力': p.plannedManpower ?? '',
+        '业务类型': p.businessType || '',
+        '项目描述': p.description || '',
+        '测试管理链接': p.docLink || '',
+      }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws['!cols'] = [{ wch: 5 }, { wch: 38 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 8 },
+      { wch: 11 }, { wch: 11 }, { wch: 11 }, { wch: 11 }, { wch: 8 }, { wch: 11 }, { wch: 9 }, { wch: 10 }, { wch: 40 }, { wch: 30 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, '历史项目');
+    XLSX.writeFile(wb, `历史项目全量_${dayjs().format('YYYYMMDD_HHmm')}.xlsx`);
+    message.success(`已导出 ${rows.length} 个历史项目`);
   };
 
   const columns: ColumnsType<HistoricalProject> = useMemo(
@@ -354,21 +397,35 @@ function History() {
           <h3>历史测试项目看板</h3>
           <p style={{ color: '#6b6892', marginTop: 4, fontSize: 13 }}>历史项目复盘分析</p>
         </div>
-        <Button
-          type="primary"
-          icon={<PlusOutlined />}
-          onClick={handleAdd}
-          style={{
-            background: 'linear-gradient(135deg, #6366f1, #818cf8)',
-            border: 'none',
-            fontFamily: 'var(--font-primary)',
-            fontWeight: 500,
-            borderRadius: 8,
-            boxShadow: '0 4px 14px rgba(99,102,241,0.35)',
-          }}
-        >
-          添加记录
-        </Button>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <Button
+            icon={<DownloadOutlined />}
+            onClick={handleExportAll}
+            style={{
+              fontFamily: 'var(--font-primary)',
+              fontWeight: 500,
+              borderRadius: 8,
+              height: 32,
+            }}
+          >
+            导出全部 Excel
+          </Button>
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={handleAdd}
+            style={{
+              background: 'linear-gradient(135deg, #6366f1, #818cf8)',
+              border: 'none',
+              fontFamily: 'var(--font-primary)',
+              fontWeight: 500,
+              borderRadius: 8,
+              boxShadow: '0 4px 14px rgba(99,102,241,0.35)',
+            }}
+          >
+            添加记录
+          </Button>
+        </div>
       </div>
 
       {/* 筛选与搜索 */}

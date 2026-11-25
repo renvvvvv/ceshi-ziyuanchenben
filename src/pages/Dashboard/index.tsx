@@ -123,7 +123,11 @@ function Dashboard() {
 
   // ===== 筛选后的项目（用于甘特图和环形图） =====
   const filteredProjects = useMemo(() => {
-    const all = [...projects, ...historyProjects];
+    // 同一个项目转“已完成”后会同时出现在两张表里（后端自动归档；用户点“归档”之前两边都在）。
+    // 按名称去掉历史表里的那一条，保留项目表里的（字段最新）——否则甘特图里同一项目出现两行，
+    // 点历史那一行还会按同编号跳到项目表里的另一个项目
+    const activeNames = new Set(projects.map((p) => (p.name || '').trim()));
+    const all = [...projects, ...historyProjects.filter((p) => !activeNames.has((p.name || '').trim()))];
     // 按来源前缀去重（两表独立自增 id 会撞号，纯 id 去重会静默丢历史项目）
     const seen = new Set<string>();
     const unique = all.filter((p) => {
@@ -146,10 +150,17 @@ function Dashboard() {
     const notStartedProjects = notStarted.length;
     // 待测试 IT 兆瓦数：所有未开始项目的 IT 产出总和（保留 1 位小数避免浮点和尾差）
     const pendingTestMW = +notStarted.reduce((sum, p) => sum + (p.itOutput || 0), 0).toFixed(1);
+    // 按名称去重：已完成的项目在点“归档”之前两张表里各有一条，不去重的话已完成数、总 IT 产出、地区分布都会重复计数
+    const completedSeen = new Set<string>();
     const completed = [
       ...projects.filter((p) => p.status === '已完成'),
       ...historyProjects.filter((p) => p.status === '已完成'),
-    ];
+    ].filter((p) => {
+      const k = (p.name || '').trim();
+      if (completedSeen.has(k)) return false;
+      completedSeen.add(k);
+      return true;
+    });
     const completedProjects = completed.length;
     const totalItOutput = completed.reduce((sum, p) => sum + (p.itOutput || 0), 0);
 
@@ -480,7 +491,7 @@ function Dashboard() {
             border: '1px solid #e9e7f4',
             boxShadow: '0 8px 24px rgba(99,102,241,0.10)',
             borderRadius: 12,
-            padding: '20px 24px',
+            padding: isMobile && displayData.upcomingProjects.length === 0 ? '12px 18px' : '20px 24px',
             position: 'relative',
             overflow: 'hidden',
           }}
@@ -496,7 +507,7 @@ function Dashboard() {
               boxShadow: '0 0 12px rgba(234, 88, 12,0.4)',
             }}
           />
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: isMobile && displayData.upcomingProjects.length === 0 ? 0 : 14 }}>
             <ClockCircleOutlined style={{ color: '#ea580c', fontSize: 16 }} />
             <span
               style={{
@@ -514,8 +525,8 @@ function Dashboard() {
             </span>
           </div>
           {displayData.upcomingProjects.length === 0 ? (
-            <div style={{ color: '#9d9ab8', fontSize: 13, padding: '8px 0', fontFamily: 'var(--font-primary)' }}>
-              暂无即将开始的项目
+            <div style={{ color: '#9d9ab8', fontSize: 13, padding: isMobile ? '0' : '8px 0', fontFamily: 'var(--font-primary)' }}>
+              {isMobile ? '未来 10 天暂无项目' : '暂无即将开始的项目'}
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>

@@ -2,11 +2,15 @@
 # ===== 备份定期清理（每周日 04:00 由 crontab 触发） =====
 # 策略：删除 7 天前的备份数据
 #   1) 日期目录 2026xxxx-xxxxxx（每日自动备份）
-#   2) 散落的手工备份包 *.tgz / *.tar.gz（backup.sh 的清理管不到这些，此脚本兜底）
+#   2) 散落在 backups/ 最外层的手工备份包 *.tgz / *.tar.gz（backup.sh 的清理管不到这些，此脚本兜底）
+#      ⚠️ 需要长期留存的手工备份不要直接放在 backups/ 最外层——放进子目录（如 backups/manual/）就不会被本脚本删
 # 安全约束：仅在备份目录内、仅一层深度、仅匹配日期目录/备份包模式，其余一概不动
 set -uo pipefail
 
-BACKUP_DIR="/root/test-platform/backups"
+# 备份目录：默认取本脚本所在项目的 backups/，可用环境变量 BACKUP_DIR 覆盖
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BACKUP_DIR="${BACKUP_DIR:-$(cd "${SCRIPT_DIR}/.." && pwd)/backups}"
+mkdir -p "${BACKUP_DIR}"
 LOG="${BACKUP_DIR}/cleanup.log"
 RETAIN_DAYS=7
 

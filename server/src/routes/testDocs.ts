@@ -6,11 +6,11 @@
  */
 import { Router } from 'express';
 import multer from 'multer';
-import { sendPreview, convertToPdf } from '../utils/preview.js';
+import { sendPreview, startBackgroundConvert } from '../utils/preview.js';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { existsSync, mkdirSync, unlinkSync } from 'fs';
-import { randomUUID } from 'crypto';
+import { existsSync, mkdirSync, statSync, unlinkSync } from 'fs';
+import { createHash, randomUUID } from 'crypto';
 import db from '../database.js';
 import { requireAuth, requireRole } from './auth.js';
 
@@ -69,10 +69,17 @@ router.get('/', requireAuth, async (_req, res) => {
  * POST /api/test-docs/upload
  * multipart 上传：file(文件) + title + category + description
  */
+const UPLOAD_EXT_ALLOW = new Set(['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'md', 'csv', 'png', 'jpg', 'jpeg', 'webp', 'zip', 'rar', '7z']);
 router.post('/upload', requireAuth, requireRole(['管理者', '编辑者']), upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ success: false, message: '未收到文件' });
+    }
+    // 扩展名白名单：与预览安全防线呼应，杜绝可执行内容入库
+    const upExt = (req.file.originalname.split('.').pop() || '').toLowerCase();
+    if (!UPLOAD_EXT_ALLOW.has(upExt)) {
+      try { unlinkSync(req.file.path); } catch { /* ignore */ }
+      return res.status(400).json({ success: false, message: `不支持的文件类型 .${upExt}（支持文档/图片/压缩包）` });
     }
     const { title, category, description } = req.body;
     if (!title || !category) {
@@ -82,7 +89,9 @@ router.post('/upload', requireAuth, requireRole(['管理者', '编辑者']), upl
     }
 
     const id = 'doc_' + Date.now() + '_' + randomUUID().slice(0, 8);
-    const fileName = req.file.originalname;
+    // multer 给的 originalname 是按 latin1 解出来的字节串：中文名要还原成 UTF-8（另两个上传接口已是这么做的）。
+    // 此前直接落库，下载时的文件名、预览标题都是乱码
+    const fileName = Buffer.from(req.file.originalname, 'latin1').toString('utf8');
     const fileSize = formatFileSize(req.file.size);
     const fileType = (fileName.split('.').pop() || '').toLowerCase();
     const filePath = req.file.filename; // multer 生成的磁盘文件名，直接用作 file_path
@@ -93,6 +102,10 @@ router.post('/upload', requireAuth, requireRole(['管理者', '编辑者']), upl
       id, title, category, description || '', fileName, fileSize, fileType, filePath,
     );
 
+    // 上传即后台预转：第一个打开者不再等 LibreOffice 冷转换
+    if (['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'wps', 'et', 'dps'].includes(fileType)) {
+      startBackgroundConvert(join(UPLOAD_DIR, filePath));
+    }
     res.json({
       success: true,
       data: {
@@ -160,14 +173,24 @@ router.delete('/:id', requireRole(['管理者']), async (req, res) => {
       return res.status(404).json({ success: false, message: '文件不存在' });
     }
     const doc = rows[0];
-    // 删除磁盘文件
-    const filePath = join(UPLOAD_DIR, doc.file_path);
-    try {
-      const { unlinkSync } = await import('fs');
-      if (existsSync(filePath)) unlinkSync(filePath);
-    } catch {}
-    // 删除 DB 记录
+    // 先删 DB 记录再删磁盘文件：DB 删除失败时文件仍在，避免留下指向缺失文件的行
     await db.runAsync('DELETE FROM test_docs WHERE id = $1', req.params.id);
+    const filePath = join(UPLOAD_DIR, doc.file_path);
+    // 顺带清理该文件的预览缓存（key 与 preview.ts 一致：md5(磁盘文件名 + mtime + size)）。
+    // 必须在删原文件之前取 mtime/size，并且每个缓存文件各自 try——
+    // 此前先删原文件再 stat（必然失败），三个缓存文件一个都没清掉，preview-cache 只增不减
+    const cacheFiles: string[] = [];
+    try {
+      const st = statSync(filePath);
+      const hash = createHash('md5').update(doc.file_path).update(String(st.mtimeMs)).update(String(st.size)).digest('hex');
+      for (const suffix of ['.pdf', '.pdf.preview.pdf', '.pdf.preview.pdf.skip']) {
+        cacheFiles.push(join(UPLOAD_DIR, 'preview-cache', hash + suffix));
+      }
+    } catch { /* 原文件已不在：没有缓存可清 */ }
+    try { if (existsSync(filePath)) unlinkSync(filePath); } catch { /* 文件不在或删不掉，记录已删，不阻塞 */ }
+    for (const f of cacheFiles) {
+      try { if (existsSync(f)) unlinkSync(f); } catch { /* 缓存不存在或删不掉，忽略 */ }
+    }
     res.json({ success: true });
   } catch (err: any) {
     console.error('[TestDocs] 删除失败:', err.message);

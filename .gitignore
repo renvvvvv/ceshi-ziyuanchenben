@@ -3,8 +3,13 @@ dist/
 server/node_modules/
 server/dist/
 server/data/
-server/.env
+# 密钥与环境配置：一律不入库（含 .env.bak-*、.env.e2e、.env.local 等），只保留示例文件
 .env
+.env.*
+!.env.example
+server/.env
+server/.env.*
+!server/.env.example
 *.log
 .DS_Store
 

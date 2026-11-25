@@ -159,18 +159,20 @@ try {
   }
 }
 
+// localUsers 是普通对象：按用户名/ id 取值一律先判断是不是自有属性，否则 id 传 "__proto__" / "constructor"
+// 会取到原型链上的对象，往上面写 manualRole 等于污染全局原型（之后所有登录者都会被当成管理者）
 // 保留 PRESET_USERS 常量名兼容旧代码引用（指向 localUsers 的只读视图）
 // 注意：新代码应直接使用 localUsers
 const PRESET_USERS: Record<string, { password: string; userId: string; name: string; role: SessionData['role'] }> =
   new Proxy({} as Record<string, { password: string; userId: string; name: string; role: SessionData['role'] }>, {
     get: (_t, prop: string) => {
-      const u = localUsers[prop];
+      const u = Object.hasOwn(localUsers, prop) ? localUsers[prop] : undefined;
       if (!u) return undefined;
       return { password: u.password, userId: u.userId, name: u.name, role: u.manualRole || u.role };
     },
     ownKeys: () => Object.keys(localUsers),
     getOwnPropertyDescriptor: (_t, prop: string) => {
-      if (localUsers[prop]) return { configurable: true, enumerable: true, value: undefined, writable: false };
+      if (Object.hasOwn(localUsers, prop)) return { configurable: true, enumerable: true, value: undefined, writable: false };
       return undefined;
     },
   });
@@ -330,7 +332,11 @@ router.post('/login', asyncHandler(async (req, res) => {
     res.status(429).json({ success: false, error: '尝试次数过多，请 5 分钟后再试' });
     return;
   }
-  const local = localUsers[username];
+  const local = Object.hasOwn(localUsers, username) ? localUsers[username] : undefined;
+  if (!local) {
+    // 时序抹平：未知用户也跑一次同代价 scrypt，防止通过响应耗时枚举用户名
+    crypto.scryptSync(password, 'timing-equalizer', 32);
+  }
   if (!local || !verifyPassword(password, local.password)) {
     recordLoginFailure(clientIp);
     res.status(401).json({ success: false, error: '账号或密码错误' });
@@ -428,7 +434,7 @@ router.get('/me', requireAuth, (req, res) => {
     return;
   }
   // 账密用户：从 localUsers 查（支持手动覆盖字段）
-  const local = localUsers[user.username];
+  const local = Object.hasOwn(localUsers, user.username) ? localUsers[user.username] : undefined;
   const effectiveRole = local?.manualRole || local?.role || user.role;
   res.json({
     success: true,
@@ -866,7 +872,7 @@ router.put('/accounts/:type/:id', requireAuth, requireRole(['管理者']), (req,
     // 立即吊销该用户已有 session，新角色/权限下次登录生效
     revokeUserSessions((s) => s.username === `feishu:${id}` || s.userId === id);
   } else if (type === 'local') {
-    const rec = localUsers[id];
+    const rec = Object.hasOwn(localUsers, id) ? localUsers[id] : undefined;
     if (!rec) {
       res.status(404).json({ success: false, error: '账密用户不存在' });
       return;
@@ -899,7 +905,7 @@ router.post('/accounts/local', requireAuth, requireRole(['管理者']), (req, re
     res.status(400).json({ success: false, error: 'role 非法' });
     return;
   }
-  if (localUsers[username]) {
+  if (Object.hasOwn(localUsers, username) && localUsers[username]) {
     res.status(409).json({ success: false, error: '账号已存在' });
     return;
   }
@@ -940,7 +946,7 @@ router.delete('/accounts/local/:username', requireAuth, requireRole(['管理者'
     res.status(400).json({ success: false, error: 'admin 账号不可删除（保留管理员入口）' });
     return;
   }
-  const rec = localUsers[username];
+  const rec = Object.hasOwn(localUsers, username) ? localUsers[username] : undefined;
   if (!rec) {
     res.status(404).json({ success: false, error: '账号不存在' });
     return;
@@ -1095,7 +1101,7 @@ router.post('/accounts/batch', requireAuth, requireRole(['管理者']), (req, re
       touchedFeishu = true;
       results.push({ id, type, ok: true });
     } else if (type === 'local') {
-      const rec = localUsers[id];
+      const rec = Object.hasOwn(localUsers, id) ? localUsers[id] : undefined;
       if (!rec) {
         results.push({ id, type, ok: false, error: '账密用户不存在' });
         continue;
@@ -1111,6 +1117,16 @@ router.post('/accounts/batch', requireAuth, requireRole(['管理者']), (req, re
 
   if (touchedFeishu) persistFeishuUsers();
   if (touchedLocal) persistLocalUsers();
+
+  // 权限变更即时生效：吊销被成功修改的账号的存量 session（否则旧角色最长保留24h）
+  const touchedNames = new Set<string>();
+  for (const r of results) {
+    if (!r.ok) continue;
+    const item = ids.find((it: any) => it && it.id === r.id && it.type === r.type);
+    if (item?.type === 'feishu') touchedNames.add(`feishu:${item.id}`);
+    else if (item?.type === 'local') touchedNames.add(String(item.id));
+  }
+  if (touchedNames.size > 0) revokeUserSessions((s) => touchedNames.has(s.username));
 
   const successCount = results.filter(r => r.ok).length;
   res.json({ success: true, updated: successCount, total: results.length, results });

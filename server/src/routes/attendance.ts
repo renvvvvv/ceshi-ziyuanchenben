@@ -76,11 +76,13 @@ router.put('/', requireAuth, requireRole(['管理者', '编辑者']), asyncHandl
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
      ON CONFLICT (member_id, project_name, cycle_start)
      DO UPDATE SET
-       project_start = EXCLUDED.project_start,
-       project_end   = EXCLUDED.project_end,
-       leave_days    = EXCLUDED.leave_days,
-       position      = EXCLUDED.position,
-       attend_days   = EXCLUDED.attend_days,
+       -- 没传的字段（NULL）保留原值：批量校准、录入页现在只在人工填过日期时才传起止日期，
+       -- 整条覆盖会把以前人工填的日期、岗位、实际出勤清空
+       project_start = COALESCE(EXCLUDED.project_start, attendance_adjustments.project_start),
+       project_end   = COALESCE(EXCLUDED.project_end, attendance_adjustments.project_end),
+       leave_days    = COALESCE(EXCLUDED.leave_days, attendance_adjustments.leave_days),
+       position      = COALESCE(EXCLUDED.position, attendance_adjustments.position),
+       attend_days   = COALESCE(EXCLUDED.attend_days, attendance_adjustments.attend_days),
        updated_at    = NOW()
      RETURNING id`,
     memberId,
@@ -92,7 +94,7 @@ router.put('/', requireAuth, requireRole(['管理者', '编辑者']), asyncHandl
     position || null,
     attendDays ?? null,
   );
-  res.json({ success: true, id: result.lastInsertRowid });
+  res.json({ success: true, data: { id: result.lastInsertRowid } });
 }));
 
 /**

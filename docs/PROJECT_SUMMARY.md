@@ -18,7 +18,7 @@
 |---|---|
 | **前端** | React 18 + TypeScript 5 + Vite 5 + Ant Design 5 + ECharts |
 | **后端** | Node.js + Express + TypeScript（ESM 模块）+ PostgreSQL 16（pg 驱动） |
-| **AI 引擎** | MiniMax `abab6.5g-chat`（错别字检测 + 长文档分块并行） |
+| **AI 引擎** | 智谱 GLM（AI 问答 / 报告错别字审核 / 图纸复核 / 故障日志解析） |
 | **部署** | Docker Compose（postgres + backend + frontend/nginx 三容器） |
 | **存储** | 持久化卷 `pg_data`（数据库）、`./data`（学习纠错库 / sessions.json） |
 | **认证** | Session token（内存 Map + `sessions.json` 持久化）+ httpOnly Cookie |
@@ -127,8 +127,8 @@ Word/PDF ──▶ mammoth/pdfjs 解析 ──▶ 文本
                   ┌──────────────────────┴──────────────────────┐
                   ▼                                               │
         长度 > 3500 字？                                          │
-        ├─ 是：按段分块 ──▶ 并行调 MiniMax ──▶ 合并结果           │
-        └─ 否：单次调 MiniMax                                     │
+        ├─ 是：按段分块 ──▶ 并行调智谱GLM ──▶ 合并结果           │
+        └─ 否：单次调智谱GLM                                     │
                   │                                               │
                   ▼                                               │
         AI 输出 JSON 错字列表                                     │
@@ -251,7 +251,7 @@ curl -b /tmp/c.txt http://49.232.147.149/api/report-review/learned  # 期望: �
 | 专业术语 | `server/src/routes/terminology.ts` |
 | 学习纠错 | `server/src/routes/learnedCorrections.ts` |
 | 部署配置 | `docker-compose.yml` `Dockerfile.backend` `Dockerfile.frontend` `nginx.conf` |
-| 环境变量 | `.env`（仅服务器，含 DB_PASSWORD + MINIMAX_API_KEY） |
+| 环境变量 | `.env`（仅服务器，含 DB_PASSWORD + ZHIPU_API_KEY + FEISHU_*） |
 
 ---
 

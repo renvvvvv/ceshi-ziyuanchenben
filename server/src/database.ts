@@ -132,10 +132,24 @@ class PgDbWrapper {
 
 const dbWrapper = new PgDbWrapper();
 
+/** 生产环境下数据库不可用就不启动：返回一个永不完成的 Promise，稍后以非零码退出进程。
+ *  不能直接 process.exit：stdout 是管道时立即退出会丢掉最后几行日志（恰恰是排障要看的错误原因）。 */
+function refuseToStart(message: string, err: unknown): Promise<never> {
+  console.error(message, err instanceof Error ? err.message : err);
+  console.error('[DB] 数据库不可用，服务不启动（容器会按重启策略自动重试）');
+  setTimeout(() => process.exit(1), 300);
+  return new Promise<never>(() => { /* 等待上面的退出 */ });
+}
+
 export async function initDatabase(): Promise<PgDbWrapper> {
+  // 线上（容器内）没有数据库时所有接口都会 500，而健康检查照样通过、容器显示 healthy。
+  // 所以生产环境直接退出，由 restart 策略重试（首次启动时数据库可能还没就绪，重试即可恢复）。
+  // 开发环境保留“连不上也继续启动”的旧行为。
+  const mustHaveDb = process.env.NODE_ENV === 'production';
   try {
     await dbWrapper.ready();
   } catch (err: any) {
+    if (mustHaveDb) return refuseToStart('[DB] PostgreSQL connection failed:', err.message || err);
     console.warn('[DB] PostgreSQL connection failed:', err.message || err);
     console.warn('[DB] Running in fallback mode (no database persistence)');
     return dbWrapper;
@@ -154,6 +168,8 @@ export async function initDatabase(): Promise<PgDbWrapper> {
       console.log('[DB] Schema initialized (PostgreSQL)');
     }
   } catch (err: any) {
+    // 建表脚本整体在一个事务里，任何一条失败都会全部回滚——带着旧表结构继续跑，缺列的接口会一直报错
+    if (mustHaveDb) return refuseToStart('[DB] Failed to init schema:', err.message || err);
     console.warn('[DB] Failed to init schema:', err.message || err);
   }
   return dbWrapper;

@@ -19,6 +19,12 @@ const router = Router();
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const BASE = join(__dirname, '..', '..', '..', 'uploads', 'drawing');
 
+/** 清掉任务目录。只用于“任务还没登记就失败”的收尾；删除已登记的任务走 DELETE 接口 */
+function removeJobDir(id: string): void {
+  try { rmSync(join(BASE, id), { recursive: true, force: true }); }
+  catch (e: any) { console.warn('[drawing] 清理任务目录失败:', id, e?.message || e); }
+}
+
 const asyncH = (fn: (req: Request, res: Response, next: NextFunction) => Promise<void>) =>
   (req: Request, res: Response, next: NextFunction) => { Promise.resolve(fn(req, res, next)).catch(next); };
 
@@ -90,7 +96,10 @@ router.post('/upload', requireAuth, requireRole(['管理者', '编辑者']), (re
   (req as any).__drawingJobId = id;
   mkdirSync(join(BASE, id, 'inbox'), { recursive: true });
   upload.array('files')(req, res, (err: any) => {
-    if (err) { res.status(400).json({ success: false, message: `上传失败：${err.message}` }); return; }
+    if (err) {
+      removeJobDir(id); // 被拒或中断的上传：清掉已落盘的半截文件，否则会留下界面上看不见、也没法清理的大目录
+      res.status(400).json({ success: false, message: `上传失败：${err.message}` }); return;
+    }
     next();
   });
 }, asyncH(async (req, res) => {
@@ -98,20 +107,35 @@ router.post('/upload', requireAuth, requireRole(['管理者', '编辑者']), (re
   const files = (req as any).files as Express.Multer.File[];
   const title = (String(req.body.title || '').trim() || '测试界面路由表（平台生成）V1.0');
   if (!files?.length) {
+    removeJobDir(id);
     res.status(400).json({ success: false, message: '未收到任何文件（支持 .dwg / .zip / .rar，可选 .xlsx 电池配置）' });
     return;
   }
   const battery = files.find(f => f.originalname.toLowerCase().endsWith('.xlsx'))?.filename;
   const pairs = String(req.body.pairs || '').trim() || null;
   const floors = String(req.body.floors || '').trim() || null;
-  writeFileSync(join(BASE, id, 'JOB'), JSON.stringify({ id, title, battery, pairs, floors }));
-  await db.runAsync(
-    `INSERT INTO drawing_jobs (id, title, status, file_count, created_by, username)
-     VALUES ($1,$2,'queued',$3,$4,$5)`,
-    id, title, files.length,
-    (req as any).user?.userId ?? '',
-    (req as any).user?.username ?? (req as any).user?.name ?? ''
-  );
+  // 先登记、后写 JOB 标记：执行器只认 JOB 文件，标记先写的话，登记失败前的一瞬间它可能已经把任务领走开跑了
+  try {
+    await db.runAsync(
+      `INSERT INTO drawing_jobs (id, title, status, file_count, created_by, username)
+       VALUES ($1,$2,'queued',$3,$4,$5)`,
+      id, title, files.length,
+      (req as any).user?.userId ?? '',
+      (req as any).user?.username ?? (req as any).user?.name ?? ''
+    );
+  } catch (e) {
+    // 登记失败就清掉已上传的文件：没有 JOB 标记执行器不会开跑，这个任务在界面上也看不到
+    removeJobDir(id);
+    throw e;
+  }
+  try {
+    writeFileSync(join(BASE, id, 'JOB'), JSON.stringify({ id, title, battery, pairs, floors }));
+  } catch (e) {
+    // 标记写不进去：执行器永远不会处理它。把刚登记的记录和文件一起撤掉，不让界面上出现一个永远“排队中”的任务
+    await db.runAsync(`DELETE FROM drawing_jobs WHERE id=$1`, id).catch(() => undefined);
+    removeJobDir(id);
+    throw e;
+  }
   res.json({ success: true, jobId: id, fileCount: files.length });
 }));
 
@@ -121,7 +145,8 @@ router.get('/jobs', requireAuth, asyncH(async (_req, res) => {
     `SELECT id, title, status, file_count, dwg_count, username, error, created_at, finished_at
      FROM drawing_jobs ORDER BY created_at DESC LIMIT 100`
   ) as any[];
-  await Promise.all(rows.map((r: any) => syncStatus(r.id)));
+  // 只同步未完成任务（终态任务状态不会再变，全部回写是每轮轮询的写放大）。错误的终态在库里记作 error
+  await Promise.all(rows.filter((r: any) => r.status !== 'done' && r.status !== 'error').map((r: any) => syncStatus(r.id)));
   const fresh = await db.allAsync(
     `SELECT id, title, status, file_count, dwg_count, username, error, created_at, finished_at
      FROM drawing_jobs ORDER BY created_at DESC LIMIT 100`
@@ -193,8 +218,14 @@ router.delete('/jobs/:id', requireAuth, requireRole(['管理者']), asyncH(async
     res.status(400).json({ success: false, message: '任务正在运行，请等待完成后再删除' });
     return;
   }
+  // 先删文件、再删记录：文件删不掉（比如目录属主不对）时保留记录，管理员还能看到并重试；
+  // 反过来先删记录，就会留下界面上看不见的孤儿目录。任务目录已不存在时 rmSync 不会报错
+  try { rmSync(join(BASE, id), { recursive: true, force: true }); }
+  catch (e: any) {
+    res.status(500).json({ success: false, message: `任务文件清理失败，记录已保留，请处理后再试：${e?.message || e}` });
+    return;
+  }
   await db.runAsync(`DELETE FROM drawing_jobs WHERE id=$1`, id);
-  try { rmSync(join(BASE, id), { recursive: true, force: true }); } catch {}
   res.json({ success: true });
 }));
 

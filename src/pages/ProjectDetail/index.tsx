@@ -150,7 +150,9 @@ function ProjectDetail() {
         ),
       };
     });
-    message.success(`文件「${lastFile.name}」上传成功`);
+    // 文件本体没传上去时不能再提示“上传成功”（之前先弹警告、再弹成功）
+    if (fileUrl) message.success(`文件「${lastFile.name}」上传成功`);
+    else message.error(`文件「${lastFile.name}」的文件本体上传失败，只记录了文件信息；请删除这条记录后重新上传`);
   };
 
   /** 添加链接 */

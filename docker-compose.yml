@@ -1,9 +1,18 @@
 version: '3.8'
 
+# 三个服务共用的日志轮转。不设上限的话容器日志（json-file）会无限增长，公网机器上 nginx 访问日志
+# 还会持续被扫描流量刷大，最终挤占磁盘——连带影响数据库写入和上传
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "5"
+
 services:
   postgres:
     image: pgvector/pgvector:pg16
     restart: unless-stopped
+    logging: *default-logging
     environment:
       POSTGRES_DB: test_platform
       POSTGRES_USER: postgres
@@ -15,7 +24,9 @@ services:
     volumes:
       - pg_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d test_platform"]
+      # 走 TCP 探测：镜像首次初始化数据目录期间有个只开 Unix socket 的临时实例，
+      # 默认的 socket 探测会在那 1~2 秒里提前判“就绪”，后端随之启动却连不上库
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres -d test_platform"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -25,6 +36,7 @@ services:
       context: .
       dockerfile: Dockerfile.backend
     # 仅绑定本机，前端 Nginx 通过 Docker 内部网络代理 /api/
+    logging: *default-logging
     ports:
       - "127.0.0.1:3001:3001"
     depends_on:
@@ -47,8 +59,26 @@ services:
       - DB_NAME=test_platform
       - DB_USER=postgres
       - DB_PASSWORD=${DB_PASSWORD:-postgres123}
-      - MINIMAX_API_KEY=${MINIMAX_API_KEY:-}
       - ZHIPU_API_KEY=${ZHIPU_API_KEY:-}
+      # 报告审核的模型与思考强度（不设则用代码默认值 glm-5.2 / low）
+      - REPORT_REVIEW_MODEL=${REPORT_REVIEW_MODEL:-}
+      - REPORT_REVIEW_EFFORT=${REPORT_REVIEW_EFFORT:-}
+      # 知识库向量检索（调按量计费的 embedding-3）：设 on 开启；不设则知识检索只用关键词
+      - KB_VECTOR_RETRIEVAL=${KB_VECTOR_RETRIEVAL:-}
+      # 跨域白名单（逗号分隔的完整来源）。不设 = 拒绝所有跨域请求，同源访问不受影响
+      - CORS_ORIGINS=${CORS_ORIGINS:-}
+      # AI 用量限额（不设则用代码默认：每日 1.1 亿 token / 每周 6 万积分 / 1 积分 = 9166.67 token）
+      - AI_DAILY_TOKEN_LIMIT=${AI_DAILY_TOKEN_LIMIT:-}
+      - AI_WEEKLY_POINT_LIMIT=${AI_WEEKLY_POINT_LIMIT:-}
+      - AI_POINT_TOKENS=${AI_POINT_TOKENS:-}
+      # 以下为对比实验/调参用的临时开关，平时留空即代码默认值
+      - KB_DEEP_MODEL=${KB_DEEP_MODEL:-}
+      - DRAWING_REVIEW_MODEL=${DRAWING_REVIEW_MODEL:-}
+      - DRAWING_REVIEW_EFFORT=${DRAWING_REVIEW_EFFORT:-}
+      - DRAWING_REVIEW_MAX_TOKENS=${DRAWING_REVIEW_MAX_TOKENS:-}
+      - DRAWING_REVIEW_TIMEOUT_MS=${DRAWING_REVIEW_TIMEOUT_MS:-}
+      - DRAWING_REVIEW_DUMP_DIR=${DRAWING_REVIEW_DUMP_DIR:-}
+      - DRAWING_REVIEW_STREAM=${DRAWING_REVIEW_STREAM:-}
       - TZ=Asia/Shanghai
       # 飞书 OAuth 登录配置
       - FEISHU_APP_ID=${FEISHU_APP_ID:-}
@@ -57,7 +87,7 @@ services:
       - FRONTEND_HOME=${FRONTEND_HOME:-/}
       - FEISHU_DEFAULT_ROLE=${FEISHU_DEFAULT_ROLE:-阅读者}
       - FEISHU_DEPT_ROLE_MAP=${FEISHU_DEPT_ROLE_MAP:-[]}
-      - FEISHU_ENABLED=${FEISHU_ENABLED:-true}
+      # 飞书登录是否开启由上面三个变量是否齐全决定（代码里据此推导）；没有单独的开关变量
       - FEISHU_FETCH_DEPT=${FEISHU_FETCH_DEPT:-false}
       # 只读状态接口 token（外部监控探活用）
       - STATUS_TOKEN=${STATUS_TOKEN:-}
@@ -72,6 +102,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.frontend
+    logging: *default-logging
     ports:
       - "80:80"
     depends_on:

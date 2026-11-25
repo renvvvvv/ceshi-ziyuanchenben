@@ -153,7 +153,9 @@ function Login() {
           <PasswordForm loading={loading} onSubmit={handleSubmit} showDemoAccounts />
         )}
 
-        {!feishuEnabled && (
+        {/* 演示账号提示只在开发模式（npm run dev）显示：正式构建里把账号口令印在登录页上，
+            等于向所有能打开页面的人开放编辑权限。初始账号的获取方式走部署说明 */}
+        {!feishuEnabled && import.meta.env.DEV && (
           <div style={{ marginTop: 16, padding: 10, background: 'rgba(99,102,241,0.05)', border: '1px solid rgba(99,102,241,0.12)', borderRadius: 6, fontSize: 11, color: '#6b6892' }}>
             <div style={{ fontWeight: 600, color: 'rgba(99,102,241,0.85)', marginBottom: 4 }}>演示账号</div>
             <div>管理员：<code style={{ color: '#818cf8' }}>admin</code> / <code style={{ color: '#818cf8' }}>admin123</code></div>

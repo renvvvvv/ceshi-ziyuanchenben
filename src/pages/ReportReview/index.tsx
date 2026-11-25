@@ -3,6 +3,7 @@ import { Upload, Button, Spin, message, Tooltip, Modal, List, Empty, Popconfirm,
 import type { UploadProps } from 'antd';
 import { useAuth } from '../../store/AuthContext';
 import { useIsMobile } from '../../hooks/useIsMobile';
+import { downloadBlob } from '../../utils/common';
 import {
   InboxOutlined, DownloadOutlined, EditOutlined, CheckCircleOutlined,
   FileTextOutlined, ReloadOutlined, BookOutlined, BulbOutlined, DeleteOutlined,
@@ -48,6 +49,10 @@ function ReportReview() {
   const [learnedItems, setLearnedItems] = useState<Array<{original:string;suggestion:string;count:number;lastSeen:string;source?:string}>>([]);
   const [learnedSearch, setLearnedSearch] = useState('');
   // 审核流程可视化：phase 跟踪当前阶段，elapsed 记录已耗时（秒）
+  // 长文档 AI 抽审失败时后端在 stats 里带 aiFailed：这个结果只做了词典扫描，页面上要一直提示，不能只靠 8 秒的气泡
+  const [aiFailReason, setAiFailReason] = useState('');
+  // 部分段落没审成（超时、限流、空输出、截断）：记成“失败段数/总段数”，页面上一直提示到下一次审核
+  const [aiPartial, setAiPartial] = useState('');
   const [reviewPhase, setReviewPhase] = useState<'idle' | 'parsing' | 'dict' | 'ai' | 'done'>('idle');
   const [elapsed, setElapsed] = useState(0);
   const phaseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -146,14 +151,17 @@ function ReportReview() {
   }, []);
 
   const reviewText = useCallback(async (text: string) => {
-    setReviewing(true); setReviewed(false);
+    setReviewing(true); setReviewed(false); setAiFailReason(''); setAiPartial('');
     // 流程可视化：先进入词典扫描阶段，3 秒后切入 AI 审核阶段（后端实际是并行/串行一体，此处为展示节奏）
     setReviewPhase('dict');
     if (phaseTimerRef.current) clearTimeout(phaseTimerRef.current);
     phaseTimerRef.current = setTimeout(() => setReviewPhase((p) => (p === 'dict' ? 'ai' : p)), 3000);
+    let reachedDone = false;
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 180000);
+      // 400 秒：要盖住后端的最坏耗时（最多 4 段分 2 批、每段 90 秒、遇限流等 4 秒重试一次 ≈ 368 秒），
+      // 又低于 nginx 的 450 秒。此前是 180 秒：前端先报“超时”，后端却还在跑并消耗额度，结果被丢掉
+      const timeoutId = setTimeout(() => controller.abort(), 400000);
       const res = await fetch('/api/report-review', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
         body: JSON.stringify({ text }), signal: controller.signal,
@@ -163,11 +171,26 @@ function ReportReview() {
       if (res.ok && data.success && Array.isArray(data.errors)) {
         setErrors(data.errors.map((e: TypoError, i: number) => ({ ...e, fixed: false, id: i + 1 })));
         setReviewed(true);
-        setReviewPhase('done');
+        setReviewPhase('done'); reachedDone = true;
         if (data.stats) setReviewStats(data.stats);
         const strategy = data.stats?.strategy; const textLen = data.stats?.textLength;
-        if (strategy === 'hybrid') message.success(`文档 ${textLen} 字，已采用智能审核（词典全量+AI抽审前3万字），发现 ${data.errors.length} 处错别字`);
-        else message.success(`AI 审核完成，发现 ${data.errors.length} 处错别字`);
+        if (data.stats?.aiFailed) {
+          const why = data.stats.aiFailReason || 'AI 服务异常';
+          setAiFailReason(why); setAiPartial('');
+          message.warning(`长文档的 AI 抽审没有完成（${why}），本次只做了词典扫描，错别字可能漏检`, 8);
+        } else {
+          setAiFailReason('');
+          const ap = data.stats?.aiPartial;
+          if (ap && ap.failed > 0) {
+            const why = String(ap.reasons?.[0] || '').slice(0, 50);
+            setAiPartial(`${ap.failed}/${ap.total}`);
+            message.warning(`有 ${ap.failed}/${ap.total} 段没能完成 AI 审核${why ? `（${why}）` : ''}，这些段落可能漏检，建议稍后重新审核`, 8);
+          } else {
+            setAiPartial('');
+          }
+          if (strategy === 'hybrid') message.success(`文档 ${textLen} 字，已采用智能审核（词典全量+AI抽审前3万字），发现 ${data.errors.length} 处错别字`);
+          else message.success(`AI 审核完成，发现 ${data.errors.length} 处错别字`);
+        }
       } else {
         const ruleCount = data.ruleErrorsOnly;
         if (typeof ruleCount === 'number' && ruleCount > 0) message.warning(`${data.message || 'AI 审核异常'}（但词典扫描仍发现 ${ruleCount} 处疑似错别字，建议缩短文档后重试）`);
@@ -175,10 +198,14 @@ function ReportReview() {
         setReviewPhase('idle');
       }
     } catch (err: any) {
-      if (err?.name === 'AbortError') message.warning('审核超时（180秒），可能文档过长或 AI 服务繁忙，请缩短文档后重试');
+      if (err?.name === 'AbortError') message.warning('审核超时（400秒），AI 服务当前响应很慢，请稍后重试或缩短文档');
       else { const detail = err instanceof Error ? err.message : ''; message.error(detail ? `审核请求失败：${detail}` : '审核请求失败，请确认后端服务已启动'); }
       setReviewPhase('idle');
-    } finally { setReviewing(false); }
+    } finally {
+      // “审核完成”这一帧停留片刻再切到结果，否则流程图的完成态永远看不到；失败的没有完成帧，直接收起
+      if (reachedDone) setTimeout(() => setReviewing(false), 800);
+      else setReviewing(false);
+    }
   }, [logout]);
 
   const formatFileSize = (bytes: number) => {
@@ -191,7 +218,7 @@ function ReportReview() {
     accept: '.docx,.pdf', multiple: false, showUploadList: false,
     beforeUpload: async (file) => {
       setFileName(file.name); setFileSize(formatFileSize(file.size));
-      setRawText(''); setOriginalFile(file); setErrors([]); setReviewed(false);
+      setRawText(''); setOriginalFile(file); setErrors([]); setReviewed(false); setAiFailReason(''); setAiPartial('');
       setReviewPhase('parsing'); setElapsed(0);
       try {
         const text = await parseDocument(file);
@@ -341,8 +368,9 @@ function ReportReview() {
               const attrs2 = (text2Match[0].match(/<w:t(\s[^>]*)?>/) || [, ''])[1] || '';
               const needPreserve1 = /^\s|\s$/.test(newCombined) ? ' xml:space="preserve"' : '';
               const finalAttrs1 = needPreserve1 && !/xml:space/.test(attrs1) ? attrs1 + needPreserve1 : attrs1;
-              const newRun1 = run1Content.replace(textTagRe, `<w:t${finalAttrs1}>${escapedNew}</w:t>`);
-              const newRun2 = run2Content.replace(textTagRe, `<w:t${attrs2}></w:t>`);
+              // 替换值用函数返回：字符串形式的替换值里，正文含 $1 / $& 会被当成替换模式
+              const newRun1 = run1Content.replace(textTagRe, () => `<w:t${finalAttrs1}>${escapedNew}</w:t>`);
+              const newRun2 = run2Content.replace(textTagRe, () => `<w:t${attrs2}></w:t>`);
               docXml = docXml.slice(0, matches[i].start) + newRun1 + docXml.slice(matches[i].end, matches[i + 1].start) + newRun2 + docXml.slice(matches[i + 1].end);
               break;
             }
@@ -350,9 +378,7 @@ function ReportReview() {
         }
         zip.file('word/document.xml', docXml);
         const blob = await zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a'); a.href = url; a.download = `审核后_${fileName.replace(/\.[^.]+$/, '')}.docx`; a.click();
-        URL.revokeObjectURL(url);
+        downloadBlob(blob, `审核后_${fileName.replace(/\.[^.]+$/, '')}.docx`);
         message.success('已导出 Word 文档（保留原排版样式）');
       } else {
         const { Document, Packer, Paragraph, TextRun, HeadingLevel } = await import('docx');
@@ -365,9 +391,7 @@ function ReportReview() {
         });
         const doc = new Document({ sections: [{ properties: {}, children: paragraphs }] });
         const blob = await Packer.toBlob(doc);
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a'); a.href = url; a.download = `审核后_${fileName.replace(/\.[^.]+$/, '')}.docx`; a.click();
-        URL.revokeObjectURL(url);
+        downloadBlob(blob, `审核后_${fileName.replace(/\.[^.]+$/, '')}.docx`);
         message.success('已导出 Word 文档（PDF 源文件无法保留原样式，已按段落格式导出）');
       }
     } catch (err) { console.error(err); message.error(err instanceof Error ? `导出失败：${err.message}` : '导出失败'); }
@@ -375,7 +399,7 @@ function ReportReview() {
   };
 
   const handleReset = () => {
-    setFileName(''); setFileSize(''); setRawText(''); setOriginalFile(null); setErrors([]); setReviewed(false);
+    setFileName(''); setFileSize(''); setRawText(''); setOriginalFile(null); setErrors([]); setReviewed(false); setAiFailReason(''); setAiPartial('');
     setReviewPhase('idle'); setElapsed(0);
   };
 
@@ -392,7 +416,7 @@ function ReportReview() {
         fileName={fileName} fileSize={fileSize} rawTextLen={rawText.length}
         errors={errors} fixedCount={fixedCount} unfixedCount={unfixedCount} fixProgress={fixProgress}
         reviewStats={reviewStats} learnedSize={learnedSize}
-        exporting={exporting} phase={reviewPhase} elapsed={elapsed}
+        exporting={exporting} phase={reviewPhase} elapsed={elapsed} aiFailReason={aiFailReason} aiPartial={aiPartial}
         onExport={handleExport} onReset={handleReset}
         onFixAll={handleFixAll} onManageLib={openManageLib}
       />
@@ -404,7 +428,7 @@ function ReportReview() {
           <ErrorList
             errors={errors} reviewing={reviewing} reviewed={reviewed} hasFile={hasFile}
             fixedCount={fixedCount} activeErrorId={activeErrorId}
-            phase={reviewPhase} elapsed={elapsed}
+            phase={reviewPhase} elapsed={elapsed} aiFailReason={aiFailReason} aiPartial={aiPartial}
             onJump={handleJumpToError} onFix={handleFixOne} onAdopt={handleAdoptOnly}
           />
           {/* 右侧：文档预览 */}
@@ -619,10 +643,10 @@ function TopBar(props: {
   fileName: string; fileSize: string; rawTextLen: number;
   errors: TypoError[]; fixedCount: number; unfixedCount: number; fixProgress: number;
   reviewStats: { aiErrors: number; ruleErrors: number; merged: number }; learnedSize: number;
-  exporting: boolean; phase?: string; elapsed?: number;
+  exporting: boolean; phase?: string; elapsed?: number; aiFailReason?: string; aiPartial?: string;
   onExport: () => void; onReset: () => void; onFixAll: () => void; onManageLib: () => void;
 }) {
-  const { hasFile, reviewing, reviewed, fileName, fileSize, rawTextLen, errors, fixedCount, unfixedCount, fixProgress, reviewStats, learnedSize, exporting, phase, elapsed, onExport, onReset, onFixAll, onManageLib } = props;
+  const { hasFile, reviewing, reviewed, fileName, fileSize, rawTextLen, errors, fixedCount, unfixedCount, fixProgress, reviewStats, learnedSize, exporting, phase, elapsed, aiFailReason, aiPartial, onExport, onReset, onFixAll, onManageLib } = props;
   const isMobile = useIsMobile();
 
   return (
@@ -659,8 +683,17 @@ function TopBar(props: {
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
             {errors.length > 0 ? (
               <Tag color="error" style={{ fontSize: 13, padding: '2px 10px', borderRadius: 6, margin: 0 }}>{errors.length} 处错别字</Tag>
+            ) : aiFailReason ? (
+              <Tooltip title={`AI 抽审未执行：${aiFailReason}。本次只做了词典扫描，错别字可能漏检。`}>
+                <Tag color="warning" style={{ fontSize: 13, padding: '2px 10px', borderRadius: 6, margin: 0 }}><WarningOutlined /> 仅词典扫描，未发现错别字</Tag>
+              </Tooltip>
             ) : (
               <Tag color="success" style={{ fontSize: 13, padding: '2px 10px', borderRadius: 6, margin: 0 }}><CheckCircleOutlined /> 未发现错别字</Tag>
+            )}
+            {aiPartial && (
+              <Tooltip title={`有 ${aiPartial} 段没能完成 AI 审核，这些段落可能漏检。建议稍后重新审核。`}>
+                <Tag color="warning" style={{ fontSize: 13, padding: '2px 10px', borderRadius: 6, margin: 0 }}><WarningOutlined /> {aiPartial} 段未审完</Tag>
+              </Tooltip>
             )}
             {reviewStats.merged > 0 && (
               <Tooltip title={`AI 检出 ${reviewStats.aiErrors} / 词典 ${reviewStats.ruleErrors} / 去重 ${reviewStats.merged}`}>
@@ -711,10 +744,10 @@ function TopBar(props: {
 // ============== 错别字列表组件 ==============
 function ErrorList(props: {
   errors: TypoError[]; reviewing: boolean; reviewed: boolean; hasFile: boolean;
-  fixedCount: number; activeErrorId: number | null; phase?: string; elapsed?: number;
+  fixedCount: number; activeErrorId: number | null; phase?: string; elapsed?: number; aiFailReason?: string; aiPartial?: string;
   onJump: (id: number) => void; onFix: (id: number) => void; onAdopt: (id: number) => void;
 }) {
-  const { errors, reviewing, reviewed, hasFile, activeErrorId, phase, elapsed, onJump, onFix, onAdopt } = props;
+  const { errors, reviewing, reviewed, hasFile, activeErrorId, phase, elapsed, aiFailReason, aiPartial, onJump, onFix, onAdopt } = props;
   const isMobile = useIsMobile();
   const phaseText = phase === 'parsing' ? '解析文档中...'
     : phase === 'dict' ? '词典扫描中...'
@@ -747,7 +780,13 @@ function ErrorList(props: {
         ) : errors.length === 0 ? (
           <div style={{ textAlign: 'center', padding: 50 }}>
             <CheckCircleOutlined style={{ fontSize: 36, color: '#16a34a' }} />
-            <div style={{ marginTop: 12, color: '#46436a', fontSize: 13 }}>未发现错别字</div>
+            <div style={{ marginTop: 12, color: aiFailReason ? '#92400e' : '#46436a', fontSize: 13 }}>
+              {aiFailReason
+                ? `本次只完成了词典扫描（AI 抽审未执行：${aiFailReason}），未发现错别字。建议稍后重新审核。`
+                : aiPartial
+                  ? `有 ${aiPartial} 段没能完成 AI 审核，这些段落可能漏检。建议稍后重新审核。`
+                  : '未发现错别字'}
+            </div>
           </div>
         ) : (
           errors.map((err) => (

@@ -155,7 +155,8 @@ function TeamPool() {
     setManageDeleting(true);
     try {
       const r = await projectApi.batchDeleteTeamMembers(ids.map(String));
-      const deleted = (r.data as { deleted?: number } | undefined)?.deleted ?? ids.length;
+      // 后端把 deleted / requested 放在响应顶层（不在 data 里）；读不到就会按“全部删除”提示
+      const deleted = Number((r as { deleted?: number }).deleted ?? ids.length);
       // 与后端结果对账：临时 id（尚未落库）会被后端忽略，删除数可能少于请求数
       if (deleted < ids.length) {
         message.warning(`已删除 ${deleted}/${ids.length} 人（其余可能已被其他操作删除或尚未保存到服务器）`);
@@ -280,8 +281,11 @@ function TeamPool() {
           leaveStartDate,
           leaveEndDate,
         };
-        addTeamMember(newMember);
-        message.success(`成员「${values.name}」添加成功`);
+        // 成败以后端结果为准：失败（如工号重复）时那一行会自动撤回
+        addTeamMember(newMember, (done, reason) => {
+          if (done) message.success(`成员「${values.name}」添加成功`);
+          else message.error(reason || `成员「${values.name}」添加失败`);
+        });
       }
       setModalOpen(false);
       form.resetFields();
@@ -576,7 +580,7 @@ function TeamPool() {
         </div>
       </div>
 
-      <div style={{ marginBottom: 24, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+      <div style={{ marginBottom: isMobile ? 16 : 24, display: 'flex', gap: isMobile ? 8 : 12, flexWrap: 'wrap', alignItems: 'center' }}>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {statusFilters.map((s) => (
             <Tag.CheckableTag
@@ -584,7 +588,7 @@ function TeamPool() {
               checked={statusFilter === s}
               onChange={() => setStatusFilter(s)}
               style={{
-                padding: '4px 16px',
+                padding: isMobile ? '6px 18px' : '4px 16px',
                 border: statusFilter === s ? '1px solid rgba(99,102,241,0.5)' : '1px solid #f1f0fe',
                 borderRadius: 20,
                 fontSize: 13,
@@ -600,7 +604,8 @@ function TeamPool() {
         <Select
           value={projectFilter}
           onChange={setProjectFilter}
-          style={{ width: 200, fontFamily: 'var(--font-primary)' }}
+          size={isMobile ? 'middle' : 'middle'}
+          style={{ width: isMobile ? '100%' : 200, fontFamily: 'var(--font-primary)' }}
           popupMatchSelectWidth={false}
           placeholder="按项目筛选人员"
         >
@@ -614,9 +619,9 @@ function TeamPool() {
           prefix={<SearchOutlined />}
           value={searchText}
           onChange={(e) => setSearchText(e.target.value)}
-          style={{ width: 220, fontFamily: 'var(--font-primary)' }}
+          style={{ width: isMobile ? '100%' : 220, fontFamily: 'var(--font-primary)', flex: isMobile ? '1 1 100%' : undefined, background: isMobile ? '#f8f7fd' : undefined }}
           allowClear
-          variant="borderless"
+          variant={isMobile ? 'outlined' : 'borderless'}
         />
         <Button
           type="primary"

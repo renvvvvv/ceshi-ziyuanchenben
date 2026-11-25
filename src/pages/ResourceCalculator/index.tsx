@@ -9,7 +9,7 @@ import {
   FileExcelOutlined, CloseCircleOutlined, CheckCircleOutlined,
   HistoryOutlined, InfoCircleOutlined, PlusOutlined,
 } from '@ant-design/icons';
-import { calculateResource, normalizeReport, type ResourceInput, type ResourceReport } from '../../utils/resourceCalculator';
+import { normalizeReport, extractStandardReport, segmentsFromHistory, type ResourceInput, type ResourceReport } from '../../utils/resourceCalculator';
 import {
   exportReportToExcel, parseImportExcel, runBatchCalculation,
   exportBatchResultsToExcel, downloadBatchTemplate,
@@ -31,6 +31,22 @@ const TRANSFORMER_SPECS = [1.25, 2.0, 2.15, 2.5, 3.15];
 
 type PageMode = 'home' | 'single' | 'batch';
 
+/** 后端计算失败时给用户看的原因（request() 抛出的 ApiError 带 statusCode） */
+function describeCalcError(e: any): string {
+  const status = e?.statusCode;
+  const detail = String(e?.message || '').trim();
+  if (status === 401) return '登录已失效，请重新登录后再计算';
+  // 请求发不出去（断网、后端容器正在重启）：浏览器给的是英文原话 Failed to fetch，换成能看懂的说法
+  if (status === undefined && (e?.name === 'TypeError' || /failed to fetch|networkerror|load failed/i.test(detail))) {
+    return '网络异常，连不上后端服务：请检查网络，或稍后重试（后端维护重启时会有几十秒不可用）';
+  }
+  if (status === 403) return '当前账号没有执行计算的权限';
+  if (status === 400 || status === 413) return `参数没有被后端接受：${detail || '请检查输入'}`;
+  if (/超时/.test(detail)) return `后端计算超时，请稍后重试（${detail}）`;
+  if (status === 404 || status === 502 || status === 503) return `后端计算服务暂时不可用（HTTP ${status}），请稍后重试`;
+  return `后端计算失败${status ? `（HTTP ${status}）` : ''}${detail ? `：${detail}` : '：网络异常'}。结果没有生成`;
+}
+
 function ResourceCalculator() {
   const [form] = Form.useForm();
   const isMobile = useIsMobile();
@@ -41,6 +57,8 @@ function ResourceCalculator() {
   const [currentInput, setCurrentInput] = useState<ResourceInput | null>(null);
   const [calcLoading, setCalcLoading] = useState(false);
   const [singleModalOpen, setSingleModalOpen] = useState(false);
+  // 后端没算出结果时的原因：显示在结果区，直到下一次计算成功
+  const [calcError, setCalcError] = useState('');
 
   // 群算
   const [batchResults, setBatchResults] = useState<BatchReportRow[]>([]);
@@ -94,27 +112,34 @@ function ResourceCalculator() {
     return [[2, 6]];
   };
 
+  /** 历史记录 → 计算输入。功率分段优先用入库的完整分段：多功率段时单值 cabinet_power 只是（取整的）加权平均，
+   *  按它还原会把 IT 容量、PUE 等汇总算错；旧记录没有分段，退回单值 */
+  const inputFromHistory = (item: {
+    total_mw?: number; total_duration?: number; cabinet_power?: number; cabinet_power_segments?: unknown;
+    it_transformers?: string | null; power_transformers?: string | null; total_cabinets?: number; ac_type?: string;
+  }): ResourceInput => {
+    const segments = segmentsFromHistory(item.cabinet_power_segments);
+    const segTotal = segments?.reduce((s, g) => s + g.count, 0) || 0;
+    const weighted = segments && segTotal > 0
+      ? Math.round(segments.reduce((s, g) => s + g.power * g.count, 0) / segTotal * 100) / 100 : 0;
+    return {
+      total_mw: item.total_mw!, total_duration: item.total_duration!,
+      cabinet_power: segments ? weighted : (item.cabinet_power || 12),
+      ...(segments ? { cabinet_power_segments: segments } : {}),
+      it_transformers: parseItTrans(item.it_transformers || '[[2,6]]'),
+      power_transformers: parseItTrans(item.power_transformers || '[[1.25,6]]'),
+      total_cabinets: item.total_cabinets || segTotal || 1150, ac_type: item.ac_type || '风冷',
+    };
+  };
+
   const handleHistoryLoad = (item: HistoryGroupItem) => {
     if (!item.result_json) { message.warning('该记录缺少完整数据'); return; }
     try {
       const r = JSON.parse(item.result_json);
-      const input: ResourceInput = {
-        total_mw: item.total_mw!, total_duration: item.total_duration!,
-        cabinet_power: item.cabinet_power || 12,
-        it_transformers: parseItTrans(item.it_transformers || '[[2,6]]'),
-        power_transformers: parseItTrans(item.power_transformers || '[[1.25,6]]'),
-        total_cabinets: item.total_cabinets || 1150, ac_type: item.ac_type || '风冷',
-      };
+      const input = inputFromHistory(item);
       setCurrentInput(input);
       setReport(null);
-      if (r['多版本对比'] && r['详细结果']) {
-        const detailResults = r['详细结果'] as Record<string, Record<string, unknown>>;
-        const keys = Object.keys(detailResults);
-        const stdKey = keys.find(k => k.includes('标准')) || keys[0];
-        setReport(normalizeReport(detailResults[stdKey], input));
-      } else {
-        setReport(normalizeReport(r as Record<string, unknown>, input));
-      }
+      setReport(normalizeReport(extractStandardReport(r), input));
       setMode('single'); setSingleModalOpen(false);
       message.success('已加载历史记录');
     } catch { message.error('记录解析失败'); }
@@ -124,22 +149,8 @@ function ResourceCalculator() {
     if (!item.result_json) { message.warning('该记录缺少完整数据'); return; }
     try {
       const r = JSON.parse(item.result_json);
-      const input: ResourceInput = {
-        total_mw: item.total_mw!, total_duration: item.total_duration!,
-        cabinet_power: item.cabinet_power || 12,
-        it_transformers: parseItTrans(item.it_transformers || '[[2,6]]'),
-        power_transformers: parseItTrans(item.power_transformers || '[[1.25,6]]'),
-        total_cabinets: item.total_cabinets || 1150, ac_type: item.ac_type || '风冷',
-      };
-      let report: ResourceReport;
-      if (r['多版本对比'] && r['详细结果']) {
-        const detailResults = r['详细结果'] as Record<string, Record<string, unknown>>;
-        const keys = Object.keys(detailResults);
-        const stdKey = keys.find(k => k.includes('标准')) || keys[0];
-        report = normalizeReport(detailResults[stdKey], input);
-      } else {
-        report = normalizeReport(r as Record<string, unknown>, input);
-      }
+      const input = inputFromHistory(item);
+      const report = normalizeReport(extractStandardReport(r), input);
       exportReportToExcel(input, report);
       message.success('已下载');
     } catch { message.error('导出失败'); }
@@ -152,8 +163,9 @@ function ResourceCalculator() {
       const rows: BatchReportRow[] = items.map((h, i) => {
         if (!h.result_json) return { index: i + 1, error: '缺数据' };
         try {
-          const report = JSON.parse(h.result_json) as ResourceReport;
-          return { index: i + 1, input: { total_mw: h.total_mw, total_duration: h.total_duration, cabinet_power: h.cabinet_power, it_transformers: parseItTrans(h.it_transformers), power_transformers: parseItTrans(h.power_transformers), total_cabinets: h.total_cabinets, ac_type: h.ac_type }, report };
+          // 入库的是多版本包装结构：先取“标准”版本再归一化（此前直接当结果用，每行都是 0 和“无数据”，导出报错）
+          const report = normalizeReport(extractStandardReport(JSON.parse(h.result_json) as Record<string, unknown>), inputFromHistory(h));
+          return { index: i + 1, input: inputFromHistory(h), report };
         } catch { return { index: i + 1, error: '解析失败' }; }
       });
       setBatchResults(rows);
@@ -193,27 +205,27 @@ function ResourceCalculator() {
     };
   };
 
-  const handleSingleCalc = async () => {
+  /** preset：用给定的参数重算（“重新计算”按钮）；不传则从表单取 */
+  const handleSingleCalc = async (preset?: ResourceInput) => {
     setCalcLoading(true);
     try {
-      const input = buildInput();
+      const input = preset ?? buildInput();
       if (!input) { setCalcLoading(false); return; }
       try {
         const res = await apiCalcResource(input);
         const data = (res?.data ?? res) as unknown as Record<string, unknown>;
-        let result: Record<string, unknown>;
-        if (data['多版本对比'] && data['详细结果']) {
-          const detailResults = data['详细结果'] as Record<string, Record<string, unknown>>;
-          const keys = Object.keys(detailResults);
-          const stdKey = keys.find(k => k.includes('标准')) || keys[0];
-          result = detailResults[stdKey];
-        } else {
-          result = data;
-        }
-        setReport(normalizeReport(result, input));
+        setReport(normalizeReport(extractStandardReport(data), input));
+        setCalcError('');
       } catch (e) {
-        console.error('[normalizeReport] 失败，回退到本地计算:', e);
-        setReport(calculateResource(input));
+        // 后端没算出结果（登录过期、参数不合法、服务没响应）就明确报错。此前这里悄悄改用本地的旧版模型继续出数，
+        // 还提示“计算完成”——两套模型差别很大（同样的输入 20 人对 38 人），旧模型的结果会被当成正式结果用
+        console.error('[资源计算] 后端计算失败:', e);
+        setReport(null);
+        setCalcError(describeCalcError(e));
+        setCurrentInput(input);
+        setSingleModalOpen(false);
+        setMode('single');
+        return;
       }
       setCurrentInput(input);
       setSingleModalOpen(false);
@@ -276,7 +288,12 @@ function ResourceCalculator() {
       setBatchResults(results);
       setMode('batch');
       const errors = results.filter(r => r.error);
-      message[errors.length > 0 ? 'warning' : 'success'](`${results.length} 条，${errors.length > 0 ? errors.length + ' 条失败' : '全部成功'}`);
+      if (results.length > 0 && errors.length === results.length) {
+        // 一条都没算出来：把原因说清楚（登录过期、服务没响应……），不能只说“N 条失败”
+        message.error(`群算没有完成：${errors[0].error}`);
+      } else {
+        message[errors.length > 0 ? 'warning' : 'success'](`${results.length} 条，${errors.length > 0 ? errors.length + ' 条失败' : '全部成功'}`);
+      }
     }
     setImportLoading(false);
   };
@@ -304,6 +321,26 @@ function ResourceCalculator() {
           </Space>
         </div>
         <BatchResultsView batchResults={batchResults} onClose={goHome} />
+      </div>
+    );
+  }
+
+  // ============ 单算失败页：后端没算出结果 ============
+  if (mode === 'single' && calcError && currentInput) {
+    return (
+      <div>
+        <div className="page-header">
+          <div>
+            <Title level={3} style={{ margin: 0 }}><CalculatorOutlined style={{ marginRight: 8 }} />资源计算</Title>
+          </div>
+          <Space>
+            <Button type="primary" icon={<CalculatorOutlined />} loading={calcLoading} onClick={() => handleSingleCalc(currentInput)}>重新计算</Button>
+            <Button onClick={() => { setCalcError(''); setMode('home'); setSingleModalOpen(true); }}>修改参数</Button>
+            <Button onClick={goHome}>← 返回首页</Button>
+          </Space>
+        </div>
+        <Alert type="error" showIcon message="这次计算没有出结果" description={calcError} style={{ marginBottom: 16 }} />
+        <Alert type="info" showIcon message="没有改用本地的旧版估算，也没有存入计算历史" />
       </div>
     );
   }
@@ -357,7 +394,7 @@ function ResourceCalculator() {
             {filterDate && <Button size="small" onClick={() => setFilterDate('')}>清除日期</Button>}
             {!backendOnline && <Tag color="red">后端离线</Tag>}
             <Button size="small" icon={<DownloadOutlined />} onClick={() => loadHistory(1, historyPageSize)} loading={historyLoading}>刷新</Button>
-            <Text type="secondary">{historyData.length > 0 ? `共 ${historyData.length} 条` : ''}</Text>
+            <Text type="secondary">{historyTotal > 0 ? `共 ${historyTotal} 条` : ''}</Text>
           </Space>
         }
       >
@@ -390,7 +427,9 @@ function ResourceCalculator() {
               },
               { title: '峰值', key: 'peak', width: 70, render: (_: unknown, r: HistoryGroupItem) => r.type === 'batch' ? `${r.total_peak}人` : `${r.peak_staff}人` },
               { title: '人天', key: 'md', width: 75, render: (_: unknown, r: HistoryGroupItem) => r.type === 'batch' ? r.total_md : r.total_man_days },
-              { title: '时间', dataIndex: 'time', width: 155 },
+              { title: '时间', dataIndex: 'time', width: 165,
+                // 后端给的是 ISO 时间（UTC）：按本地时间显示
+                render: (t: string) => { const d = new Date(t); return Number.isNaN(d.getTime()) ? t : d.toLocaleString('zh-CN', { hour12: false }); } },
               {
                 title: '操作', key: 'action', width: 180,
                 render: (_: unknown, r: HistoryGroupItem) => {
@@ -431,7 +470,7 @@ function ResourceCalculator() {
         footer={[
           <Button key="back" onClick={() => setSingleModalOpen(false)}>取消</Button>,
           <Button key="import" icon={<ImportOutlined />} onClick={() => { setSingleModalOpen(false); setImportMode('single'); setImportFile(null); setImportedData([]); setImportError(''); setImportModalOpen(true); }}>从Excel导入</Button>,
-          <Button key="calc" type="primary" icon={<CalculatorOutlined />} loading={calcLoading} onClick={handleSingleCalc}>开始计算</Button>,
+          <Button key="calc" type="primary" icon={<CalculatorOutlined />} loading={calcLoading} onClick={() => handleSingleCalc()}>开始计算</Button>,
         ]}
         width={isMobile ? 'calc(100vw - 24px)' : 560}
       >

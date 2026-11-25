@@ -1,10 +1,9 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import fs from 'fs';
-import path from 'path';
 import { requireAuth, requireRole } from './auth.js';
 import { TERMINOLOGY, buildTerminologyPrompt, FEW_SHOT_EXAMPLES } from './terminology.js';
 import { ALL_COMMON_TYPOS, buildCommonTyposPrompt } from './commonTypos.js';
-import { buildLearnedPrompt, addCorrection, loadCorrections, getKnownOriginals } from './learnedCorrections.js';
+import { buildLearnedPrompt, addCorrection, loadCorrections, getKnownOriginals, persistCorrections } from './learnedCorrections.js';
+import { describeZhipuError, ZHIPU_CHAT_URL } from '../utils/zhipuError.js';
 
 const router = Router();
 
@@ -14,8 +13,6 @@ const asyncHandler = (fn: (req: Request, res: Response, next: NextFunction) => P
     Promise.resolve(fn(req, res, next)).catch(next);
   };
 
-// 已学习纠错库的落盘路径（与 learnedCorrections.ts DATA_DIR/FILE 保持一致）
-const PERSIST_PATH = path.resolve(process.cwd(), 'data', 'learned-corrections.json');
 
 /**
  * POST /api/report-review
@@ -88,38 +85,46 @@ router.post('/', requireAuth, asyncHandler(async (req, res) => {
     return res.status(400).json({ success: false, message: '缺少待审核文本' });
   }
 
-  const apiKey = process.env.MINIMAX_API_KEY;
+  const apiKey = process.env.ZHIPU_API_KEY;
   if (!apiKey) {
-    return res.status(500).json({ success: false, message: 'AI 服务未配置（MINIMAX_API_KEY 未设置）' });
+    return res.status(500).json({ success: false, message: 'AI 服务未配置（ZHIPU_API_KEY 未设置）' });
   }
 
   // ===== 智能分级审核策略（按字数自动切换）=====
   // 策略 ai_full（≤3万字）: AI 全量精审（每段8000字，5并发）+ 词典兜底
   // 策略 hybrid（>3万字）:  词典规则全量秒级扫描 + AI 抽审前 3 万字（目录/摘要/正文开头，错字密度最高）
-  //   说明：长文档（如14万字）若全量走 AI，分段过多、单段易命中 MiniMax 内容安全软拦截
+  //   说明：长文档（如14万字）若全量走 AI，分段过多、单段易触发模型内容安全软拦截
   //   返回空 content，且 19 段串行批处理总耗时超过前端超时。改用 hybrid：词典保证
   //   300+ 类已知错字（地名/品牌/术语/学习库）秒级必抓，AI 补充前 3 万字精审。
   const textLen = text.length;
   const STRATEGY = textLen <= 30000 ? 'ai_full' : 'hybrid';
+  // 长文档只让 AI 审前 3 万字（分段过多，既慢又容易被内容安全软拦截），其余靠词典全量扫描
+  const AI_TEXT_LIMIT = 30000;
   console.log(`[ReportReview] 文本 ${textLen} 字，策略: ${STRATEGY}`);
 
   try {
-    const ruleErrors = ruleBasedDetect(text);
+    const correctionsMap = loadCorrections(); // 请求级一次加载（此前每 known original 各读一次盘）
+    const ruleErrors = ruleBasedDetect(text, correctionsMap);
     let aiErrors: Array<{original: string; suggestion: string; context: string}> = [];
+    let aiFailReason = ''; // AI 一段都没审成的原因：要带给前端明示，否则用户以为 AI 审过
+    let aiPartial: { failed: number; total: number; reasons: string[] } | undefined;
 
-    if (STRATEGY === 'hybrid') {
-      // ===== 长文档（>3万字）: 词典全量秒级扫描 + AI 抽审前 3 万字 =====
-      // 词典规则已覆盖常见错别字（地名/品牌/术语/学习库），秒级完成
-      // AI 只审核"最可能有错别字"的段落：取前 3 万字（约 4 段，1 批并发，~15-30s）
-      const aiText = text.slice(0, 30000);
-      try {
-        aiErrors = await callAiReview(apiKey, aiText);
-      } catch (aiErr: any) {
-        console.warn('[ReportReview] AI 抽审失败，仅返回词典结果:', aiErr?.message, '| 文档', textLen, '字');
+    try {
+      // 两种策略同一个口径：ai_full 审全文；hybrid 只审前 3 万字，其余靠词典全量扫描
+      const aiText = STRATEGY === 'hybrid' ? text.slice(0, AI_TEXT_LIMIT) : text;
+      const run = await callAiReview(apiKey, aiText);
+      aiErrors = run.items;
+      if (run.total > 0 && run.failed === run.total) {
+        aiFailReason = (run.reasons[0] || 'AI 服务异常').slice(0, 160);
+        console.warn('[ReportReview] AI 全部段失败，仅返回词典结果:', aiFailReason, '| 文档', textLen, '字');
+      } else if (run.failed > 0) {
+        // 部分段没审成：这些段落可能有错别字没被查出来，必须告诉用户，不能报“审核完成”
+        aiPartial = { failed: run.failed, total: run.total, reasons: run.reasons };
+        console.warn(`[ReportReview] AI 有 ${run.failed}/${run.total} 段未完成:`, run.reasons.join(' | '));
       }
-    } else {
-      // ===== 正常文档（≤3万字）: AI 全量精审 =====
-      aiErrors = await callAiReview(apiKey, text);
+    } catch (aiErr: any) {
+      aiFailReason = String(aiErr?.message || 'AI 服务异常').slice(0, 160);
+      console.warn('[ReportReview] AI 审核失败，仅返回词典结果:', aiErr?.message, '| 文档', textLen, '字');
     }
 
     const merged = mergeAndDedup(aiErrors, ruleErrors);
@@ -130,9 +135,11 @@ router.post('/', requireAuth, asyncHandler(async (req, res) => {
         aiErrors: aiErrors.length,
         ruleErrors: ruleErrors.length,
         merged: merged.length,
-        learnedLibrarySize: Object.keys(loadCorrections()).length,
+        learnedLibrarySize: Object.keys(correctionsMap).length,
         strategy: STRATEGY,
         textLength: textLen,
+        ...(aiFailReason ? { aiFailed: true, aiFailReason } : {}),
+        ...(aiPartial ? { aiPartial } : {}),
       },
     });
   } catch (err: any) {
@@ -141,7 +148,7 @@ router.post('/', requireAuth, asyncHandler(async (req, res) => {
     res.status(500).json({
       success: false,
       message: errMsg,
-      ruleErrorsOnly: ruleBasedDetect(text).length,
+      // ruleErrors 定义在 try 内，catch 分支不可见：去掉该字段（原实现此处会重跑全文检测）
     });
   }
 }));
@@ -157,7 +164,8 @@ router.post('/', requireAuth, asyncHandler(async (req, res) => {
  *  3. original !== suggestion（无意义学习直接拒）
  *  4. trim 处理
  */
-router.post('/learn', requireAuth, (req, res) => {
+// 学习库会注入所有用户的审核提示词，属于共享数据：只有管理者和编辑者能写（删除仍然只限管理者）
+router.post('/learn', requireAuth, requireRole(['管理者', '编辑者']), (req, res) => {
   const rawOriginal = (req.body?.original ?? '').toString().trim();
   const rawSuggestion = (req.body?.suggestion ?? '').toString().trim();
   if (!rawOriginal || !rawSuggestion) {
@@ -170,6 +178,9 @@ router.post('/learn', requireAuth, (req, res) => {
     return res.status(400).json({ success: false, message: '原词和推荐词相同，无需学习' });
   }
   const updated = addCorrection(rawOriginal, rawSuggestion, 'user');
+  if (!updated) {
+    return res.status(400).json({ success: false, message: 'original 不能用作学习条目' });
+  }
   res.json({ success: true, correction: updated });
 });
 
@@ -184,13 +195,13 @@ router.delete('/learn', requireRole(['管理者']), (req, res) => {
     return res.status(400).json({ success: false, message: 'original 必填' });
   }
   const all = loadCorrections();
-  if (!all[raw]) {
+  if (!Object.hasOwn(all, raw)) {
     return res.status(404).json({ success: false, message: '该条目不存在' });
   }
   delete all[raw];
-  // 落盘：复用持久化逻辑（与 learnedCorrections.ts 一致）
+  // 落盘：统一走 learnedCorrections 的原子写（临时文件 + 改名）
   try {
-    fs.writeFileSync(PERSIST_PATH, JSON.stringify(all, null, 2), 'utf-8');
+    persistCorrections(all);
   } catch (e: any) {
     return res.status(500).json({ success: false, message: '落盘失败：' + (e?.message || 'unknown') });
   }
@@ -212,63 +223,80 @@ router.get('/learned', requireAuth, (_req, res) => {
 
 // ============== 内部函数 ==============
 
-/**
- * 调 MiniMax AI；带超时、超长分段、并发批处理、Few-shot
- *
- * 注意：callMiniMaxOnce 在失败时会抛错（而非静默返回空数组），
- * 上层 callAiReview 用 try/catch 兜底，把错误信息透传给前端，
- * 避免"AI 挂了但前端显示审核完成 0 错误"的误导。
- */
-async function callAiReview(apiKey: string, text: string): Promise<Array<{original: string; suggestion: string; context: string}>> {
-  const okBatches: { ok: number; total: number; why: any }[] = [];
-  // 长文档分段（按段落切，每段 ≤ 3500 字）
-  const chunks = splitText(text, 8000);
-  // 并发调用：分批并行（每批 5 段同时调，避免触发限流）
-  // 14万字：旧方案 40段×串行 ≈ 5-10分钟；新方案 18段×并行(每批5个) ≈ 30-60秒
-  const BATCH_SIZE = 5;
-  const out: Array<{original: string; suggestion: string; context: string}> = [];
-  for (let i = 0; i < chunks.length; i += BATCH_SIZE) {
-    const batch = chunks.slice(i, i + BATCH_SIZE);
-    const results = await Promise.allSettled(
-      batch.map((chunk) => callMiniMaxOnce(apiKey, chunk))
-    );
-    let okN = 0;
-    for (const r of results) {
-      if (r.status === 'fulfilled') {
-        okN++;
-        out.push(...r.value);
-      } else {
-        console.warn('[ReportReview] 某段审核失败:', r.reason?.message || r.reason);
-      }
-    }
-    // 全部段失败：抛错而非静默返回空（否则前端看到"审核完成、0 错误"的误导）
-    if (okN === 0 && results.length > 0) {
-      const why = (results.find(r => r.status === 'rejected') as PromiseRejectedResult)?.reason;
-      throw new Error(`AI 审核 ${results.length} 段全部失败：${why?.message || why || '未知错误'}`);
-    }
-  }
-  return out;
-}
+type TypoItem = { original: string; suggestion: string; context: string };
+
+/** 一次 AI 审核的结果：items 是审成的段里查到的错别字；failed 是没审成的段数（超时/限流/空输出/截断） */
+interface AiReviewRun { items: TypoItem[]; total: number; failed: number; reasons: string[] }
 
 /**
- * 单次调用 MiniMax ChatCompletion v2
+ * 调智谱 GLM；带超时、超长分段、并发批处理、Few-shot
  *
- * 模型：MiniMax-M3（官方主推旗舰）
- *   - 1M 上下文，适合长文档错别字检测
+ * 按段记录成败：某一段失败不等于“这一段没有错别字”。这里不因为个别段失败而抛错，
+ * 而是把失败段数交给路由层如实返回（全部失败 → aiFailed；部分失败 → aiPartial）。
+ */
+async function callAiReview(apiKey: string, text: string): Promise<AiReviewRun> {
+  // 长文档分段（按段落切，每段 ≤ 8000 字）
+  const chunks = splitText(text, 8000);
+  // 分批并行。每批 3 段：套餐端点并发上限低（实测 6 路即触发 1302 限流），还要给别人同时审核留余量
+  const BATCH_SIZE = 3;
+  const out: TypoItem[] = [];
+  const reasons: string[] = [];
+  let failed = 0;
+  for (let i = 0; i < chunks.length; i += BATCH_SIZE) {
+    const batch = chunks.slice(i, i + BATCH_SIZE);
+    let results = await Promise.allSettled(
+      batch.map((chunk) => callZhipuOnce(apiKey, chunk))
+    );
+    // 被限流的段等一下重试一次（套餐端点限流是短时的；不重试的话这段的错别字会静默漏掉）
+    const limited = results
+      .map((r, k) => (r.status === 'rejected' && /限流/.test(String(r.reason?.message || r.reason)) ? k : -1))
+      .filter(k => k >= 0);
+    if (limited.length) {
+      await new Promise(r => setTimeout(r, 4000));
+      const again = await Promise.allSettled(limited.map(k => callZhipuOnce(apiKey, batch[k])));
+      again.forEach((r, j) => { results[limited[j]] = r; });
+    }
+    for (const r of results) {
+      if (r.status === 'fulfilled') {
+        out.push(...r.value);
+      } else {
+        failed++;
+        const why = String(r.reason?.message || r.reason || '未知错误');
+        console.warn('[ReportReview] 某段审核失败:', why);
+        if (reasons.length < 3) reasons.push(why);
+      }
+    }
+  }
+  return { items: out, total: chunks.length, failed, reasons };
+}
+
+// 模型与思考强度可用环境变量覆盖（换配置不必重新构建镜像）；默认值见下方选型说明
+const REPORT_MODEL = process.env.REPORT_REVIEW_MODEL || 'glm-5.2';
+const REPORT_EFFORT = process.env.REPORT_REVIEW_EFFORT || 'low';
+
+/**
+ * 单次调用智谱 ChatCompletion（Coding Plan 的 OpenAI 兼容端点，与故障日志解析/图纸复核同一通道）
+ *
+ * 模型：glm-5.2 思考模式、强度 low。选型为实测结果（两套各含 24 处错别字的样本）：
+ *   套餐通道（2026-11-24，经平台串行）：glm-5.2 low 11/11 次 24/24 检出，1100 字 9-15s、
+ *     8000 字单段 12-13s、2.9 万字 24-26s；同通道 glm-5.3 high 短样本 82s、2.9 万字 129-179s，
+ *     并出现过 90s 超时（同一档位下套餐通道的思考量约为通用端点的 3 倍、出字速度约六成）
+ *   通用端点（2026-11-23）：glm-5.3 high 11/11 次正确、4 段并发整批 9s；glm-5.2 low 12/12 次正确；
+ *     glm-5.3 low 在 8000 字长段约 2/3 概率漏 1 处；glm-5.3-flash：稳定漏检 1 处
  *   - 通过 system prompt 约束 JSON 输出
  *
  * 错误处理：
- *   - HTTP 非 2xx → 抛错（带状态码 + 响应体片段）
+ *   - HTTP 非 2xx → 抛错（带状态码 + 响应体片段）；智谱出错时以非 2xx 返回 {error:{code,message}}
  *   - JSON 解析失败 → 尝试提取 ```json 块 → 仍失败返回空
  *   - 超时 → 抛错（AbortError）
  *   - 上层 callAiReview 不 catch，让错误冒泡到路由 handler 返回 500
  */
-async function callMiniMaxOnce(
+async function callZhipuOnce(
   apiKey: string,
   text: string,
 ): Promise<Array<{original: string; suggestion: string; context: string}>> {
   const controller = new AbortController();
-  // 90s 超时（长文档 + M3 推理可能较慢）
+  // 90s 超时（长文档 + 思考模式可能较慢）。定时器在 finally 里清：要一直覆盖到响应体读完
   const timeout = setTimeout(() => controller.abort(), 90000);
 
   // 拼装 system prompt：基础 + 通用错字词典 + 数据中心术语词典 + 学习库 + Few-shot
@@ -289,87 +317,84 @@ async function callMiniMaxOnce(
 
   let requestId = 'unknown';
   try {
-    const response = await fetch('https://api.minimaxi.com/v1/text/chatcompletion_v2', {
+    const response = await fetch(ZHIPU_CHAT_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        // MiniMax-M3：官方主推前沿模型
-        model: 'MiniMax-M3',
+        model: REPORT_MODEL,
         messages: [
           { role: 'system', content: systemContent },
           { role: 'user', content: text },
         ],
-        temperature: 0.05,   // 低温度求稳定
+        thinking: { type: 'enabled' },
+        reasoning_effort: REPORT_EFFORT,  // glm-5.3 不支持 medium；glm-5.3 的 low 在 8000 字长段上会漏检（见上方选型说明）
         max_tokens: 8192,
       }),
       signal: controller.signal,
     });
-    clearTimeout(timeout);
 
     // 记录 request_id（智谱响应头里通常有，方便排查）
     requestId = response.headers.get('x-request-id') || response.headers.get('request-id') || 'unknown';
 
     if (!response.ok) {
       const errText = await response.text();
-      const msg = `MINIMAX HTTP ${response.status}: ${errText.slice(0, 300)}`;
+      const msg = describeZhipuError(response.status, errText);
       console.error(`[ReportReview] ${msg} | req_id=${requestId}`);
       throw new Error(msg);
     }
 
     const data: any = await response.json();
+    // 智谱的业务错误（余额不足 1113 / 限流 429 等）都走非 2xx 状态码，上面的 !response.ok 已覆盖
 
-    // MiniMax 业务错误检查：base_resp.status_code != 0 表示失败
-    const baseStatus = data?.base_resp?.status_code;
-    const baseMsg = data?.base_resp?.status_msg;
-    if (typeof baseStatus === 'number' && baseStatus !== 0) {
-      const msg = `MINIMAX 业务错误 code=${baseStatus}: ${baseMsg || 'unknown'}`;
-      console.error(`[ReportReview] ${msg} | req_id=${requestId}`);
-      throw new Error(msg);
+    const choice = data.choices?.[0];
+    const content: string = choice?.message?.content || '';
+    // 下面三种都不是“这段没有错别字”，而是“这段没审成”，一律抛错交给上层按失败段计数
+    if (choice?.finish_reason === 'length') {
+      console.warn(`[ReportReview] AI 输出被截断（finish_reason=length） | req_id=${requestId}`);
+      throw new Error('AI 输出因长度上限被截断，该段结果不完整');
     }
-
-    const content: string = data.choices?.[0]?.message?.content || '';
     if (!content) {
       console.warn(`[ReportReview] AI 返回空 content | req_id=${requestId}`);
-      return [];
+      throw new Error('AI 返回了空内容（可能被内容安全策略拦截）');
     }
     let parsed: any;
     try {
       parsed = JSON.parse(content);
     } catch {
-      // M3 可能输出带 ```json 包裹的 markdown，尝试提取
-      const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
-      if (jsonMatch) {
-        try {
-          parsed = JSON.parse(jsonMatch[1].trim());
-        } catch {
-          console.warn(`[ReportReview] AI 返回非 JSON | req_id=${requestId}:`, content.slice(0, 300));
-          return [];
-        }
-      } else {
+      // 模型可能输出带 ```json 包裹的 markdown，或在 JSON 前后带一句说明：取首个 { 到末个 } 再试
+      const stripped = content.replace(/^\s*```(?:json)?/i, '').replace(/```\s*$/, '').trim();
+      const a = stripped.indexOf('{'), b = stripped.lastIndexOf('}');
+      const candidate = a >= 0 && b > a ? stripped.slice(a, b + 1) : '';
+      try {
+        parsed = JSON.parse(candidate);
+      } catch {
         console.warn(`[ReportReview] AI 返回非 JSON | req_id=${requestId}:`, content.slice(0, 300));
-        return [];
+        throw new Error('AI 返回的内容不是规定的 JSON 格式');
       }
     }
     const arr = Array.isArray(parsed.errors) ? parsed.errors : [];
     return arr
-      .filter((e: any) => e && typeof e.original === 'string' && e.original.length > 0)
+      // 原文与建议相同的不算纠错（模型偶尔把正确的词也列一条，如「记入→记入（正确）」）
+      .filter((e: any) => e && typeof e.original === 'string' && e.original.length > 0
+        && String(e.original).trim() !== String(e.suggestion ?? '').trim())
       .map((e: any) => ({
         original: String(e.original),
         suggestion: String(e.suggestion || ''),
         context: String(e.context || '').slice(0, 60),
       }));
   } catch (err: any) {
-    clearTimeout(timeout);
     if (err.name === 'AbortError') {
-      const msg = 'MINIMAX 调用超时（90s）';
+      const msg = '智谱调用超时（90s）';
       console.error(`[ReportReview] ${msg} | req_id=${requestId}`);
       throw new Error(msg);
     }
     // 已经是上面抛出的带 req_id 的错误，直接冒泡
     throw err;
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
@@ -408,7 +433,7 @@ function isInsideLongerChineseWord(text: string, idx: number, len: number): bool
 /**
  * 词典兜底：用通用易混字词典、术语词典、学习库直接匹配文本，确保 AI 漏网也被抓到
  */
-function ruleBasedDetect(text: string): Array<{original: string; suggestion: string; context: string}> {
+function ruleBasedDetect(text: string, preloaded?: Record<string, {suggestion: string}>): Array<{original: string; suggestion: string; context: string}> {
   const out: Array<{original: string; suggestion: string; context: string}> = [];
   const seen = new Set<string>();
 
@@ -465,7 +490,7 @@ function ruleBasedDetect(text: string): Array<{original: string; suggestion: str
   // 3) 学习纠错库
   const known = getKnownOriginals();
   for (const original of known) {
-    const c = loadCorrections()[original];
+    const c = (preloaded ?? loadCorrections())[original];
     if (!c || original === c.suggestion) continue;
     let from = 0;
     while (true) {

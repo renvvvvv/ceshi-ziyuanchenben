@@ -13,8 +13,19 @@ CREATE TABLE IF NOT EXISTS knowledge_embeddings (
     content     TEXT NOT NULL,
     embedding   vector(1024)
 );
-CREATE INDEX IF NOT EXISTS idx_knowledge_embedding
-ON knowledge_embeddings USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+-- 向量表暂不建索引（2026-11-24 移除）。原先建的是 ivfflat 索引且 lists=100，而知识块只有一千多条、查询默认只查
+-- 1 个桶：实测它返回的前 3 近邻与精确结果相比只有约 34%~38% 是对的，是“故障场景题检索不到案例库”的根因。
+-- 这个量级下全表精确扫描只要约 9ms。等知识块增长到几万条、精确扫描明显变慢时再建 HNSW 索引：
+--   CREATE INDEX idx_knowledge_embedding_hnsw ON knowledge_embeddings USING hnsw (embedding vector_cosine_ops);
+-- 上面删掉的只是“建索引”的语句：在这之前初始化的库，那个 ivfflat 索引还在，每次启动都要在这里清掉。
+-- 只清 ivfflat 的那一个（将来建的 HNSW 索引不要沿用这个名字）。
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_indexes
+             WHERE indexname = 'idx_knowledge_embedding' AND indexdef ILIKE '%ivfflat%') THEN
+    DROP INDEX idx_knowledge_embedding;
+  END IF;
+END $$;
 
 -- 资源计算历史记录
 CREATE TABLE IF NOT EXISTS resource_calc_history (
@@ -32,6 +43,10 @@ CREATE TABLE IF NOT EXISTS resource_calc_history (
     result_json     TEXT    NOT NULL,
     created_at      TIMESTAMP NOT NULL DEFAULT NOW()
 );
+
+-- 机柜功率分段 [[功率, 台数], ...]（单功率段也存；没有分段为 NULL）。cabinet_power 列只是整数概览，
+-- 多功率段时重新加载历史记录必须以这一列为准（2026-11-24 新增）
+ALTER TABLE resource_calc_history ADD COLUMN IF NOT EXISTS cabinet_power_segments JSONB;
 
 CREATE INDEX IF NOT EXISTS idx_rc_batch ON resource_calc_history(batch_id);
 CREATE INDEX IF NOT EXISTS idx_rc_created ON resource_calc_history(created_at DESC);
@@ -141,7 +156,8 @@ CREATE TABLE IF NOT EXISTS kb_documents (
 CREATE INDEX IF NOT EXISTS idx_kb_parent ON kb_documents(parent_id);
 CREATE INDEX IF NOT EXISTS idx_kb_sort ON kb_documents(parent_id, sort_order);
 
--- 知识库默认数据：根目录 + 3 个分类
+-- 知识库默认数据：根目录 + 3 个分类（分类只在根目录下还没有任何分类时一次性写入：
+-- 管理员删掉某个默认分类后，不能在下次重启时又冒出来）
 -- 注意：必须先把 sequence 设到 100，避免后续不带 id 的 INSERT 用到 1（与根节点冲突）
 SELECT setval('kb_documents_id_seq', 100, false);
 
@@ -150,16 +166,9 @@ SELECT 1, NULL, '智航测试部知识库', 0
 WHERE NOT EXISTS (SELECT 1 FROM kb_documents WHERE id = 1);
 
 INSERT INTO kb_documents (parent_id, title, sort_order)
-SELECT 1, '电力系统测试', 1
-WHERE NOT EXISTS (SELECT 1 FROM kb_documents WHERE parent_id = 1 AND title = '电力系统测试');
-
-INSERT INTO kb_documents (parent_id, title, sort_order)
-SELECT 1, '暖通系统测试', 2
-WHERE NOT EXISTS (SELECT 1 FROM kb_documents WHERE parent_id = 1 AND title = '暖通系统测试');
-
-INSERT INTO kb_documents (parent_id, title, sort_order)
-SELECT 1, '弱电消防测试', 3
-WHERE NOT EXISTS (SELECT 1 FROM kb_documents WHERE parent_id = 1 AND title = '弱电消防测试');
+SELECT 1, t.title, t.sort_order
+FROM (VALUES ('电力系统测试', 1), ('暖通系统测试', 2), ('弱电消防测试', 3)) AS t(title, sort_order)
+WHERE NOT EXISTS (SELECT 1 FROM kb_documents WHERE parent_id = 1);
 
 -- 如果之前已有数据，把 sequence 同步到 MAX(id) 之后
 SELECT setval('kb_documents_id_seq', GREATEST(100, (SELECT COALESCE(MAX(id), 100) FROM kb_documents)));
@@ -293,4 +302,87 @@ CREATE TABLE IF NOT EXISTS project_phases (
     project_id TEXT PRIMARY KEY,
     phases     TEXT NOT NULL,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 以下三张表原先只在各自的路由模块加载时创建，且失败被静默忽略（数据库还没就绪时就会缺表，
+-- 而本进程内不会再重试）。放进建表脚本，保证数据库就绪后表一定存在。
+-- 路由里的同名 CREATE TABLE IF NOT EXISTS 保留（幂等），两处定义必须保持一致。
+
+-- 图纸路由任务（宿主机执行器经共享目录回写状态）
+CREATE TABLE IF NOT EXISTS drawing_jobs (
+    id          TEXT PRIMARY KEY,
+    title       TEXT NOT NULL,
+    status      TEXT NOT NULL DEFAULT 'queued',
+    file_count  INTEGER NOT NULL DEFAULT 0,
+    dwg_count   INTEGER,
+    created_by  TEXT NOT NULL,
+    username    TEXT NOT NULL,
+    error       TEXT,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    finished_at TIMESTAMPTZ
+);
+
+-- 故障日志快照（各组件日志聚合 + AI 解析结果）
+CREATE TABLE IF NOT EXISTS sys_snapshots (
+    id            TEXT PRIMARY KEY,
+    title         TEXT NOT NULL,
+    hours         INT NOT NULL DEFAULT 6,
+    created_by    TEXT NOT NULL,
+    username      TEXT NOT NULL,
+    components    JSONB NOT NULL,
+    ai_analysis   JSONB,
+    ai_model      TEXT,
+    ai_at         TIMESTAMPTZ,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 资源配置库（整库 JSON + 乐观锁版本号）
+CREATE TABLE IF NOT EXISTS rc_store (
+    key         TEXT PRIMARY KEY,
+    value       JSONB NOT NULL,
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    version     INT DEFAULT 1
+);
+
+-- ============================================================
+-- 出差概览（2026-11-25 新增）：值班补贴台账里的出差登记，由台账解析管线导入；平台只读、不算台账。
+-- 表结构在 src/routes/trips.ts 里有一份同名定义（老库启动时兜底建表），两处必须保持一致。
+-- ============================================================
+
+-- 出差段：台账里一行“到岗日期–离岗日期”。同人同项目同起止同考勤期的完全重复行在导入前已去掉。
+CREATE TABLE IF NOT EXISTS trip_segments (
+    id            SERIAL PRIMARY KEY,
+    year          INTEGER NOT NULL,                 -- 年度（台账所属年份）
+    member_id     INTEGER,                          -- team_members.id（按姓名匹配；匹配不上为空）
+    member_name   TEXT    NOT NULL,
+    project_name  TEXT    NOT NULL,
+    position      TEXT,                             -- 岗位（原表写法归一后）
+    start_date    TEXT    NOT NULL,                 -- YYYY-MM-DD
+    end_date      TEXT    NOT NULL,
+    reg_days      INTEGER,                          -- 登记天数（原表手填）
+    period        INTEGER NOT NULL DEFAULT 0,       -- 登记的考勤期（几月期）
+    UNIQUE(year, member_name, project_name, start_date, end_date, period)
+);
+
+CREATE INDEX IF NOT EXISTS idx_trip_segments_year
+    ON trip_segments(year, member_name);
+
+-- 各考勤期的登记出勤天数：1–4 月期台账只有汇总数、没有日期；5 月期起 = 各行程天数之和 + 非测试出差天数
+CREATE TABLE IF NOT EXISTS trip_cycle_days (
+    id            SERIAL PRIMARY KEY,
+    year          INTEGER NOT NULL,
+    member_id     INTEGER,
+    member_name   TEXT    NOT NULL,
+    cycle         INTEGER NOT NULL,                 -- 几月期（1–12）
+    reg_days      INTEGER NOT NULL DEFAULT 0,
+    nontest_days  INTEGER NOT NULL DEFAULT 0,       -- 非测试出差天数（原表只有天数、没有日期）
+    UNIQUE(year, member_name, cycle)
+);
+
+-- 每个年度的导入信息：数据截止日、导入时间、按要求剔除的人
+CREATE TABLE IF NOT EXISTS trip_meta (
+    year         INTEGER PRIMARY KEY,
+    as_of        TEXT,                              -- 统计截止日 YYYY-MM-DD
+    imported_at  TIMESTAMP NOT NULL DEFAULT NOW(),
+    excluded     TEXT NOT NULL DEFAULT '[]'         -- JSON 数组：剔除的姓名
 );

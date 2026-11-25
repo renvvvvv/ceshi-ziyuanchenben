@@ -4,14 +4,32 @@
 # 保留策略：每日备份，保留最近 7 天
 set -euo pipefail
 
-PROJECT_DIR="/root/test-platform"
+# 项目目录：默认取本脚本所在目录的上一级（脚本随项目一起部署），可用环境变量 PROJECT_DIR 覆盖。
+# 此前写死 /root/test-platform：按文档装到别的路径时，下面“目录存在才备份”的检查会全部跳过，
+# 最后照样打印“备份完成”，实际只备份了数据库。
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="${PROJECT_DIR:-$(cd "${SCRIPT_DIR}/.." && pwd)}"
+if [ ! -f "${PROJECT_DIR}/docker-compose.yml" ]; then
+  echo "❌ 项目目录不对：${PROJECT_DIR} 下没有 docker-compose.yml。请用环境变量 PROJECT_DIR 指定项目路径" >&2
+  exit 1
+fi
 BACKUP_DIR="${PROJECT_DIR}/backups"
 DATE=$(date +%Y%m%d-%H%M%S)
 TODAY_DIR="${BACKUP_DIR}/${DATE}"
-PG_CONTAINER="test-platform-postgres-1"
+# 数据库容器：按 compose 文件查实际容器（容器名取决于项目目录名），查不到时退回默认名
+PG_CONTAINER="${PG_CONTAINER:-$(docker compose -f "${PROJECT_DIR}/docker-compose.yml" ps -q postgres 2>/dev/null | head -n 1 || true)}"
+PG_CONTAINER="${PG_CONTAINER:-test-platform-postgres-1}"
 DB_NAME="test_platform"
 DB_USER="postgres"
 RETAIN_DAYS=7
+# 缺了哪个目录就记下来：结尾如实报告“备份不完整”，并以非零码结束
+MISSING=""
+[ -d "${PROJECT_DIR}/data" ] || MISSING="${MISSING} data/"
+[ -d "${PROJECT_DIR}/uploads" ] || MISSING="${MISSING} uploads/"
+mkdir -p "${BACKUP_DIR}"
+if [ -n "${MISSING}" ]; then
+  echo "[$(date "+%Y-%m-%d %H:%M:%S")] ⚠️⚠️ 备份不完整：${PROJECT_DIR} 下找不到${MISSING}（账号库/会话/学习库、附件没有进本次备份）" | tee -a "${BACKUP_DIR}/backup.log"
+fi
 
 echo "[$(date "+%Y-%m-%d %H:%M:%S")] 开始备份..."
 
@@ -40,7 +58,7 @@ fi
 echo "  → 备份 uploads 附件（不含图纸任务）..."
 if [ -d "${PROJECT_DIR}/uploads" ]; then
   mkdir -p "${TODAY_DIR}/uploads"
-  (cd "${PROJECT_DIR}/uploads" && find . -maxdepth 1 ! -name drawing ! -name . -exec cp -r {} "${TODAY_DIR}/uploads/" \;)
+  (cd "${PROJECT_DIR}/uploads" && find . -maxdepth 1 ! -name drawing ! -name preview-cache ! -name . -exec cp -r {} "${TODAY_DIR}/uploads/" \;)
   echo "    附件备份完成"
 fi
 
@@ -81,9 +99,12 @@ if [ -d "/root/drawing-tools" ]; then
 fi
 
 # 5. 写入备份元信息
+if [ -z "${MISSING}" ]; then COMPLETE="完整（数据库 + data/ + uploads/）"; else COMPLETE="⚠️ 不完整，缺少:${MISSING}"; fi
 cat > "${TODAY_DIR}/BACKUP_INFO.txt" << EOF
 备份时间: $(date "+%Y-%m-%d %H:%M:%S")
+项目目录: ${PROJECT_DIR}
 备份内容: PostgreSQL ${DB_NAME} + data/ + uploads/(不含drawing) + drawing-tools脚本
+完整性: ${COMPLETE}
 图纸归档: backups/drawing-archive/（每任务一包，长期保留，不随7天轮换删除）
 数据库大小: ${DB_SIZE}
 备份类型: 全量自动备份
@@ -103,6 +124,10 @@ fi
 # 7. 统计
 TOTAL_SIZE=$(du -sh "${TODAY_DIR}" | cut -f1)
 BACKUP_COUNT=$(find "${BACKUP_DIR}" -maxdepth 1 -type d -name "20*" | wc -l)
+if [ -n "${MISSING}" ]; then
+  echo "[$(date "+%Y-%m-%d %H:%M:%S")] ⚠️⚠️ 备份不完整（缺少:${MISSING}），详见 ${BACKUP_DIR}/backup.log" | tee -a "${BACKUP_DIR}/backup.log"
+  exit 1
+fi
 echo ""
 echo "[$(date "+%Y-%m-%d %H:%M:%S")] 备份完成！"
 echo "  本次大小: ${TOTAL_SIZE}"

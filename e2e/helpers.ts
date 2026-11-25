@@ -1,10 +1,15 @@
 import { test as base, expect, type Page } from '@playwright/test';
+import { e2eAdmin, loadE2EEnv } from './env';
+
+// 用例文件在独立的工作进程里执行：这里也读一次 .env.e2e（幂等），不依赖配置进程
+loadE2EEnv();
 
 /**
  * 登录辅助：走 API 登录（绕开 UI 登录页的折叠面板交互），
  * cookie 会随 context 自动带到后续页面请求。
+ * 账号来自环境变量 / .env.e2e，见 ./env.ts。
  */
-export const TEST_ADMIN = { username: 'admin', password: 'admin111' };
+export const TEST_ADMIN = e2eAdmin();
 
 export async function apiLogin(page: Page) {
   const r = await page.request.post('/api/auth/login', { data: TEST_ADMIN });

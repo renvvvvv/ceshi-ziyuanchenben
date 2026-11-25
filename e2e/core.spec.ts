@@ -1,4 +1,5 @@
 import { test, expect, apiLogin, uiLogin, TEST_ADMIN } from './helpers';
+import { e2eEditor } from './env';
 
 test.describe('登录与权限', () => {
   test('错误密码登录被拒', async ({ page }) => {
@@ -7,7 +8,7 @@ test.describe('登录与权限', () => {
     await page.waitForTimeout(500);
     // 展开后的表单（选择器宽松：文本框出现即可）
     const inputs = page.locator('input');
-    await inputs.nth(0).fill('admin');
+    await inputs.nth(0).fill(TEST_ADMIN.username);
     await inputs.nth(1).fill('wrong-password');
     await page.locator('button[type=submit], button:has-text("登录")').last().click();
     await expect(page.locator('body')).toContainText(/密码|错误|失败/, { timeout: 8000 }).catch(() => {
@@ -140,10 +141,11 @@ test.describe('新功能回归', () => {
   });
 
   test('删除权限：editor 账号看不到项目删除按钮', async ({ page }) => {
+    const editor = e2eEditor();
     await page.goto('/login');
     await page.getByRole('button', { name: /管理员账号登录/ }).click();
-    await page.getByRole('textbox', { name: '账号' }).fill('editor');
-    await page.getByRole('textbox', { name: '密码' }).fill('editor123');
+    await page.getByRole('textbox', { name: '账号' }).fill(editor.username);
+    await page.getByRole('textbox', { name: '密码' }).fill(editor.password);
     await page.getByRole('button', { name: '登 录' }).click();
     await page.waitForURL('**/dashboard', { timeout: 15_000 });
     await page.goto('/projects');

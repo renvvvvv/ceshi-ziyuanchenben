@@ -100,23 +100,45 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 // ============================================================
-// 预置用户（演示用，实际应走后端验证）
+// 内置账号在前端的基础资料（id / 显示名 / 默认角色），用于后端返回信息不全时兜底。
+// 登录验证一律走后端：前端代码和打包产物里不保存任何口令。
 // ============================================================
 
-const PRESET_USERS: Record<string, { password: string; user: User }> = {
-  admin: {
-    password: 'admin123',
-    user: { id: 'u1', username: 'admin', name: '管理员', role: '管理者' },
-  },
-  editor: {
-    password: 'editor123',
-    user: { id: 'u2', username: 'editor', name: '编辑者', role: '编辑者' },
-  },
-  reader: {
-    password: 'reader123',
-    user: { id: 'u3', username: 'reader', name: '阅读者', role: '阅读者' },
-  },
+const PRESET_USERS: Record<string, User> = {
+  admin: { id: 'u1', username: 'admin', name: '管理员', role: '管理者' },
+  editor: { id: 'u2', username: 'editor', name: '编辑者', role: '编辑者' },
+  reader: { id: 'u3', username: 'reader', name: '阅读者', role: '阅读者' },
 };
+
+/** 后端 user 对象净化（validateSession 与 login 共用）：角色白名单 + manualRole/Perms 校验 + id/username 兜底 */
+function sanitizeBackendUser(raw: any, fallback?: User | null): User {
+  const presetUser = PRESET_USERS[raw?.username];
+  const ALLOWED_ROLES: UserRole[] = ['管理者', '编辑者', '阅读者'];
+  const role: UserRole = ALLOWED_ROLES.includes(raw?.role) ? raw.role : '阅读者';
+  const rawManualRole = raw?.manualRole;
+  const manualRole: UserRole | undefined =
+    rawManualRole && ALLOWED_ROLES.includes(rawManualRole) ? rawManualRole : undefined;
+  const rawManualPerms = raw?.manualPerms;
+  const manualPerms: ModulePermission[] | undefined =
+    Array.isArray(rawManualPerms) && rawManualPerms.length > 0
+      ? rawManualPerms.filter(
+          (p: any) => p && typeof p.module === 'string' &&
+            typeof p.view === 'boolean' &&
+            typeof p.edit === 'boolean' &&
+            typeof p.delete === 'boolean'
+        )
+      : undefined;
+  return {
+    id: String(raw?.id || raw?.userId || presetUser?.id || fallback?.id || ''),
+    username: String(raw?.username || presetUser?.username || fallback?.username || ''),
+    name: String(raw?.name || presetUser?.name || fallback?.name || raw?.username || ''),
+    role,
+    loginType: raw?.loginType === 'feishu' ? 'feishu' : 'password',
+    deptNames: Array.isArray(raw?.deptNames) ? raw.deptNames : undefined,
+    manualRole,
+    manualPerms,
+  };
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [authState, setAuthState] = useState<{ user: User | null }>(() => {
@@ -140,7 +162,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (cancelled) return;
 
         if (res.ok && data.success && data.user) {
-          const presetUser = PRESET_USERS[data.user.username]?.user;
+          const presetUser = PRESET_USERS[data.user.username];
           // 白名单校验 role，防止后端返回未知角色导致权限映射全空
           const ALLOWED_ROLES: UserRole[] = ['管理者', '编辑者', '阅读者'];
           const rawRole = data.user.role;
@@ -260,7 +282,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!res.ok || !data.success) {
           return { success: false, message: data.error || '登录失败' };
         }
-        const newState = { user: data.user };
+        // 复用与 validateSession 相同的净化（角色白名单/manualRole/manualPerms/id 兜底），
+        // 此前直接透传 data.user：后端返回未知 role 时权限映射全空且被持久化
+        const newState = { user: sanitizeBackendUser(data.user, authState.user) };
         setAuthState(newState);
         saveToStorage(AUTH_KEY, newState);
         // 广播登录成功：DataContext 监听后重拉后端数据，

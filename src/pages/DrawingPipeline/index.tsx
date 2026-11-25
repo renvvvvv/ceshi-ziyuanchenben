@@ -34,18 +34,49 @@ interface ReviewFinding {
   corrected_value?: string;  // 人工修正值（结构化，入学习库供管线回写）
 }
 interface ReviewState {
-  model: string; updated_at: string; findings: ReviewFinding[];
+  model: string;
+  mode?: 'standard' | 'deep';   // deep：页面发起的 GLM-5.3 后台复核；standard：旧的 GLM-5.2 同步复核结果
+  updated_at: string; findings: ReviewFinding[];
   stats: Record<string, number>; summary: string;
 }
+/** 后台复核的状态（与后端 PendingReview 对齐）：running 时前端轮询，failed 时提示 */
+interface PendingReview {
+  mode: string; status: 'running' | 'failed'; started_at: string; by?: string;
+  failed_at?: string; error?: string;
+}
 interface ReviewHistoryItem { role: string; kind: string; at: string; by?: string; [k: string]: any }
+/** 复核历史条目的标签：人工侧分 反馈 / 修正 / 建议 三种，后端 history 里用 kind 区分 */
+function historyLabel(h: ReviewHistoryItem): string {
+  if (h.role === 'human') {
+    const who = h.by || '—';
+    return h.kind === 'correct' ? `人工修正（${who}）` : h.kind === 'suggest' ? `优化建议（${who}）` : `人工反馈（${who}）`;
+  }
+  return h.kind === 'reverify' ? 'AI 重核' : `AI 复核（${h.dur_sec ?? '?'}s）`;
+}
+/** 复核历史条目的正文：修正记录存的是 finding + value，没有 message */
+function historyText(h: ReviewHistoryItem): string {
+  if (h.role === 'human' && h.kind === 'correct') return `疑点 ${h.finding ?? ''} 的修正值：${h.value ?? ''}`;
+  return h.role === 'human' ? h.message : h.summary;
+}
+
 /** 自学习库条目（与后端 Learning 对齐） */
 interface LearningItem {
   id: string; kind: string; content: string; buildings: string[];
   source_job: string; created_by: string; at: string; applied: number;
 }
 
+/** 默认打开数据最丰富的表：机柜路由 > 低压一层 > 首个（「说明」页仅3行文字，观感像空白） */
+function pickDefaultSheet(list: SheetMeta[] | undefined | null): string {
+  if (!list?.length) return '';
+  const prefer = list.find((x) => x.name.includes('机房机柜路由'))
+    || list.find((x) => x.name.includes('低压系统'))
+    || list[0];
+  return prefer.file;
+}
+
 const STAGE_TEXT: Record<string, { text: string; pct: number }> = {
   'queued': { text: '排队中', pct: 5 },
+  '完成': { text: '完成', pct: 100 },   // 解析脚本从日志里认出的收尾阶段，状态写成 done 之前会短暂停在这里
   '解压归档': { text: '解压归档', pct: 10 },
   '格式转换': { text: 'DWG 格式转换（最耗时）', pct: 35 },
   '处理中': { text: '处理中', pct: 50 },
@@ -83,7 +114,8 @@ export default function DrawingPipeline() {
   const [review, setReview] = useState<ReviewState | null>(null);
   const [reviewHistory, setReviewHistory] = useState<ReviewHistoryItem[]>([]);
   const [learnings, setLearnings] = useState<LearningItem[]>([]);
-  const [reviewing, setReviewing] = useState(false);       // AI 复核进行中
+  const [reviewPending, setReviewPending] = useState<PendingReview | null>(null); // 后台复核：进行中 / 失败
+  const [reviewStarting, setReviewStarting] = useState(false); // 启动请求发出去了（还没拿到 202）
   const [feedbackText, setFeedbackText] = useState('');
   const [feedbackSending, setFeedbackSending] = useState(false);
   // 人工修正值（findingId → value）与优化建议
@@ -93,6 +125,7 @@ export default function DrawingPipeline() {
   const [suggestSending, setSuggestSending] = useState(false);
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const pollRef = useRef<number | null>(null);
+  const detailSeqRef = useRef(0);          // 详情请求序号：切换任务后，旧任务的迟到响应一律丢弃
 
   const loadJobs = useCallback(async () => {
     try {
@@ -108,6 +141,7 @@ export default function DrawingPipeline() {
     const tick = async () => {
       if (stop) return;
       await loadJobs();
+      if (stop) return; // 卸载发生在请求期间时不再排下一轮（否则每次进出页面泄漏一条永久轮询链）
       const anyRunning = jobsRef.current.some(j => j.status === 'running' || j.status === 'queued');
       pollRef.current = window.setTimeout(tick, anyRunning ? 3000 : 15000);
     };
@@ -117,25 +151,38 @@ export default function DrawingPipeline() {
 
   const jobsRef = useRef<JobItem[]>([]);
   jobsRef.current = jobs;
+  const detailIdRef = useRef<string>('');  // 当前显示的任务 id，供异步回调核对“用户还停在这个任务上吗”
+  detailIdRef.current = detail?.id ?? '';
 
-  // 详情打开时轮询详情（运行中滚动日志）
+  // 详情打开时轮询详情（运行中滚动日志）。用 setTimeout 链而不是 setInterval：
+  // interval 派发的异步回调没有先后约束，慢的那次可能后到，把“已完成”覆盖回“运行中”。
   useEffect(() => {
     if (!detailOpen || !detail?.id) return;
     const id = detail.id;
-    const iv = window.setInterval(async () => {
-      try {
-        const r = await request<any>(`/drawing/jobs/${id}`);
-        if (r?.job) {
-          setDetail((prev: any) => ({ ...prev, ...r.job, __status: r.status, __report: r.report, __validate: r.validate, __sheets: r.sheetsIndex }));
-          if (r.job.status === 'done' || r.job.status === 'error') {
-            // 终态停轮询并补一次列表
-            clearInterval(iv);
-            loadJobs();
-          }
+    let stop = false;
+    let finished = false;   // 到了终态就不再接受任何迟到的响应
+    let timer: number | null = null;
+    const tick = async () => {
+      if (stop) return;
+      let r: any = null;
+      try { r = await request<any>(`/drawing/jobs/${id}`); } catch { /* 网络抖动，下一轮再查 */ }
+      if (stop || finished) return;
+      if (r?.job) {
+        setDetail((prev: any) => (prev?.id === id
+          ? { ...prev, ...r.job, __status: r.status, __report: r.report, __validate: r.validate, __sheets: r.sheetsIndex }
+          : prev));
+        if (r.job.status === 'done' || r.job.status === 'error') {
+          finished = true;
+          // 上传后立刻点“查看”的任务：打开时还没有表格，选中的一直是空值，跑完时在这里补上默认表
+          if (r.job.status === 'done') setActiveSheet((cur) => cur || pickDefaultSheet(r.sheetsIndex || []));
+          loadJobs(); // 终态补刷一次列表
+          return;
         }
-      } catch { /* ignore */ }
-    }, 3000);
-    return () => clearInterval(iv);
+      }
+      timer = window.setTimeout(tick, 3000);
+    };
+    timer = window.setTimeout(tick, 3000);
+    return () => { stop = true; if (timer) clearTimeout(timer); };
   }, [detailOpen, detail?.id, loadJobs]);
 
   const handleUpload = async () => {
@@ -167,27 +214,28 @@ export default function DrawingPipeline() {
   };
 
   const openDetail = async (id: string) => {
+    const seq = ++detailSeqRef.current;
     setSheetData(null);
+    setActiveSheet(''); // 先清空：再打开同一个任务时选中表必须发生变化，下面的加载逻辑才会重跑
     setReview(null); setReviewHistory([]); setLearnings([]); setFeedbackText(''); setCorrections({}); setSuggestText(''); setSuggestions([]);
+    setReviewPending(null);
+    setDetail(null);   // 读取期间显示加载态，不把上一个任务的信息当成这个任务的
     setDetailOpen(true);
     try {
       const r = await request<any>(`/drawing/jobs/${id}`);
+      if (seq !== detailSeqRef.current) return; // 期间又打开了别的任务，这次的结果作废
       setDetail({ ...r.job, __status: r.status, __report: r.report, __validate: r.validate, __sheets: r.sheetsIndex });
-      if (r.sheetsIndex?.length) {
-        // 默认打开数据最丰富的表：机柜路由 > 低压一层 > 首个（「说明」页仅3行文字，观感像空白）
-        const prefer = r.sheetsIndex.find((x: SheetMeta) => x.name.includes('机房机柜路由'))
-          || r.sheetsIndex.find((x: SheetMeta) => x.name.includes('低压系统'))
-          || r.sheetsIndex[0];
-        setActiveSheet(prefer.file);
-      }
+      setActiveSheet(pickDefaultSheet(r.sheetsIndex));
       // 已有 AI 复核结果则带出（含历史 + 自学习库）
       try {
         const rv = await request<any>(`/drawing/jobs/${id}/review`);
+        if (seq !== detailSeqRef.current) return;
         if (rv?.review) setReview(rv.review);
         if (rv?.history) setReviewHistory(rv.history);
         if (rv?.learnings) setLearnings(rv.learnings);
+        if (rv?.pending) setReviewPending(rv.pending);   // 别人或刚才发起的复核还在后台跑
       } catch { /* 尚无复核 */ }
-    } catch { message.error('读取任务详情失败'); }
+    } catch { if (seq === detailSeqRef.current) message.error('读取任务详情失败'); }
   };
 
   // 拉取 sheet 数据
@@ -206,40 +254,73 @@ export default function DrawingPipeline() {
     return () => { stop = true; };
   }, [detail?.id, detail?.status, activeSheet]);
 
-  // ============== AI 复核 ==============
+  // ============== AI 复核（GLM-5.3，后台任务，约 6~8 分钟） ==============
+  // 后端收到 deep: true 后登记为后台任务并立即返回，结果靠下面的轮询取。
+  // 不同步等待：一个要挂 7 分钟的请求太脆弱（代理超时、电脑休眠、切换网络都会断）。
+  const reviewRunning = reviewPending?.status === 'running';
   const runReview = async () => {
     if (!detail?.id) return;
-    setReviewing(true);
+    const targetId = detail.id; // 请求期间用户可能切到了别的任务：响应只允许写回原任务
+    setReviewStarting(true);
     try {
-      const r = await request<any>(`/drawing/jobs/${detail.id}/review`, { method: 'POST', timeout: 180000 });
-      if (r?.review) {
-        setReview(r.review);
-        if (r.learnings) setLearnings(r.learnings);
-        message.success(`AI 复核完成：${r.review.stats?.total ?? 0} 条疑点`);
-        try {
-          const rv = await request<any>(`/drawing/jobs/${detail.id}/review`);
-          if (rv?.history) setReviewHistory(rv.history);
-        } catch { /* */ }
-      } else { message.error(r?.message || 'AI 复核失败'); }
-    } catch (e: any) { message.error(e?.message || 'AI 复核失败（可能超时，请重试）'); }
-    finally { setReviewing(false); }
+      const r = await request<any>(`/drawing/jobs/${targetId}/review`, { method: 'POST', body: JSON.stringify({ deep: true }) });
+      if (detailIdRef.current !== targetId) return;
+      if (r?.started) {
+        setReviewPending({ mode: 'deep', status: 'running', started_at: new Date().toISOString() });
+        message.info('AI 复核已在后台开始，约需 6~8 分钟，可以离开页面，稍后回来看结果');
+      } else { message.error(r?.message || 'AI 复核启动失败'); }
+    } catch (e: any) {
+      if (detailIdRef.current !== targetId) return;
+      if (e?.statusCode === 409) {
+        // 别人（或另一个标签页）已经对这个任务发起了复核：转入“进行中”去轮询他的结果
+        setReviewPending({ mode: 'deep', status: 'running', started_at: new Date().toISOString() });
+        message.info(e?.message || '该任务已在复核中');
+      } else { message.error(e?.message || 'AI 复核启动失败'); }
+    } finally { setReviewStarting(false); }
   };
+
+  // 复核进行中：每 10 秒查一次状态。完成则刷新结果；失败则提示。关掉详情页即停，不留轮询链。
+  useEffect(() => {
+    if (!detailOpen || !detail?.id || !reviewRunning) return;
+    const id = detail.id;
+    let stop = false;
+    let timer: number | null = null;
+    const tick = async () => {
+      if (stop) return;
+      let rv: any = null;
+      try { rv = await request<any>(`/drawing/jobs/${id}/review`); } catch { /* 网络抖动，下一轮再查 */ }
+      if (stop) return;
+      if (!rv) { timer = window.setTimeout(tick, 15000); return; }
+      if (rv.pending?.status === 'running') { setReviewPending(rv.pending); timer = window.setTimeout(tick, 10000); return; }
+      // 不再“进行中”：要么跑完了，要么失败了
+      if (rv.review) setReview(rv.review);
+      if (rv.history) setReviewHistory(rv.history);
+      if (rv.learnings) setLearnings(rv.learnings);
+      setReviewPending(rv.pending?.status === 'failed' ? rv.pending : null);
+      if (rv.pending?.status === 'failed') message.error(`AI 复核失败：${rv.pending.error || '未知原因'}`);
+      else message.success(`AI 复核完成：${rv.review?.stats?.total ?? 0} 条疑点`);
+    };
+    timer = window.setTimeout(tick, 5000);
+    return () => { stop = true; if (timer) clearTimeout(timer); };
+  }, [detailOpen, detail?.id, reviewRunning]);
 
   const sendFeedback = async () => {
     if (!detail?.id || !feedbackText.trim()) { message.warning('请先填写反馈内容'); return; }
+    const targetId = detail.id;
     setFeedbackSending(true);
     try {
-      const r = await request<any>(`/drawing/jobs/${detail.id}/review/feedback`, {
-        method: 'POST', body: JSON.stringify({ message: feedbackText.trim() }), timeout: 180000,
+      const r = await request<any>(`/drawing/jobs/${targetId}/review/feedback`, {
+        method: 'POST', body: JSON.stringify({ message: feedbackText.trim() }), timeout: 450000,
       });
+      if (detailIdRef.current !== targetId) return; // 重核要等一会儿，期间用户可能已经切到别的任务
       if (r?.review) {
         setReview(r.review);
         if (r.learnings) setLearnings(r.learnings);
         setFeedbackText('');
         message.success('AI 已结合你的反馈重新复核');
         try {
-          const rv = await request<any>(`/drawing/jobs/${detail.id}/review`);
-          if (rv?.history) setReviewHistory(rv.history);
+          const rv = await request<any>(`/drawing/jobs/${targetId}/review`);
+          if (detailIdRef.current === targetId && rv?.history) setReviewHistory(rv.history);
         } catch { /* */ }
       } else { message.error(r?.message || '反馈失败'); }
     } catch (e: any) { message.error(e?.message || '反馈失败（可能超时，请重试）'); }
@@ -250,19 +331,21 @@ export default function DrawingPipeline() {
   const submitCorrection = async (findingId: string) => {
     const value = (corrections[findingId] || '').trim();
     if (!value) { message.warning('请先填写修正值'); return; }
+    const targetId = detail.id;
     setCorrectingId(findingId);
     try {
-      const r = await request<any>(`/drawing/jobs/${detail.id}/review/correct`, {
+      const r = await request<any>(`/drawing/jobs/${targetId}/review/correct`, {
         method: 'POST', body: JSON.stringify({ findingId, value }), timeout: 60000,
       });
+      if (detailIdRef.current !== targetId) return;
       if (r?.review) {
         setReview(r.review);
         if (r.learnings) setLearnings(r.learnings);
         setCorrections(prev => { const n = { ...prev }; delete n[findingId]; return n; });
         message.success('修正已记录（高置信入学习库，下次同楼栋自动应用）');
         try {
-          const rv = await request<any>(`/drawing/jobs/${detail.id}/review`);
-          if (rv?.history) setReviewHistory(rv.history);
+          const rv = await request<any>(`/drawing/jobs/${targetId}/review`);
+          if (detailIdRef.current === targetId && rv?.history) setReviewHistory(rv.history);
         } catch { /* */ }
       } else message.error(r?.message || '提交修正失败');
     } catch (e: any) { message.error(e?.message || '提交修正失败'); }
@@ -344,7 +427,8 @@ export default function DrawingPipeline() {
   ];
 
   const st = detail?.__status;
-  const stageInfo = STAGE_TEXT[st?.stage || detail?.status || 'queued'] || STAGE_TEXT.queued;
+  // 认不出的阶段回落到任务状态自己的档位，再不行按“处理中”显示——不能回落到“排队中 5%”
+  const stageInfo = STAGE_TEXT[st?.stage || detail?.status || 'queued'] || STAGE_TEXT[detail?.status || ''] || STAGE_TEXT['处理中'];
   const sheets: SheetMeta[] = detail?.__sheets || [];
 
   const sheetTable = () => {
@@ -454,7 +538,9 @@ export default function DrawingPipeline() {
           </Space>
         ) : null}
       >
-        {detail && (
+        {!detail ? (
+          <div style={{ textAlign: 'center', padding: 60 }}><Spin /></div>
+        ) : (
           <div>
             {/* 进度 */}
             <div style={{ marginBottom: 12 }}>
@@ -479,7 +565,7 @@ export default function DrawingPipeline() {
             {(detail.status === 'running' || detail.status === 'queued') && (
               <Card size="small" title="实时日志" style={{ marginBottom: 12 }}>
                 <pre style={{ maxHeight: 200, overflow: 'auto', fontSize: 11, margin: 0, whiteSpace: 'pre-wrap' }}>
-                  {(st?.log || []).join('\n') || '等待执行器接管…'}
+                  {Array.isArray(st?.log) ? st.log.join('\n') : String(st?.log ?? '') || '等待执行器接管…'}
                 </pre>
               </Card>
             )}
@@ -505,17 +591,27 @@ export default function DrawingPipeline() {
                     </Space>
                   }
                   extra={
-                    <Button size="small" type="primary" ghost icon={<AuditOutlined />}
-                      loading={reviewing} onClick={runReview} disabled={feedbackSending}>
-                      {review ? '重新复核' : '发起 AI 复核'}
-                    </Button>
+                    <Tooltip title="GLM-5.3 深度推理，能发现需要跨表对照才能看出的疑点。约需 6~8 分钟，在后台运行，可以离开页面。">
+                      <Button size="small" type="primary" icon={<AuditOutlined />}
+                        loading={reviewStarting} onClick={runReview}
+                        disabled={feedbackSending || reviewRunning}>
+                        {review ? '重新复核' : '发起 AI 复核'}
+                      </Button>
+                    </Tooltip>
                   }
                 >
-                  {reviewing && (
+                  {reviewRunning && reviewPending && (
                     <Alert type="info" showIcon style={{ marginBottom: 10 }}
-                      message="AI 正在复核（预扫描疑点 → 逐条校准审核），约需 30~90 秒…" />
+                      message={`AI 复核在后台进行中（已进行 ${Math.max(0, Math.round((Date.now() - (Date.parse(reviewPending.started_at) || Date.now())) / 60000))} 分钟），约需 6~8 分钟。可以离开页面，稍后回来看结果。`}
+                      description="复核期间不能再次复核，也不能提交人工反馈。" />
                   )}
-                  {!review && !reviewing && (
+                  {reviewPending?.status === 'failed' && (
+                    <Alert type="error" showIcon closable style={{ marginBottom: 10 }}
+                      onClose={() => setReviewPending(null)}
+                      message="AI 复核没有完成，原有复核结果没有被改动。"
+                      description={reviewPending.error || '未知原因'} />
+                  )}
+                  {!review && !reviewRunning && (
                     <Typography.Paragraph type="secondary" style={{ fontSize: 12.5, marginBottom: 0 }}>
                       规则引擎负责确定性提取（可追溯坐标），AI 只做二次确认：扫描最终输出的<span style={{ color: '#dc2626' }}>缺失（?）、乱码、推定值、跨表不一致</span>，
                       逐条给出证据与建议；AI 不直接改数，所有疑点以「建议需人工确认」呈现。
@@ -528,7 +624,9 @@ export default function DrawingPipeline() {
                     <div>
                       {review.summary && (
                         <Alert type={review.stats?.high ? 'warning' : 'success'} showIcon style={{ marginBottom: 10 }}
-                          message={review.summary} />
+                          message={review.summary}
+                          description={review.mode === 'deep'
+                            ? '这是 AI 给出的总结。实测中它出现过计数错误和夸大，请以下方逐条疑点为准。' : undefined} />
                       )}
                       <Table size="small" bordered
                         dataSource={review.findings}
@@ -553,7 +651,10 @@ export default function DrawingPipeline() {
                                     size="small" style={{ width: 260 }} placeholder="填写正确值（如 1AH5 / 500kVA）"
                                     value={corrections[f.id] || ''}
                                     onChange={e => setCorrections(prev => ({ ...prev, [f.id]: e.target.value }))}
-                                    onPressEnter={() => submitCorrection(f.id)}
+                                    onKeyDown={e => {
+                                      // 中文输入法里按回车是“上屏”：组合期间（isComposing）的回车不能当成提交
+                                      if (e.key === 'Enter' && !e.nativeEvent.isComposing) submitCorrection(f.id);
+                                    }}
                                   />
                                   <Button size="small" type="primary" loading={correctingId === f.id}
                                     disabled={!(corrections[f.id] || '').trim()}
@@ -603,7 +704,7 @@ export default function DrawingPipeline() {
                         </Space.Compact>
                         <Button size="small" type="primary" icon={<SendOutlined />} style={{ marginTop: 8 }}
                           loading={feedbackSending} onClick={sendFeedback}
-                          disabled={!feedbackText.trim()}>
+                          disabled={!feedbackText.trim() || reviewRunning}>
                           提交反馈并让 AI 重新复核
                         </Button>
                       </div>
@@ -636,10 +737,10 @@ export default function DrawingPipeline() {
                                     <div style={{ fontSize: 12.5 }}>
                                       <Typography.Text type="secondary">
                                         {new Date(h.at).toLocaleString('zh-CN', { hour12: false })} ·{' '}
-                                        {h.role === 'human' ? `人工反馈（${h.by || '—'}）` : h.kind === 'reverify' ? 'AI 重核' : `AI 复核（${h.dur_sec ?? '?'}s）`}
+                                        {historyLabel(h)}
                                       </Typography.Text>
                                       <div style={{ marginTop: 2 }}>
-                                        {h.role === 'human' ? h.message : h.summary}
+                                        {historyText(h)}
                                       </div>
                                       {h.kind === 'reverify' && Array.isArray(h.responses) && h.responses.length > 0 && (
                                         <ul style={{ margin: '4px 0 0', paddingLeft: 18, color: '#6b6892' }}>

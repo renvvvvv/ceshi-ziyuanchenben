@@ -8,7 +8,7 @@
 
 param(
     [string]$Mode = "build",
-    [string]$ApiKey = $env:MINIMAX_API_KEY
+    [string]$ApiKey = $env:ZHIPU_API_KEY
 )
 
 $ErrorActionPreference = "Stop"
@@ -56,7 +56,7 @@ function Deploy-Docker {
     docker-compose down --remove-orphans 2>$null
 
     Write-Host "==> 启动服务" -ForegroundColor Yellow
-    $env:MINIMAX_API_KEY = $ApiKey
+    $env:ZHIPU_API_KEY = $ApiKey
     docker-compose up -d
 
     Start-Sleep -Seconds 3

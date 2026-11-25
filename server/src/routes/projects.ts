@@ -16,8 +16,8 @@ const asyncHandler = (fn: (req: Request, res: Response, next: NextFunction) => P
     Promise.resolve(fn(req, res, next)).catch(next);
   };
 
-// 设计：GET 路由（只读）允许匿名访问，POST/PUT/DELETE 路由单独加 requireAuth
-// 这样未登录用户也能看到项目数据（演示模式），但写操作必须有登录态
+// 设计：所有路由（含只读 GET）都必须登录。此前 GET 允许匿名（“演示模式”），结果公网上不登录就能
+// 拿到全部项目、客户、项目经理、文档链接和历史项目（2026-11-24 实测），写操作则一直是必须登录的
 
 // ============= 参数校验工具 =============
 
@@ -57,6 +57,90 @@ function auditLog(req: Request, action: string, targetType: string, targetId: un
   ).catch((e: Error) => console.warn('[audit] 写入失败:', e.message));
 }
 
+/**
+ * 项目改名 / 改期后，把别处照抄的“项目名 + 起止日期”对齐到项目表（项目表是唯一来源）。两处：
+ *  1 考勤校准记录（按“项目名 + 成员 + 周期”关联，且每次校准会把项目起止日期抄一份）：
+ *    - 改名：考勤记录里的项目名跟着改（同一人同一周期在新名字下已有记录的保留新那条）
+ *    - 改期：起止日期与项目“旧日期”相同的记录，就是照抄的副本，改成新日期；与旧日期不同的是人工填的，不动
+ *  2 成员表里的项目副本（人员池卡片、考勤的应出勤读的是它）：项目名等于旧名字的条目，改成项目现在的名字和日期。
+ *    页面里（DataContext.updateProject）也有同样的对齐；放在后端是为了不依赖各人浏览器里跑的是哪个版本的页面。
+ * 只改名称和日期：不增删条目、不改成员状态。尽力而为：失败只告警，不影响项目本身的保存。
+ * 注意：这里的 SQL 里不能写 jsonb 的 ? 运算符——数据库封装会把文本里的 ? 当成占位符替换掉。
+ */
+async function followProjectChange(
+  prev: { name: string; startDate: string | null; endDate: string | null },
+  next: { name?: unknown; startDate?: unknown; endDate?: unknown },
+): Promise<void> {
+  const norm = (v: unknown): string | null => (v === undefined || v === null || v === '' ? null : String(v));
+  try {
+    const prevStart = norm(prev.startDate), prevEnd = norm(prev.endDate);
+    const newName = norm(next.name) ?? prev.name;
+    if (newName !== prev.name) {
+      // 同一人同一周期在新旧两个名字下都有记录的，旧名字那条留在原地（没法自动判断该留哪条），记一条日志便于排查
+      const dup = await db.getAsync(
+        `SELECT count(*)::int AS n FROM attendance_adjustments a
+          WHERE a.project_name = $1 AND EXISTS (SELECT 1 FROM attendance_adjustments b
+             WHERE b.member_id = a.member_id AND b.cycle_start = a.cycle_start AND b.project_name = $2)`,
+        prev.name, newName,
+      ) as { n?: number } | undefined;
+      if ((dup?.n ?? 0) > 0) {
+        console.warn(`[projects] 项目「${prev.name}」改名为「${newName}」：有 ${dup!.n} 条考勤校准记录因新旧名字下同一人同一周期各有一条而留在旧名字下`);
+      }
+      await db.runAsync(
+        `UPDATE attendance_adjustments a SET project_name = $2
+          WHERE a.project_name = $1
+            AND NOT EXISTS (SELECT 1 FROM attendance_adjustments b
+                             WHERE b.member_id = a.member_id AND b.cycle_start = a.cycle_start AND b.project_name = $2)`,
+        prev.name, newName,
+      );
+    }
+    // 请求里没带日期的（只改名称、指派、状态的局部更新），沿用项目现有的日期——不能当成“清空”
+    const newStart = next.startDate !== undefined ? norm(next.startDate) : prevStart;
+    const newEnd = next.endDate !== undefined ? norm(next.endDate) : prevEnd;
+    if (next.startDate !== undefined && newStart !== prevStart) {
+      await db.runAsync(
+        `UPDATE attendance_adjustments SET project_start = $2
+          WHERE project_name = $1 AND project_start IS NOT DISTINCT FROM $3::text`,
+        newName, newStart, prevStart,
+      );
+    }
+    if (next.endDate !== undefined && newEnd !== prevEnd) {
+      await db.runAsync(
+        `UPDATE attendance_adjustments SET project_end = $2
+          WHERE project_name = $1 AND project_end IS NOT DISTINCT FROM $3::text`,
+        newName, newEnd, prevEnd,
+      );
+    }
+    // 成员表里的项目副本：只动项目名等于旧名字的条目。名称和日期都没变的请求（比如只调指派）不动它
+    if (newName !== prev.name || newStart !== prevStart || newEnd !== prevEnd) {
+      if (newName !== prev.name) {
+        await db.runAsync(
+          `UPDATE team_members SET current_projects = (
+             SELECT COALESCE(jsonb_agg(CASE WHEN n = $1 THEN to_jsonb($2::text) ELSE to_jsonb(n) END), '[]'::jsonb)::text
+             FROM jsonb_array_elements_text(current_projects::jsonb) n)
+           WHERE jsonb_typeof(current_projects::jsonb) = 'array'
+             AND EXISTS (SELECT 1 FROM jsonb_array_elements_text(current_projects::jsonb) n WHERE n = $1)`,
+          prev.name, newName,
+        );
+      }
+      for (const col of ['projects', 'upcoming_projects']) {
+        await db.runAsync(
+          `UPDATE team_members m SET ${col} = (
+             SELECT COALESCE(jsonb_agg(
+                      e || jsonb_build_object('projectName', $2::text, 'startDate', COALESCE($3::text, ''), 'endDate', COALESCE($4::text, ''))
+                      ORDER BY ord), '[]'::jsonb)::text
+             FROM jsonb_array_elements(m.${col}::jsonb) WITH ORDINALITY AS t(e, ord))
+           WHERE jsonb_typeof(m.${col}::jsonb) = 'array'
+             AND EXISTS (SELECT 1 FROM jsonb_array_elements(m.${col}::jsonb) e WHERE e->>'projectName' = $1)`,
+          prev.name, newName, newStart, newEnd,
+        );
+      }
+    }
+  } catch (e: any) {
+    console.warn('[projects] 项目改名/改期后对齐考勤与成员副本失败（不影响项目保存）:', e?.message || e);
+  }
+}
+
 /** 限制分页参数边界 */
 function clampPageSize(rawPage: unknown, rawSize: unknown): { page: number; size: number; offset: number } {
   const page = Math.max(1, parseInt(String(rawPage ?? '1'), 10) || 1);
@@ -65,7 +149,7 @@ function clampPageSize(rawPage: unknown, rawSize: unknown): { page: number; size
 }
 
 /** GET /api/projects — 查询项目列表 */
-router.get('/', asyncHandler(async (req, res) => {
+router.get('/', requireAuth, asyncHandler(async (req, res) => {
   const status = req.query.status as string | undefined;
   const search = req.query.search as string | undefined;
   const { page, size, offset } = clampPageSize(req.query.page, req.query.size);
@@ -193,6 +277,7 @@ router.get('/phases', requireAuth, asyncHandler(async (_req, res) => {
 
 /** PUT /api/projects/phases/:id — 保存某项目的阶段数据（UPSERT 全量覆盖） */
 router.put('/phases/:id', requireAuth, requireRole(['管理者', '编辑者']), asyncHandler(async (req, res) => {
+  if (!/^[\w-]{1,64}$/.test(req.params.id)) { res.status(400).json({ success: false, error: '非法的阶段键' }); return; }
   const { phases } = req.body || {};
   if (!Array.isArray(phases)) { res.status(400).json({ success: false, error: 'phases 必须为数组' }); return; }
   const payload = JSON.stringify(phases);
@@ -234,7 +319,8 @@ router.put('/:id', requireAuth, requireRole(['管理者', '编辑者']), asyncHa
   // 覆盖所有触发路径：autoProcessProjects 状态机 / 手动编辑 / 批量操作。
   const completing = String(b.status ?? '') === '已完成';
   // 更新前状态与名称：归档检测 + 审计 target_name（主键查询，微秒级）
-  const prev = await db.getAsync('SELECT status, name FROM test_projects WHERE id=$1', id) as { status?: string; name?: string } | undefined;
+  const prev = await db.getAsync('SELECT status, name, start_date, end_date FROM test_projects WHERE id=$1', id) as
+    { status?: string; name?: string; start_date?: string | null; end_date?: string | null } | undefined;
   const prevStatus = prev?.status ?? null;
   const prevName = prev?.name;
 
@@ -244,6 +330,12 @@ router.put('/:id', requireAuth, requireRole(['管理者', '编辑者']), asyncHa
     ...partial.values,
   );
   if (result.changes === 0) { res.status(404).json({ error: '项目不存在' }); return; }
+
+  // 考勤校准、成员项目副本里照抄的项目名 / 日期跟着改
+  await followProjectChange(
+    { name: prevName ?? '', startDate: prev?.start_date ?? null, endDate: prev?.end_date ?? null },
+    { name: b.name, startDate: b.start_date, endDate: b.end_date },
+  );
 
   let archived = false;
   if (completing && prevStatus !== null && prevStatus !== '已完成') {
@@ -279,7 +371,7 @@ router.delete('/:id', requireAuth, requireProjectDeleteUser, asyncHandler(async 
 }));
 
 /** GET /api/history-projects — 历史项目（必须在 /:id 之前，否则会被 :id='list' 拦截）*/
-router.get('/history/list', asyncHandler(async (_req, res) => {
+router.get('/history/list', requireAuth, asyncHandler(async (_req, res) => {
   const rows = await db.allAsync('SELECT * FROM historical_projects ORDER BY end_date DESC');
   // 2026-07-19 直接转 camelCase 返回，前端无需再 snakeToCamel
   const camelRows = rows.map((r) => {
@@ -294,7 +386,7 @@ router.get('/history/list', asyncHandler(async (_req, res) => {
 }));
 
 /** GET /api/projects/:id — 项目详情 */
-router.get('/:id', asyncHandler(async (req, res) => {
+router.get('/:id', requireAuth, asyncHandler(async (req, res) => {
   const id = parseIdOrNull(req.params.id);
   if (id === null) { res.status(400).json({ error: 'id 必须为正整数' }); return; }
   const row = await db.getAsync('SELECT * FROM test_projects WHERE id=$1', id);
@@ -345,7 +437,7 @@ router.post('/history', requireAuth, requireRole(['管理者', '编辑者']), as
 }));
 
 /** GET /api/team-members — 团队成员 */
-router.get('/members/list', asyncHandler(async (req, res) => {
+router.get('/members/list', requireAuth, asyncHandler(async (req, res) => {
   const status = req.query.status as string | undefined;
   const search = req.query.search as string | undefined;
   let where = 'WHERE 1=1';
@@ -356,6 +448,17 @@ router.get('/members/list', asyncHandler(async (req, res) => {
   const rows = await db.allAsync(`SELECT * FROM team_members ${where} ORDER BY name`, ...params);
   res.json({ success: true, data: rows });
 }));
+
+
+/** JSON 数组列写入规范化：容忍 前端已 stringify / 原生数组 / 双层 stringify，统一存单层 JSON 文本 */
+function normJsonCol(v: unknown, fallback: unknown[] = []): string {
+  let x = v;
+  let guard = 0;
+  while (typeof x === 'string' && guard++ < 4) {
+    try { x = JSON.parse(x); } catch { break; }
+  }
+  return JSON.stringify(Array.isArray(x) ? x : fallback);
+}
 
 /** POST /api/projects/members — 创建团队成员 */
 router.post('/members', requireAuth, requireRole(['管理者', '编辑者']), asyncHandler(async (req, res) => {
@@ -371,13 +474,13 @@ router.post('/members', requireAuth, requireRole(['管理者', '编辑者']), as
       name,
       employee_id,
       status || '空闲',
-      JSON.stringify(skills || []),
-      JSON.stringify(current_projects || []),
+      normJsonCol(skills),
+      normJsonCol(current_projects),
       email || null,
       phone || null,
       req.body.position ?? null,
-      JSON.stringify(req.body.projects || []),
-      JSON.stringify(req.body.upcoming_projects || []),
+      normJsonCol(req.body.projects),
+      normJsonCol(req.body.upcoming_projects),
       req.body.leave_start_date ?? null,
       req.body.leave_end_date ?? null,
       req.body.title ?? null,
@@ -401,7 +504,12 @@ router.put('/members/:id', requireAuth, requireRole(['管理者', '编辑者']),
   if (id === null) { res.status(400).json({ error: 'id 必须为正整数' }); return; }
   const prevMem = await db.getAsync('SELECT name FROM team_members WHERE id=$1', id) as { name?: string } | undefined;
   // 部分更新：只改携带的字段（如考勤模块只改 position），避免把姓名/状态等意外清空
-  const partial = partialSetSql(req.body || {}, [
+  // JSON 数组列先归一化为单层文本（前端若传已 stringify 的值，原样入库会变双层）
+  const putBody = { ...(req.body || {}) };
+  for (const k of ['skills', 'current_projects', 'projects', 'upcoming_projects']) {
+    if (putBody[k] !== undefined) putBody[k] = normJsonCol(putBody[k], k === 'skills' ? [] : k === 'current_projects' ? [] : []);
+  }
+  const partial = partialSetSql(putBody, [
     'name', 'employee_id', 'status', 'skills', 'current_projects',
     'email', 'phone', 'position', 'projects', 'upcoming_projects',
     'leave_start_date', 'leave_end_date', 'title', 'profile',
@@ -426,9 +534,25 @@ router.delete('/members/:id', requireRole(['管理者']), asyncHandler(async (re
   const memName = prev?.name;
   const result = await db.runAsync('DELETE FROM team_members WHERE id=$1 RETURNING id', id);
   if (result.changes === 0) { res.status(404).json({ error: '成员不存在' }); return; }
+  await cleanDanglingMemberRefs([String(id)]);
   auditLog(req, 'delete', 'member', id, memName ?? '');
   res.json({ success: true });
 }));
+
+/** 清理 test_projects.assigned_member_ids 中已删成员的悬空引用（单删/批删共用）。
+ *  SQL 只做 LIKE '[%' 预过滤（不 cast），行内 JSON.parse 判定数组——存量脏数据不再炸整个事务 */
+async function cleanDanglingMemberRefs(ids: string[]): Promise<void> {
+  const idSet = new Set(ids.map(String));
+  const projRows = await db.allAsync(`SELECT id, assigned_member_ids FROM test_projects WHERE assigned_member_ids LIKE '[%'`) as Array<{ id: number; assigned_member_ids: string }>;
+  for (const row of projRows) {
+    try {
+      const arr = JSON.parse(row.assigned_member_ids || '[]');
+      if (!Array.isArray(arr) || !arr.some((x) => idSet.has(String(x)))) continue;
+      const cleaned = arr.filter((x) => !idSet.has(String(x)));
+      await db.runAsync('UPDATE test_projects SET assigned_member_ids=$1 WHERE id=$2', JSON.stringify(cleaned), row.id);
+    } catch { /* 行内 JSON 异常跳过 */ }
+  }
+}
 
 // 项目删除白名单：仅 admin 与指定飞书账号（王家晟）可删除项目/历史项目，
 // 其他账号（含管理者角色）一律 403，防止项目数据被误删或恶意删除
@@ -467,25 +591,25 @@ router.post('/members/batch-delete', requireAuth, (req, res, next) => {
       const r = await client.query('DELETE FROM team_members WHERE id=$1 RETURNING id', [id]);
       deleted += r.rowCount ?? 0;
     }
-    // 顺带清理项目指派里的悬空引用（assignedMemberIds 存 JSON 数组文本）
+    // 顺带清理项目指派里的悬空引用（LIKE '[%' 预过滤，行内 JSON.parse 判定，不依赖 SQL cast）
     const projRows = await client.query(
-      `SELECT id, assigned_member_ids FROM test_projects WHERE assigned_member_ids LIKE '%[%' AND jsonb_typeof(assigned_member_ids::jsonb) = 'array'`
+      `SELECT id, assigned_member_ids FROM test_projects WHERE assigned_member_ids LIKE '[%'`
     );
     const idSet = new Set(ids.map(String));
     for (const row of projRows.rows as Array<{ id: number; assigned_member_ids: string }>) {
       try {
-        const arr = JSON.parse(row.assigned_member_ids || '[]') as string[];
-        if (!arr.some((x) => idSet.has(String(x)))) continue;
+        const arr = JSON.parse(row.assigned_member_ids || '[]');
+        if (!Array.isArray(arr) || !arr.some((x) => idSet.has(String(x)))) continue;
         const cleaned = arr.filter((x) => !idSet.has(String(x)));
         await client.query('UPDATE test_projects SET assigned_member_ids=$1 WHERE id=$2', [JSON.stringify(cleaned), row.id]);
       } catch { /* 行内 JSON 异常跳过，不阻塞删除 */ }
     }
     await client.query('COMMIT');
   } catch (e) {
-    await client.query('ROLLBACK');
+    try { await client.query('ROLLBACK'); } catch { /* 连接已断时 ROLLBACK 自身失败不应掩盖原错误 */ }
     throw e;
   } finally {
-    client.release();
+    client.release(); // aborted 事务连接由 pg 池自动重建，异常路径无需销毁（pg 会 reset）
   }
   auditLog(req, 'batch_delete', 'member', ids.join(','), `${deleted} 人`, { deleted, requested: ids.length });
   res.json({ success: true, deleted, requested: ids.length });
